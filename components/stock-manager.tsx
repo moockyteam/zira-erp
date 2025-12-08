@@ -1,4 +1,3 @@
-// components/stock-manager.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -11,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { StockEntryDialog } from "./stock-entry-dialog"
-import { CompanySelector } from "@/components/company-selector" // <-- J'ai ajouté l'importation
+import { StockImportDialog } from "./stock-import-dialog"
+import { CompanySelector } from "@/components/company-selector"
 
-// Définition des types
 type Company = { id: string; name: string; }
 type Item = {
   id: string;
@@ -37,7 +36,7 @@ const stockCategories = [
 export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // <-- J'ai ajusté le type pour autoriser null
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [items, setItems] = useState<Item[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [formData, setFormData] = useState({
@@ -48,7 +47,6 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Sélectionne la première entreprise par défaut s'il n'y en a qu'une
     if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id)
     }
@@ -116,7 +114,6 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
 
   return (
     <div className="space-y-8">
-      {/* --- J'AI REMPLACÉ L'ANCIEN SÉLECTEUR PAR LE COMPOSANT RÉUTILISABLE --- */}
       <CompanySelector
         companies={userCompanies}
         selectedCompanyId={selectedCompanyId}
@@ -171,12 +168,18 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
                 <CardTitle>Inventaire Actuel</CardTitle>
                 <CardDescription>Liste de tous les articles en stock pour cette entreprise.</CardDescription>
               </div>
-              <StockEntryDialog 
-                companyId={selectedCompanyId}
-                items={items}
-                suppliers={suppliers}
-                onEntrySuccess={() => fetchCompanyData(selectedCompanyId)}
-              />
+              <div className="flex items-center gap-2">
+                  <StockImportDialog 
+                    companyId={selectedCompanyId}
+                    onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
+                  />
+                  <StockEntryDialog 
+                    companyId={selectedCompanyId}
+                    items={items}
+                    suppliers={suppliers}
+                    onEntrySuccess={() => fetchCompanyData(selectedCompanyId)}
+                  />
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
