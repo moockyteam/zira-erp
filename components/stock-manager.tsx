@@ -11,10 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { StockEntryDialog } from "./stock-entry-dialog"
 import { StockImportDialog } from "./stock-import-dialog"
+import { ManageItemDialog } from "./manage-item-dialog"
 import { CompanySelector } from "@/components/company-selector"
 
-type Company = { id: string; name: string; }
-type Item = {
+export type Company = { id: string; name: string; }
+export type Item = {
   id: string;
   name: string;
   reference: string | null;
@@ -23,10 +24,11 @@ type Item = {
   unit_of_measure: string | null;
   purchase_price: number | null;
   sale_price: number | null;
+  description?: string | null;
 }
-type Supplier = { id: string; name: string; }
+export type Supplier = { id: string; name: string; }
 
-const stockCategories = [
+export const stockCategories = [
   { value: 'MARCHANDISE', label: 'Marchandise' },
   { value: 'MATIERE_PREMIERE', label: 'Matière Première' },
   { value: 'PRODUIT_SEMI_FINI', label: 'Produit Semi-Fini' },
@@ -45,6 +47,7 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [itemToManage, setItemToManage] = useState<Item | null>(null);
 
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
@@ -64,7 +67,7 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
   const fetchCompanyData = async (companyId: string) => {
     setIsLoading(true)
     const [itemsResponse, suppliersResponse] = await Promise.all([
-      supabase.from("items").select("*").eq("company_id", companyId).order('name'),
+      supabase.from("items").select("*").eq("company_id", companyId).eq('is_archived', false).order('name'),
       supabase.from("suppliers").select("id, name").eq("company_id", companyId).order('name')
     ])
     
@@ -202,7 +205,11 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
                         <TableCell><Badge variant="outline">{stockCategories.find(c => c.value === item.category)?.label}</Badge></TableCell>
                         <TableCell className="text-right font-mono">{item.quantity_on_hand}</TableCell>
                         <TableCell className="text-right font-mono">{item.sale_price ? `${item.sale_price.toFixed(2)} TND` : '-'}</TableCell>
-                        <TableCell><Button variant="outline" size="sm">Gérer</Button></TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" onClick={() => setItemToManage(item)}>
+                            Gérer
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
@@ -214,6 +221,16 @@ export function StockManager({ userCompanies }: { userCompanies: Company[] }) {
           </Card>
         </div>
       )}
+      <ManageItemDialog
+        item={itemToManage}
+        isOpen={!!itemToManage}
+        onOpenChange={(open) => !open && setItemToManage(null)}
+        onSuccess={() => {
+          if (selectedCompanyId) {
+            fetchCompanyData(selectedCompanyId);
+          }
+        }}
+      />
     </div>
   )
 }
