@@ -109,12 +109,7 @@ export function LoginForm() {
             {isLoading ? "Connexion..." : "Se connecter"}
           </Button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            Pas encore de compte ?{" "}
-            <a href="#" className="text-primary hover:underline font-medium">
-              S'inscrire
-            </a>
-          </div>
+         
         </form>
       </CardContent>
     </Card>
