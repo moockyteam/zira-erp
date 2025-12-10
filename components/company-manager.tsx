@@ -1,10 +1,9 @@
-// components/company-manager.tsx
-
 "use client"
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+// <-- NOUVEAU: J'importe useRef pour pouvoir faire défiler la page vers le formulaire
+import { useEffect, useState, useRef } from "react" 
 import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -13,10 +12,9 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Switch } from "@/components/ui/switch" // <-- CHANGEMENT: J'importe le composant Switch
+import { Switch } from "@/components/ui/switch"
 import Image from "next/image"
 
-// <-- CHANGEMENT: J'ajoute les nouveaux champs au type Company
 type Company = {
   id: string
   name: string
@@ -27,13 +25,12 @@ type Company = {
   logo_url: string | null
   governorate_id: number | null
   delegation_id: number | null
-  is_fully_exporting: boolean | null // <-- NOUVEAU
-  is_subject_to_fodec: boolean | null // <-- NOUVEAU
+  is_fully_exporting: boolean | null
+  is_subject_to_fodec: boolean | null
 }
 type Governorate = { id: number; name: string }
 type Delegation = { id: number; name: string; governorate_id: number }
 
-// <-- CHANGEMENT: J'ajoute les nouveaux champs au state initial du formulaire
 const initialFormData = {
   name: "",
   matricule_fiscal: "",
@@ -46,19 +43,26 @@ const initialFormData = {
 
 export function CompanyManager() {
   const supabase = createClient()
+  
+  // <-- NOUVEAU: États pour gérer le mode édition
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null)
 
   const [companies, setCompanies] = useState<Company[]>([])
   const [governorates, setGovernorates] = useState<Governorate[]>([])
   const [delegations, setDelegations] = useState<Delegation[]>([])
   const [filteredDelegations, setFilteredDelegations] = useState<Delegation[]>([])
 
-  const [formData, setFormData] = useState(initialFormData) // <-- CHANGEMENT: J'utilise l'état initial
+  const [formData, setFormData] = useState(initialFormData)
   const [selectedGov, setSelectedGov] = useState<string>("")
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // <-- NOUVEAU: Référence pour le scroll vers le formulaire
+  const formCardRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -103,6 +107,50 @@ export function CompanyManager() {
     }
   }
 
+  // <-- NOUVEAU: Fonction pour réinitialiser le formulaire et quitter le mode édition
+  const resetForm = () => {
+    setEditingCompany(null);
+    setFormData(initialFormData);
+    setSelectedGov("");
+    setSelectedDel("");
+    setLogoFile(null);
+    const logoInput = document.getElementById('logo') as HTMLInputElement;
+    if (logoInput) logoInput.value = "";
+  }
+  
+  // <-- NOUVEAU: Fonction appelée lors du clic sur le bouton "Gérer"
+  const handleEditClick = (company: Company) => {
+    setEditingCompany(company);
+
+    // Remplir le formulaire avec les données de l'entreprise
+    setFormData({
+      name: company.name,
+      matricule_fiscal: company.matricule_fiscal || "",
+      email: company.email || "",
+      phone_number: company.phone_number || "",
+      address: company.address || "",
+      is_fully_exporting: company.is_fully_exporting || false,
+      is_subject_to_fodec: company.is_subject_to_fodec || false,
+    });
+
+    // Sélectionner le bon gouvernorat et filtrer les délégations
+    if (company.governorate_id) {
+        const govIdStr = String(company.governorate_id);
+        setSelectedGov(govIdStr);
+        const filtered = delegations.filter((d) => d.governorate_id === company.governorate_id);
+        setFilteredDelegations(filtered);
+    } else {
+        setSelectedGov("");
+        setFilteredDelegations([]);
+    }
+
+    // Sélectionner la bonne délégation
+    setSelectedDel(company.delegation_id ? String(company.delegation_id) : "");
+    
+    // Faire défiler l'utilisateur jusqu'au formulaire d'édition
+    formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsLoading(true)
@@ -117,7 +165,7 @@ export function CompanyManager() {
       return
     }
 
-    let logoPublicUrl = null
+    let logoPublicUrl = editingCompany?.logo_url || null; // <-- MODIFIÉ: On conserve l'ancien logo par défaut
 
     if (logoFile) {
       const fileExt = logoFile.name.split(".").pop()
@@ -132,32 +180,57 @@ export function CompanyManager() {
       const { data: urlData } = supabase.storage.from("company_logos").getPublicUrl(filePath)
       logoPublicUrl = urlData.publicUrl
     }
+    
+    // <-- MODIFIÉ: Logique de mise à jour ou d'insertion
+    if (editingCompany) {
+      // ** MODE MISE À JOUR **
+      const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+          name: formData.name,
+          matricule_fiscal: formData.matricule_fiscal,
+          email: formData.email,
+          phone_number: formData.phone_number,
+          address: formData.address,
+          governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
+          delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
+          logo_url: logoPublicUrl,
+          is_fully_exporting: formData.is_fully_exporting,
+          is_subject_to_fodec: formData.is_subject_to_fodec,
+        })
+        .eq('id', editingCompany.id) // La condition pour ne mettre à jour que la bonne entreprise
 
-    // <-- CHANGEMENT: J'ajoute les nouveaux champs à l'objet d'insertion
-    const { error: insertError } = await supabase.from("companies").insert({
-      user_id: user.id,
-      name: formData.name,
-      matricule_fiscal: formData.matricule_fiscal,
-      email: formData.email,
-      phone_number: formData.phone_number,
-      address: formData.address,
-      governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
-      delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
-      logo_url: logoPublicUrl,
-      is_fully_exporting: formData.is_fully_exporting, // <-- NOUVEAU
-      is_subject_to_fodec: formData.is_subject_to_fodec, // <-- NOUVEAU
-    })
+        if (updateError) {
+            setError("Erreur lors de la mise à jour de l'entreprise.")
+            console.error(updateError)
+        } else {
+            resetForm();
+            await fetchCompanies();
+        }
 
-    if (insertError) {
-      setError("Erreur lors de la création de l'entreprise.")
-      console.error(insertError)
     } else {
-      setFormData(initialFormData) // <-- CHANGEMENT: Réinitialisation complète
-      setSelectedGov("")
-      setSelectedDel("")
-      setLogoFile(null)
-      document.getElementById('logo')?.form?.reset(); // Réinitialise le champ fichier
-      await fetchCompanies()
+      // ** MODE CRÉATION ** (code original)
+      const { error: insertError } = await supabase.from("companies").insert({
+        user_id: user.id,
+        name: formData.name,
+        matricule_fiscal: formData.matricule_fiscal,
+        email: formData.email,
+        phone_number: formData.phone_number,
+        address: formData.address,
+        governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
+        delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
+        logo_url: logoPublicUrl,
+        is_fully_exporting: formData.is_fully_exporting,
+        is_subject_to_fodec: formData.is_subject_to_fodec,
+      })
+
+      if (insertError) {
+        setError("Erreur lors de la création de l'entreprise.")
+        console.error(insertError)
+      } else {
+        resetForm();
+        await fetchCompanies()
+      }
     }
 
     setIsLoading(false)
@@ -199,7 +272,8 @@ export function CompanyManager() {
                     <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
                     <TableCell className="hidden md:table-cell">{company.email}</TableCell>
                     <TableCell>
-                      <Button variant="outline" size="sm">
+                      {/* <-- MODIFIÉ: Le bouton appelle maintenant handleEditClick --> */}
+                      <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
                         Gérer
                       </Button>
                     </TableCell>
@@ -210,11 +284,13 @@ export function CompanyManager() {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
+      
+      {/* <-- MODIFIÉ: J'ajoute la référence ici --> */}
+      <Card ref={formCardRef}>
         <CardHeader>
-          <CardTitle>Ajouter une nouvelle entreprise</CardTitle>
-          <CardDescription>Remplissez les informations de votre entreprise.</CardDescription>
+          {/* <-- MODIFIÉ: Le titre et la description changent en fonction du mode --> */}
+          <CardTitle>{editingCompany ? `Modifier l'entreprise : ${editingCompany.name}` : "Ajouter une nouvelle entreprise"}</CardTitle>
+          <CardDescription>{editingCompany ? "Modifiez les informations ci-dessous." : "Remplissez les informations de votre entreprise."}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -267,7 +343,6 @@ export function CompanyManager() {
                 </Select>
               </div>
               
-              {/* <-- CHANGEMENT: J'ai ajouté les nouveaux interrupteurs ici --> */}
               <div className="pt-2 space-y-4">
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
@@ -292,12 +367,19 @@ export function CompanyManager() {
               </div>
             </div>
 
-            {/* Bouton et Erreurs */}
-            <div className="md:col-span-2 mt-4">
-              {error && <p className="text-sm text-destructive mb-4">{error}</p>}
+            {/* Boutons et Erreurs */}
+            <div className="md:col-span-2 mt-4 flex items-center gap-4">
+              {/* <-- MODIFIÉ: Le texte du bouton principal change en fonction du mode --> */}
               <Button type="submit" disabled={isLoading} className="w-full md:w-auto">
-                {isLoading ? "Ajout en cours..." : "Ajouter l'entreprise"}
+                {isLoading ? "Sauvegarde..." : editingCompany ? "Mettre à jour l'entreprise" : "Ajouter l'entreprise"}
               </Button>
+              {/* <-- NOUVEAU: Bouton pour annuler l'édition --> */}
+              {editingCompany && (
+                <Button type="button" variant="ghost" onClick={resetForm} disabled={isLoading}>
+                  Annuler
+                </Button>
+              )}
+               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
           </form>
         </CardContent>
