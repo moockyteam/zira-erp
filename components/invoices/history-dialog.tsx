@@ -1,3 +1,4 @@
+///components/invoices/history-dialog:TSX
 "use client"
 
 import type React from "react"

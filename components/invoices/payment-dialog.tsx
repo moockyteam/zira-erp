@@ -1,4 +1,4 @@
-// Placez ce code dans : components/invoices/payment-dialog.tsx
+//  components/invoices/payment-dialog.tsx
 
 "use client"
 

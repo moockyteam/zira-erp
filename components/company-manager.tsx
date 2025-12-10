@@ -1,9 +1,7 @@
 "use client"
 
 import type React from "react"
-
-// <-- NOUVEAU: J'importe useRef pour pouvoir faire défiler la page vers le formulaire
-import { useEffect, useState, useRef } from "react" 
+import { useEffect, useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -15,9 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch"
 import Image from "next/image"
 
+// <-- MODIFIÉ: J'ajoute le nouveau champ au type Company
 type Company = {
   id: string
   name: string
+  manager_name: string | null // <-- NOUVEAU
   matricule_fiscal: string | null
   email: string | null
   phone_number: string | null
@@ -31,8 +31,10 @@ type Company = {
 type Governorate = { id: number; name: string }
 type Delegation = { id: number; name: string; governorate_id: number }
 
+// <-- MODIFIÉ: J'ajoute le nouveau champ au state initial du formulaire
 const initialFormData = {
   name: "",
+  manager_name: "", // <-- NOUVEAU
   matricule_fiscal: "",
   email: "",
   phone_number: "",
@@ -43,26 +45,18 @@ const initialFormData = {
 
 export function CompanyManager() {
   const supabase = createClient()
-  
-  // <-- NOUVEAU: États pour gérer le mode édition
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
-
   const [companies, setCompanies] = useState<Company[]>([])
   const [governorates, setGovernorates] = useState<Governorate[]>([])
   const [delegations, setDelegations] = useState<Delegation[]>([])
   const [filteredDelegations, setFilteredDelegations] = useState<Delegation[]>([])
-
   const [formData, setFormData] = useState(initialFormData)
   const [selectedGov, setSelectedGov] = useState<string>("")
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
-
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
-  // <-- NOUVEAU: Référence pour le scroll vers le formulaire
-  const formCardRef = useRef<HTMLDivElement>(null);
-
+  const formCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -107,48 +101,39 @@ export function CompanyManager() {
     }
   }
 
-  // <-- NOUVEAU: Fonction pour réinitialiser le formulaire et quitter le mode édition
   const resetForm = () => {
-    setEditingCompany(null);
-    setFormData(initialFormData);
-    setSelectedGov("");
-    setSelectedDel("");
-    setLogoFile(null);
-    const logoInput = document.getElementById('logo') as HTMLInputElement;
-    if (logoInput) logoInput.value = "";
+    setEditingCompany(null)
+    setFormData(initialFormData)
+    setSelectedGov("")
+    setSelectedDel("")
+    setLogoFile(null)
+    const logoInput = document.getElementById("logo") as HTMLInputElement
+    if (logoInput) logoInput.value = ""
   }
-  
-  // <-- NOUVEAU: Fonction appelée lors du clic sur le bouton "Gérer"
-  const handleEditClick = (company: Company) => {
-    setEditingCompany(company);
 
-    // Remplir le formulaire avec les données de l'entreprise
+  const handleEditClick = (company: Company) => {
+    setEditingCompany(company)
     setFormData({
       name: company.name,
+      manager_name: company.manager_name || "", // <-- MODIFIÉ
       matricule_fiscal: company.matricule_fiscal || "",
       email: company.email || "",
       phone_number: company.phone_number || "",
       address: company.address || "",
       is_fully_exporting: company.is_fully_exporting || false,
       is_subject_to_fodec: company.is_subject_to_fodec || false,
-    });
-
-    // Sélectionner le bon gouvernorat et filtrer les délégations
+    })
     if (company.governorate_id) {
-        const govIdStr = String(company.governorate_id);
-        setSelectedGov(govIdStr);
-        const filtered = delegations.filter((d) => d.governorate_id === company.governorate_id);
-        setFilteredDelegations(filtered);
+      const govIdStr = String(company.governorate_id)
+      setSelectedGov(govIdStr)
+      const filtered = delegations.filter((d) => d.governorate_id === company.governorate_id)
+      setFilteredDelegations(filtered)
     } else {
-        setSelectedGov("");
-        setFilteredDelegations([]);
+      setSelectedGov("")
+      setFilteredDelegations([])
     }
-
-    // Sélectionner la bonne délégation
-    setSelectedDel(company.delegation_id ? String(company.delegation_id) : "");
-    
-    // Faire défiler l'utilisateur jusqu'au formulaire d'édition
-    formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setSelectedDel(company.delegation_id ? String(company.delegation_id) : "")
+    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -165,7 +150,7 @@ export function CompanyManager() {
       return
     }
 
-    let logoPublicUrl = editingCompany?.logo_url || null; // <-- MODIFIÉ: On conserve l'ancien logo par défaut
+    let logoPublicUrl = editingCompany?.logo_url || null
 
     if (logoFile) {
       const fileExt = logoFile.name.split(".").pop()
@@ -181,38 +166,10 @@ export function CompanyManager() {
       logoPublicUrl = urlData.publicUrl
     }
     
-    // <-- MODIFIÉ: Logique de mise à jour ou d'insertion
-    if (editingCompany) {
-      // ** MODE MISE À JOUR **
-      const { error: updateError } = await supabase
-        .from("companies")
-        .update({
-          name: formData.name,
-          matricule_fiscal: formData.matricule_fiscal,
-          email: formData.email,
-          phone_number: formData.phone_number,
-          address: formData.address,
-          governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
-          delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
-          logo_url: logoPublicUrl,
-          is_fully_exporting: formData.is_fully_exporting,
-          is_subject_to_fodec: formData.is_subject_to_fodec,
-        })
-        .eq('id', editingCompany.id) // La condition pour ne mettre à jour que la bonne entreprise
-
-        if (updateError) {
-            setError("Erreur lors de la mise à jour de l'entreprise.")
-            console.error(updateError)
-        } else {
-            resetForm();
-            await fetchCompanies();
-        }
-
-    } else {
-      // ** MODE CRÉATION ** (code original)
-      const { error: insertError } = await supabase.from("companies").insert({
-        user_id: user.id,
+    // <-- MODIFIÉ: J'ajoute manager_name aux données à sauvegarder
+    const companyData = {
         name: formData.name,
+        manager_name: formData.manager_name, // <-- NOUVEAU
         matricule_fiscal: formData.matricule_fiscal,
         email: formData.email,
         phone_number: formData.phone_number,
@@ -222,22 +179,39 @@ export function CompanyManager() {
         logo_url: logoPublicUrl,
         is_fully_exporting: formData.is_fully_exporting,
         is_subject_to_fodec: formData.is_subject_to_fodec,
-      })
+    }
 
+    if (editingCompany) {
+      const { error: updateError } = await supabase
+        .from("companies")
+        .update(companyData)
+        .eq("id", editingCompany.id)
+      if (updateError) {
+        setError("Erreur lors de la mise à jour de l'entreprise.")
+        console.error(updateError)
+      } else {
+        resetForm()
+        await fetchCompanies()
+      }
+    } else {
+      const { error: insertError } = await supabase.from("companies").insert({
+        ...companyData,
+        user_id: user.id
+      })
       if (insertError) {
         setError("Erreur lors de la création de l'entreprise.")
         console.error(insertError)
       } else {
-        resetForm();
+        resetForm()
         await fetchCompanies()
       }
     }
-
     setIsLoading(false)
   }
 
   return (
     <div className="space-y-8">
+      {/* La partie affichage de la liste des entreprises ne change pas */}
       <Card>
         <CardHeader>
           <CardTitle>Mes Entreprises</CardTitle>
@@ -272,7 +246,6 @@ export function CompanyManager() {
                     <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
                     <TableCell className="hidden md:table-cell">{company.email}</TableCell>
                     <TableCell>
-                      {/* <-- MODIFIÉ: Le bouton appelle maintenant handleEditClick --> */}
                       <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
                         Gérer
                       </Button>
@@ -284,11 +257,9 @@ export function CompanyManager() {
           </div>
         </CardContent>
       </Card>
-      
-      {/* <-- MODIFIÉ: J'ajoute la référence ici --> */}
+
       <Card ref={formCardRef}>
         <CardHeader>
-          {/* <-- MODIFIÉ: Le titre et la description changent en fonction du mode --> */}
           <CardTitle>{editingCompany ? `Modifier l'entreprise : ${editingCompany.name}` : "Ajouter une nouvelle entreprise"}</CardTitle>
           <CardDescription>{editingCompany ? "Modifiez les informations ci-dessous." : "Remplissez les informations de votre entreprise."}</CardDescription>
         </CardHeader>
@@ -300,6 +271,11 @@ export function CompanyManager() {
                 <Label htmlFor="name">Nom de l'entreprise *</Label>
                 <Input id="name" value={formData.name} onChange={handleInputChange} required />
               </div>
+              {/* <-- NOUVEAU: Champ pour le nom du gérant --> */}
+              <div>
+                <Label htmlFor="manager_name">Nom du gérant</Label>
+                <Input id="manager_name" value={formData.manager_name} onChange={handleInputChange} />
+              </div>
               <div>
                 <Label htmlFor="matricule_fiscal">Matricule Fiscal</Label>
                 <Input id="matricule_fiscal" value={formData.matricule_fiscal} onChange={handleInputChange} />
@@ -308,18 +284,14 @@ export function CompanyManager() {
                 <Label htmlFor="email">Adresse Email</Label>
                 <Input id="email" type="email" value={formData.email} onChange={handleInputChange} />
               </div>
-              <div>
-                <Label htmlFor="phone_number">Numéro de téléphone</Label>
-                <Input id="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} />
-              </div>
-               <div>
-                <Label htmlFor="logo">Logo de l'entreprise</Label>
-                <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" />
-              </div>
             </div>
 
             {/* Colonne 2 */}
             <div className="space-y-4">
+              <div>
+                <Label htmlFor="phone_number">Numéro de téléphone</Label>
+                <Input id="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} />
+              </div>
               <div>
                 <Label htmlFor="address">Adresse</Label>
                 <Input id="address" value={formData.address} onChange={handleInputChange} />
@@ -342,38 +314,41 @@ export function CompanyManager() {
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div className="pt-2 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="is_fully_exporting">Société totalement exportatrice ?</Label>
-                  </div>
-                  <Switch
-                    id="is_fully_exporting"
-                    checked={formData.is_fully_exporting}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))}
-                  />
+            </div>
+
+            {/* Switches et Logo sous les 2 colonnes */}
+            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="is_fully_exporting">Société totalement exportatrice ?</Label>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="is_subject_to_fodec">Société soumise au Fodec ?</Label>
-                  </div>
-                   <Switch
-                    id="is_subject_to_fodec"
-                    checked={formData.is_subject_to_fodec}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))}
-                  />
+                <Switch
+                  id="is_fully_exporting"
+                  checked={formData.is_fully_exporting}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="is_subject_to_fodec">Société soumise au Fodec ?</Label>
                 </div>
+                 <Switch
+                  id="is_subject_to_fodec"
+                  checked={formData.is_subject_to_fodec}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))}
+                />
+              </div>
+               <div className="sm:col-span-2">
+                <Label htmlFor="logo">Logo de l'entreprise</Label>
+                <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" />
               </div>
             </div>
 
             {/* Boutons et Erreurs */}
             <div className="md:col-span-2 mt-4 flex items-center gap-4">
-              {/* <-- MODIFIÉ: Le texte du bouton principal change en fonction du mode --> */}
               <Button type="submit" disabled={isLoading} className="w-full md:w-auto">
                 {isLoading ? "Sauvegarde..." : editingCompany ? "Mettre à jour l'entreprise" : "Ajouter l'entreprise"}
               </Button>
-              {/* <-- NOUVEAU: Bouton pour annuler l'édition --> */}
               {editingCompany && (
                 <Button type="button" variant="ghost" onClick={resetForm} disabled={isLoading}>
                   Annuler

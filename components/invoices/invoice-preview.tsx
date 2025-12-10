@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import writtenNumber from "written-number"
-import { FODEC_RATE } from "@/constants" // Declare the FODEC_RATE variable
+import { FODEC_RATE } from "@/constants" 
 
 export function InvoicePreview({ invoice }: { invoice: any }) {
   if (!invoice) return null
@@ -21,7 +21,7 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
       <div className="max-w-4xl mx-auto p-8 print:p-4" style={{ width: "210mm", minHeight: "297mm" }}>
         <header className="flex justify-between items-start pb-4 mb-6 border-b-2 border-black">
-          <div className="flex items-center gap-4">
+          <div className="flex items-start gap-4">
             {invoice.companies?.logo_url && (
               <div className="relative w-24 h-24 print:w-20 print:h-20 flex-shrink-0">
                 <Image
@@ -33,9 +33,13 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
               </div>
             )}
             <div className="text-xs">
-              <h2 className="text-xl font-bold">{invoice.companies?.name}</h2>
-              <p>Adresse: {invoice.companies?.address}</p>
+              <h2 className="text-xl font-bold mb-1">{invoice.companies?.name}</h2>
+              <p className="max-w-xs">{invoice.companies?.address}</p>
               <p>Matricule Fiscal: {invoice.companies?.matricule_fiscal}</p>
+              {invoice.companies?.email && <p>Email: {invoice.companies.email}</p>}
+              {invoice.companies?.phone_number && <p>Tél: {invoice.companies.phone_number}</p>}
+              {/* <-- NOUVEAU: Affichage du nom du gérant s'il existe --> */}
+              {invoice.companies?.manager_name && <p>Gérant: {invoice.companies.manager_name}</p>}
             </div>
           </div>
           <div className="text-right text-xs">
@@ -52,13 +56,15 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
           </div>
         </header>
 
+        {/* Le reste du fichier ne change pas */}
         <section className="mb-6 grid grid-cols-2 gap-4">
-          <div className="p-3 border rounded-md bg-gray-50 text-xs">
+          <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
             <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
-            {/* --- LA CORRECTION EST ICI --- */}
-            <p className="text-base font-bold break-words">{invoice.customers?.name}</p>
-            <p>{invoice.customers?.address}</p>
+            <p className="text-base font-bold">{invoice.customers?.name}</p>
+            {invoice.customers?.address && <p>{invoice.customers.address}</p>}
             {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
+            {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
+            {invoice.customers?.phone_number && <p>Tél: {invoice.customers.phone_number}</p>}
           </div>
           {invoice.delivery_enabled && (
             <div className="p-3 border rounded-md bg-gray-50 text-xs">
