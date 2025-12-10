@@ -13,11 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch"
 import Image from "next/image"
 
-// <-- MODIFIÉ: J'ajoute le nouveau champ au type Company
+// Type de l'objet Company, incluant le nouveau champ 'manager_name'
 type Company = {
   id: string
   name: string
-  manager_name: string | null // <-- NOUVEAU
+  manager_name: string | null
   matricule_fiscal: string | null
   email: string | null
   phone_number: string | null
@@ -31,10 +31,10 @@ type Company = {
 type Governorate = { id: number; name: string }
 type Delegation = { id: number; name: string; governorate_id: number }
 
-// <-- MODIFIÉ: J'ajoute le nouveau champ au state initial du formulaire
+// État initial du formulaire, incluant le nouveau champ
 const initialFormData = {
   name: "",
-  manager_name: "", // <-- NOUVEAU
+  manager_name: "",
   matricule_fiscal: "",
   email: "",
   phone_number: "",
@@ -115,7 +115,7 @@ export function CompanyManager() {
     setEditingCompany(company)
     setFormData({
       name: company.name,
-      manager_name: company.manager_name || "", // <-- MODIFIÉ
+      manager_name: company.manager_name || "", 
       matricule_fiscal: company.matricule_fiscal || "",
       email: company.email || "",
       phone_number: company.phone_number || "",
@@ -166,10 +166,9 @@ export function CompanyManager() {
       logoPublicUrl = urlData.publicUrl
     }
     
-    // <-- MODIFIÉ: J'ajoute manager_name aux données à sauvegarder
     const companyData = {
         name: formData.name,
-        manager_name: formData.manager_name, // <-- NOUVEAU
+        manager_name: formData.manager_name, 
         matricule_fiscal: formData.matricule_fiscal,
         email: formData.email,
         phone_number: formData.phone_number,
@@ -211,7 +210,6 @@ export function CompanyManager() {
 
   return (
     <div className="space-y-8">
-      {/* La partie affichage de la liste des entreprises ne change pas */}
       <Card>
         <CardHeader>
           <CardTitle>Mes Entreprises</CardTitle>
@@ -271,7 +269,6 @@ export function CompanyManager() {
                 <Label htmlFor="name">Nom de l'entreprise *</Label>
                 <Input id="name" value={formData.name} onChange={handleInputChange} required />
               </div>
-              {/* <-- NOUVEAU: Champ pour le nom du gérant --> */}
               <div>
                 <Label htmlFor="manager_name">Nom du gérant</Label>
                 <Input id="manager_name" value={formData.manager_name} onChange={handleInputChange} />
@@ -288,7 +285,7 @@ export function CompanyManager() {
 
             {/* Colonne 2 */}
             <div className="space-y-4">
-              <div>
+               <div>
                 <Label htmlFor="phone_number">Numéro de téléphone</Label>
                 <Input id="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} />
               </div>
@@ -316,7 +313,6 @@ export function CompanyManager() {
               </div>
             </div>
 
-            {/* Switches et Logo sous les 2 colonnes */}
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-2">
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-0.5">

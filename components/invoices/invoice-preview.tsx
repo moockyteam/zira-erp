@@ -59,13 +59,23 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
         {/* Le reste du fichier ne change pas */}
         <section className="mb-6 grid grid-cols-2 gap-4">
           <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
-            <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
-            <p className="text-base font-bold">{invoice.customers?.name}</p>
-            {invoice.customers?.address && <p>{invoice.customers.address}</p>}
-            {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
-            {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
-            {invoice.customers?.phone_number && <p>Tél: {invoice.customers.phone_number}</p>}
-          </div>
+  <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
+  <p className="text-base font-bold">{invoice.customers?.name}</p>
+  
+  {/* LA CORRECTION EST ICI : On assemble la nouvelle adresse structurée */}
+  <p>
+    {[
+      invoice.customers?.street,
+      invoice.customers?.delegation,
+      invoice.customers?.governorate,
+      invoice.customers?.country
+    ].filter(Boolean).join(', ')}
+  </p>
+
+  {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
+  {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
+  {invoice.customers?.phone_number && <p>Tél: {invoice.customers.phone_number}</p>}
+</div>
           {invoice.delivery_enabled && (
             <div className="p-3 border rounded-md bg-gray-50 text-xs">
               <h3 className="font-bold text-gray-600 mb-1">LIVRAISON</h3>

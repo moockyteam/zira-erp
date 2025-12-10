@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server" // Important : on utilise le client SERVEUR pour la sécurité
-import { CompanyManager } from "@/components/company-manager"
+import { CompanyManager } from "@/components/company-manager"; // <-- LA CORRECTION EST ICI
 
 // La page est une fonction "async" pour pouvoir utiliser "await"
 export default async function CompaniesPage() {

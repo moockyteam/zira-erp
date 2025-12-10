@@ -1,28 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import * as XLSX from 'xlsx' // La librairie pour lire les fichiers Excel
+import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { UploadCloud } from 'lucide-react'
+import { Download, UploadCloud } from 'lucide-react'
 
 interface CustomerImportDialogProps {
   companyId: string;
-  onImportSuccess: () => void; // Pour rafraîchir la liste des clients
+  onImportSuccess: () => void;
 }
 
-// On définit la structure attendue des colonnes dans le fichier Excel
+// <-- MODIFIÉ: Structure de l'Excel avec les nouvelles colonnes
 type ExcelRow = {
   'Nom': string;
   'Type (ENTREPRISE/PARTICULIER)': 'ENTREPRISE' | 'PARTICULIER';
@@ -30,6 +24,10 @@ type ExcelRow = {
   'Email': string;
   'Telephone': string;
   'Matricule Fiscal': string;
+  'Rue': string;
+  'Delegation': string;
+  'Gouvernorat': string;
+  'Pays': string;
 }
 
 export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImportDialogProps) {
@@ -42,7 +40,25 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFile(e.target.files[0])
+      setError(null)
+      setSuccessMessage(null)
     }
+  }
+  
+  // <-- NOUVEAU: Fonction pour générer et télécharger le modèle Excel
+  const downloadTemplate = () => {
+    const headers = [
+        ['Nom', 'Type (ENTREPRISE/PARTICULIER)', 'Contact', 'Email', 'Telephone', 'Matricule Fiscal', 'Rue', 'Delegation', 'Gouvernorat', 'Pays']
+    ];
+    // Exemple de ligne pour guider l'utilisateur
+    const exampleRow = [
+        ['Client Exemple SARL', 'ENTREPRISE', 'Mme. Flen', 'contact@exemple.com', '71123456', '1234567/A/B/000', '123 Rue de la Liberté', 'Tunis', 'Tunis', 'Tunisie']
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet([...headers, ...exampleRow]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clients");
+    XLSX.writeFile(workbook, "modele_import_clients.xlsx");
   }
 
   const handleImport = async () => {
@@ -63,41 +79,43 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
         const worksheet = workbook.Sheets[sheetName]
         const json: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet)
 
-        if (json.length === 0) {
-          throw new Error("Le fichier Excel est vide ou mal formaté.")
-        }
+        if (json.length === 0) throw new Error("Le fichier Excel est vide ou mal formaté.")
 
-        // On transforme les données lues en objets prêts pour Supabase
+        // <-- MODIFIÉ: Mapping des nouvelles colonnes
         const customersToInsert = json.map(row => {
-          // --- CORRECTION EXACTE ICI ---
-          // On nettoie la valeur du type : on la met en majuscules et on enlève les espaces
+          if (!row['Nom'] || String(row['Nom']).trim() === '') return null; // Ignore les lignes sans nom
+
           const customerTypeRaw = (row['Type (ENTREPRISE/PARTICULIER)'] || '').toString().trim().toUpperCase();
           const customerType = customerTypeRaw === 'PARTICULIER' ? 'PARTICULIER' : 'ENTREPRISE';
 
           return {
             company_id: companyId,
             name: row['Nom'],
-            customer_type: customerType, // On utilise la valeur nettoyée
+            customer_type: customerType,
             contact_person: row['Contact'],
             email: row['Email'],
             phone_number: row['Telephone'],
             matricule_fiscal: row['Matricule Fiscal'],
+            street: row['Rue'],
+            delegation: row['Delegation'],
+            governorate: row['Gouvernorat'],
+            country: row['Pays'],
           };
-        });
+        }).filter(Boolean); // Filtre les lignes nulles
 
-        // On envoie tout à Supabase en une seule requête
-        const { error: insertError } = await supabase.from('customers').insert(customersToInsert)
-
-        if (insertError) {
-          throw insertError
+        if (customersToInsert.length === 0) {
+            throw new Error("Aucun client avec un nom valide n'a été trouvé dans le fichier.");
         }
 
+        const { error: insertError } = await supabase.from('customers').insert(customersToInsert)
+        if (insertError) throw insertError
+
         setSuccessMessage(`${customersToInsert.length} clients ont été importés avec succès !`)
-        onImportSuccess() // On rafraîchit la liste
+        onImportSuccess()
         setFile(null)
 
       } catch (e: any) {
-        setError(`Erreur lors de l'import : ${e.message}`)
+        setError(`Erreur: ${e.message}`)
         console.error(e)
       } finally {
         setIsLoading(false)
@@ -107,28 +125,35 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
   }
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={() => { setFile(null); setError(null); setSuccessMessage(null); }}>
       <DialogTrigger asChild>
-        <Button variant="outline">
-          <UploadCloud className="h-4 w-4 mr-2" />
-          Importer depuis Excel
-        </Button>
+        <Button variant="outline"><UploadCloud className="h-4 w-4 mr-2" /> Importer</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Importer une liste de clients</DialogTitle>
           <DialogDescription>
-            Sélectionnez un fichier Excel (.xlsx). Assurez-vous que les colonnes correspondent au modèle : 
-            Nom, Type (ENTREPRISE/PARTICULIER), Contact, Email, Telephone, Matricule Fiscal.
+            Importez vos clients depuis un fichier Excel (.xlsx). Seul le champ 'Nom' est obligatoire.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 py-4">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h4 className="font-semibold text-blue-800 mb-2">Instructions</h4>
+            <p className="text-sm text-blue-700 mb-3">
+              1. Téléchargez notre modèle pour vous assurer que vos colonnes sont correctement formatées.
+            </p>
+            {/* <-- NOUVEAU: Bouton pour télécharger le modèle --> */}
+            <Button onClick={downloadTemplate} variant="secondary" size="sm">
+              <Download className="h-4 w-4 mr-2" />
+              Télécharger le modèle
+            </Button>
+          </div>
           <div>
-            <Label htmlFor="excel-file">Fichier Excel</Label>
+            <Label htmlFor="excel-file">2. Sélectionnez votre fichier complété</Label>
             <Input id="excel-file" type="file" onChange={handleFileChange} accept=".xlsx, .xls" />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
+          {successMessage && <p className="text-sm text-green-600 font-semibold">{successMessage}</p>}
         </div>
         <DialogFooter>
           <Button onClick={handleImport} disabled={isLoading || !file}>

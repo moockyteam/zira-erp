@@ -34,7 +34,18 @@ import {
 import { cn } from "@/lib/utils"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
-type Customer = { id: string; name: string; balance: number | null }
+type Customer = {
+  id: string;
+  name: string;
+  balance: number | null;
+  street?: string;
+  delegation?: string;
+  governorate?: string;
+  country?: string;
+  matricule_fiscal?: string;
+  email?: string;
+  phone_number?: string;
+}
 type Item = { id: string; name: string; sale_price: number | null; reference: string | null; quantity_on_hand: number }
 type Quote = { id: string; quote_number: string }
 
@@ -317,64 +328,82 @@ export function InvoiceForm({
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
           {selectedCustomer && (
-            <div
-              className={cn(
-                "p-4 rounded-lg border-2 transition-all hover:shadow-md",
-                selectedCustomer.balance && selectedCustomer.balance < 0
-                  ? "bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-950/20 dark:to-red-950/20 border-rose-300 dark:border-rose-800"
-                  : selectedCustomer.balance && selectedCustomer.balance > 0
-                    ? "bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-300 dark:border-emerald-800"
-                    : "bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border-slate-300 dark:border-slate-700",
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div
+            <>
+              <div
+                className={cn(
+                  "p-4 rounded-lg border-2 transition-all hover:shadow-md",
+                  selectedCustomer.balance && selectedCustomer.balance < 0
+                    ? "bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-950/20 dark:to-red-950/20 border-rose-300 dark:border-rose-800"
+                    : selectedCustomer.balance && selectedCustomer.balance > 0
+                      ? "bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-300 dark:border-emerald-800"
+                      : "bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border-slate-300 dark:border-slate-700",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "p-2 rounded-full",
+                        selectedCustomer.balance && selectedCustomer.balance < 0
+                          ? "bg-rose-200 dark:bg-rose-900"
+                          : selectedCustomer.balance && selectedCustomer.balance > 0
+                            ? "bg-emerald-200 dark:bg-emerald-900"
+                            : "bg-slate-200 dark:bg-slate-700",
+                      )}
+                    >
+                      <User
+                        className={cn(
+                          "h-5 w-5",
+                          selectedCustomer.balance && selectedCustomer.balance < 0
+                            ? "text-rose-700 dark:text-rose-300"
+                            : selectedCustomer.balance && selectedCustomer.balance > 0
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-slate-700 dark:text-slate-300",
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-base">Situation du client</h4>
+                      <span className="text-sm text-muted-foreground">
+                        {selectedCustomer.balance && selectedCustomer.balance < 0
+                          ? "Dette antérieure"
+                          : selectedCustomer.balance && selectedCustomer.balance > 0
+                            ? "Avoir disponible"
+                            : "Solde neutre"}
+                      </span>
+                    </div>
+                  </div>
+                  <span
                     className={cn(
-                      "p-2 rounded-full",
+                      "font-mono font-bold text-2xl",
                       selectedCustomer.balance && selectedCustomer.balance < 0
-                        ? "bg-rose-200 dark:bg-rose-900"
+                        ? "text-rose-700 dark:text-rose-300"
                         : selectedCustomer.balance && selectedCustomer.balance > 0
-                          ? "bg-emerald-200 dark:bg-emerald-900"
-                          : "bg-slate-200 dark:bg-slate-700",
+                          ? "text-emerald-700 dark:text-emerald-300"
+                          : "text-slate-700 dark:text-slate-300",
                     )}
                   >
-                    <User
-                      className={cn(
-                        "h-5 w-5",
-                        selectedCustomer.balance && selectedCustomer.balance < 0
-                          ? "text-rose-700 dark:text-rose-300"
-                          : selectedCustomer.balance && selectedCustomer.balance > 0
-                            ? "text-emerald-700 dark:text-emerald-300"
-                            : "text-slate-700 dark:text-slate-300",
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-base">Situation du client</h4>
-                    <span className="text-sm text-muted-foreground">
-                      {selectedCustomer.balance && selectedCustomer.balance < 0
-                        ? "Dette antérieure"
-                        : selectedCustomer.balance && selectedCustomer.balance > 0
-                          ? "Avoir disponible"
-                          : "Solde neutre"}
-                    </span>
-                  </div>
+                    {selectedCustomer.balance?.toFixed(3)} TND
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    "font-mono font-bold text-2xl",
-                    selectedCustomer.balance && selectedCustomer.balance < 0
-                      ? "text-rose-700 dark:text-rose-300"
-                      : selectedCustomer.balance && selectedCustomer.balance > 0
-                        ? "text-emerald-700 dark:text-emerald-300"
-                        : "text-slate-700 dark:text-slate-300",
-                  )}
-                >
-                  {selectedCustomer.balance?.toFixed(3)} TND
-                </span>
               </div>
-            </div>
+
+              <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
+                <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
+                <p className="text-base font-bold">{selectedCustomer.name}</p>
+                <p>
+                  {[
+                    selectedCustomer.street,
+                    selectedCustomer.delegation,
+                    selectedCustomer.governorate,
+                    selectedCustomer.country
+                  ].filter(Boolean).join(', ')}
+                </p>
+                {selectedCustomer.matricule_fiscal && <p>MF: {selectedCustomer.matricule_fiscal}</p>}
+                {selectedCustomer.email && <p>Email: {selectedCustomer.email}</p>}
+                {selectedCustomer.phone_number && <p>Tél: {selectedCustomer.phone_number}</p>}
+              </div>
+            </>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">

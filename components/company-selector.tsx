@@ -1,12 +1,11 @@
-// Placez ce code dans le fichier : components/company-selector.tsx
+// Fichier : components/company-selector.tsx
 
 "use client"
 
 import Image from "next/image"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { cn } from "@/lib/utils" // Assurez-vous que ce helper existe dans votre projet (standard avec shadcn/ui)
+import { cn } from "@/lib/utils"
 
-// Définition des types pour les props
 type Company = {
   id: string;
   name: string;
@@ -21,7 +20,7 @@ interface CompanySelectorProps {
 
 export function CompanySelector({ companies, selectedCompanyId, onCompanySelect }: CompanySelectorProps) {
   if (!companies || companies.length === 0) {
-    return null; // Ne rien afficher si l'utilisateur n'a pas d'entreprise
+    return null;
   }
 
   return (

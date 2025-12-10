@@ -1,4 +1,3 @@
-// components/customer-manager.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -33,9 +32,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Trash2 } from "lucide-react"
-import { CompanySelector } from "@/components/company-selector" // <-- CHANGEMENT: J'importe le bon composant
+import { CompanySelector } from "@/components/company-selector"
 
-// Définition des types
+// <-- MODIFIÉ: Mise à jour du type Customer avec les nouveaux champs d'adresse
 type Company = { id: string; name: string; }
 type Customer = {
   id: string;
@@ -44,7 +43,10 @@ type Customer = {
   contact_person: string | null;
   email: string | null;
   phone_number: string | null;
-  address: string | null;
+  street: string | null; // <-- MODIFIÉ
+  delegation: string | null; // <-- NOUVEAU
+  governorate: string | null; // <-- NOUVEAU
+  country: string | null; // <-- NOUVEAU
   matricule_fiscal: string | null;
   balance: number | null;
 }
@@ -54,25 +56,24 @@ const customerTypes = [
   { value: 'PARTICULIER', label: 'Particulier' },
 ]
 
+// <-- MODIFIÉ: Mise à jour de l'état initial du formulaire
 const initialAddFormData = {
   name: '', customer_type: 'ENTREPRISE' as 'ENTREPRISE' | 'PARTICULIER', contact_person: '',
-  email: '', phone_number: '', address: '', matricule_fiscal: '', balance: '0.000'
+  email: '', phone_number: '', street: '', delegation: '', governorate: '', country: 'Tunisie',
+  matricule_fiscal: '', balance: '0.000'
 };
 
 export function CustomerManager({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // <-- CHANGEMENT: J'autorise null
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const [addFormData, setAddFormData] = useState(initialAddFormData)
-
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
 
-  // <-- CHANGEMENT: Logique de sélection automatique de l'entreprise
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id)
@@ -105,7 +106,8 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
     setIsLoading(true)
     setError(null)
 
-    const dataToInsert = {
+    // <-- MODIFIÉ: Suppression de l'ancien champ 'address'
+    const { ...dataToInsert } = {
       ...addFormData,
       balance: parseFloat(addFormData.balance) || 0,
       company_id: selectedCompanyId,
@@ -133,10 +135,15 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
   const handleUpdate = async () => {
     if (!editingCustomer) return
     setIsLoading(true)
+    
+    // <-- MODIFIÉ: Assurez-vous que l'ancien champ 'address' n'est pas envoyé
+    const { ...dataToUpdate } = editingCustomer
+    
     const { error } = await supabase.from('customers').update({
-      ...editingCustomer,
+      ...dataToUpdate,
       balance: parseFloat(editingCustomer.balance as any) || 0,
     }).eq('id', editingCustomer.id)
+    
     if (error) {
       setError("Erreur lors de la mise à jour.")
       console.error(error);
@@ -162,19 +169,15 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
 
   return (
     <div className="space-y-8">
-      {/* <-- CHANGEMENT: Remplacement de l'ancien sélecteur par le composant standard --> */}
       <CompanySelector
         companies={userCompanies}
         selectedCompanyId={selectedCompanyId}
         onCompanySelect={setSelectedCompanyId}
       />
 
-      {/* <-- CHANGEMENT: Affichage conditionnel si aucune entreprise n'est sélectionnée --> */}
       {!selectedCompanyId && userCompanies.length > 1 && (
         <Card className="text-center py-12">
-          <CardContent>
-            <p className="text-muted-foreground">Veuillez sélectionner une entreprise pour gérer ses clients.</p>
-          </CardContent>
+          <CardContent><p className="text-muted-foreground">Veuillez sélectionner une entreprise pour gérer ses clients.</p></CardContent>
         </Card>
       )}
 
@@ -183,7 +186,10 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
           <Card>
             <CardHeader><CardTitle>Ajouter un nouveau client</CardTitle></CardHeader>
             <CardContent>
-              <form onSubmit={handleAddSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* <-- MODIFIÉ: Le formulaire d'ajout est maintenant sur 4 colonnes pour mieux organiser les champs --> */}
+              <form onSubmit={handleAddSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                {/* Colonne 1: Infos principales */}
                 <div className="space-y-4">
                   <div><Label htmlFor="name">Nom du client *</Label><Input id="name" value={addFormData.name} onChange={handleAddFormChange} required /></div>
                   <div>
@@ -197,20 +203,32 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
                   </div>
                    <div><Label htmlFor="matricule_fiscal">Matricule Fiscal</Label><Input id="matricule_fiscal" value={addFormData.matricule_fiscal} onChange={handleAddFormChange} /></div>
                 </div>
+
+                {/* Colonne 2: Infos contact */}
                 <div className="space-y-4">
                   <div><Label htmlFor="contact_person">Personne de contact</Label><Input id="contact_person" value={addFormData.contact_person} onChange={handleAddFormChange} /></div>
                   <div><Label htmlFor="email">Email</Label><Input id="email" type="email" value={addFormData.email} onChange={handleAddFormChange} /></div>
                   <div><Label htmlFor="phone_number">Téléphone</Label><Input id="phone_number" type="tel" value={addFormData.phone_number} onChange={handleAddFormChange} /></div>
                 </div>
+
+                {/* Colonne 3: Adresse */}
                 <div className="space-y-4">
-                  <div><Label htmlFor="address">Adresse</Label><Input id="address" value={addFormData.address} onChange={handleAddFormChange}/></div>
+                  <div><Label htmlFor="street">Rue et numéro</Label><Input id="street" value={addFormData.street} onChange={handleAddFormChange}/></div>
+                  <div><Label htmlFor="delegation">Délégation / Ville</Label><Input id="delegation" value={addFormData.delegation} onChange={handleAddFormChange}/></div>
+                  <div><Label htmlFor="governorate">Gouvernorat / Région</Label><Input id="governorate" value={addFormData.governorate} onChange={handleAddFormChange}/></div>
+                </div>
+                
+                {/* Colonne 4: Pays et Solde */}
+                <div className="space-y-4">
+                  <div><Label htmlFor="country">Pays</Label><Input id="country" value={addFormData.country} onChange={handleAddFormChange}/></div>
                   <div>
                     <Label htmlFor="balance">Solde initial (TND)</Label>
                     <Input id="balance" type="number" step="0.001" value={addFormData.balance} onChange={handleAddFormChange} />
-                    <p className="text-xs text-muted-foreground mt-1">Positif si le client vous doit de l'argent, négatif pour un avoir.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Positif si le client vous doit de l'argent.</p>
                   </div>
                 </div>
-                <div className="md:col-span-2 lg:col-span-3">
+
+                <div className="lg:col-span-4">
                   {error && <p className="text-sm text-destructive mb-4">{error}</p>}
                   <Button type="submit" disabled={isLoading}>{isLoading ? "Ajout en cours..." : "Ajouter le client"}</Button>
                 </div>
@@ -255,31 +273,34 @@ export function CustomerManager({ userCompanies }: { userCompanies: Company[] })
                 </Table>
               </CardContent>
             </Card>
-
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Modifier le client</DialogTitle>
-              </DialogHeader>
+            
+            {/* <-- MODIFIÉ: Le formulaire d'édition utilise maintenant les nouveaux champs --> */}
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader><DialogTitle>Modifier le client</DialogTitle></DialogHeader>
               {editingCustomer && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                  <div><Label htmlFor="name">Nom</Label><Input id="name" value={editingCustomer.name} onChange={handleEditFormChange} /></div>
-                  <div><Label htmlFor="matricule_fiscal">Matricule Fiscal</Label><Input id="matricule_fiscal" value={editingCustomer.matricule_fiscal || ''} onChange={handleEditFormChange} /></div>
-                  <div><Label htmlFor="contact_person">Contact</Label><Input id="contact_person" value={editingCustomer.contact_person || ''} onChange={handleEditFormChange} /></div>
-                  <div><Label htmlFor="email">Email</Label><Input id="email" type="email" value={editingCustomer.email || ''} onChange={handleEditFormChange} /></div>
-                  <div><Label htmlFor="phone_number">Téléphone</Label><Input id="phone_number" type="tel" value={editingCustomer.phone_number || ''} onChange={handleEditFormChange} /></div>
-                  <div>
-                    <Label htmlFor="balance">Solde (TND)</Label>
-                    <Input id="balance" type="number" step="0.001" value={editingCustomer.balance ?? '0'} onChange={handleEditFormChange} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                  <div className="space-y-4">
+                    <div><Label htmlFor="name">Nom</Label><Input id="name" value={editingCustomer.name} onChange={handleEditFormChange} /></div>
+                    <div><Label htmlFor="matricule_fiscal">Matricule Fiscal</Label><Input id="matricule_fiscal" value={editingCustomer.matricule_fiscal || ''} onChange={handleEditFormChange} /></div>
+                    <div><Label htmlFor="contact_person">Contact</Label><Input id="contact_person" value={editingCustomer.contact_person || ''} onChange={handleEditFormChange} /></div>
+                    <div><Label htmlFor="email">Email</Label><Input id="email" type="email" value={editingCustomer.email || ''} onChange={handleEditFormChange} /></div>
+                    <div><Label htmlFor="phone_number">Téléphone</Label><Input id="phone_number" type="tel" value={editingCustomer.phone_number || ''} onChange={handleEditFormChange} /></div>
+                  </div>
+                  <div className="space-y-4">
+                    <div><Label htmlFor="street">Rue et numéro</Label><Input id="street" value={editingCustomer.street || ''} onChange={handleEditFormChange}/></div>
+                    <div><Label htmlFor="delegation">Délégation / Ville</Label><Input id="delegation" value={editingCustomer.delegation || ''} onChange={handleEditFormChange}/></div>
+                    <div><Label htmlFor="governorate">Gouvernorat / Région</Label><Input id="governorate" value={editingCustomer.governorate || ''} onChange={handleEditFormChange}/></div>
+                    <div><Label htmlFor="country">Pays</Label><Input id="country" value={editingCustomer.country || ''} onChange={handleEditFormChange}/></div>
+                    <div>
+                      <Label htmlFor="balance">Solde (TND)</Label>
+                      <Input id="balance" type="number" step="0.001" value={editingCustomer.balance ?? '0'} onChange={handleEditFormChange} />
+                    </div>
                   </div>
                 </div>
               )}
               <DialogFooter className="justify-between">
-                <Button variant="destructive" onClick={() => handleDelete(editingCustomer!.id)} disabled={isLoading}>
-                  <Trash2 className="h-4 w-4 mr-2" /> Supprimer
-                </Button>
-                <Button onClick={handleUpdate} disabled={isLoading}>
-                  {isLoading ? "Sauvegarde..." : "Sauvegarder les modifications"}
-                </Button>
+                <Button variant="destructive" onClick={() => handleDelete(editingCustomer!.id)} disabled={isLoading}><Trash2 className="h-4 w-4 mr-2" /> Supprimer</Button>
+                <Button onClick={handleUpdate} disabled={isLoading}>{isLoading ? "Sauvegarde..." : "Sauvegarder"}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

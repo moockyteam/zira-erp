@@ -1,4 +1,4 @@
-// dans app/dashboard/customers/page.tsx
+//  app/dashboard/customers/page.tsx
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
