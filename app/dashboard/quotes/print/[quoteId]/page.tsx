@@ -1,4 +1,4 @@
-//  app/dashboard/quotes/print/[quoteId]/page.tsx
+// app/dashboard/quotes/print/[quoteId]/page.tsx
 
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
@@ -15,9 +15,15 @@ export default async function PrintQuotePage({
   const resolvedSearchParams = await searchParams;
   const supabase = await createClient();
   
+  // MODIFIÉ: Le select inclut maintenant tous les champs nécessaires
   const { data: quote, error } = await supabase
     .from('quotes')
-    .select(`*, companies(*), customers(*), quote_lines(*, items(reference))`)
+    .select(`
+      *, 
+      companies(*), 
+      customers(*), 
+      quote_lines(*, items(reference))
+    `)
     .eq('id', quoteId)
     .single();
 
@@ -29,9 +35,7 @@ export default async function PrintQuotePage({
 
   return (
     <>
-      {/* On affiche simplement le composant de prévisualisation. C'est tout. */}
       <QuotePreview quote={quote} />
-
       {shouldPrint && (
         <script dangerouslySetInnerHTML={{ __html: 'window.print();' }} />
       )}

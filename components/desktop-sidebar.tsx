@@ -17,6 +17,7 @@ import {
   Truck,
   CornerUpLeft,
   Package,
+  ShoppingCart,
 } from "lucide-react"
 import LogoutButton from "@/components/logout-button"
 import { cn } from "@/lib/utils"
@@ -31,6 +32,7 @@ const navLinks = [
   { href: "/dashboard/companies", label: "Entreprises", icon: Building },
   { href: "/dashboard/customers", label: "Clients", icon: Contact },
   { href: "/dashboard/suppliers", label: "Fournisseurs", icon: Users },
+  { href: "/dashboard/purchase-orders", label: "Bons de Commande", icon: ShoppingCart },
   { href: "/dashboard/stock", label: "Stock", icon: Boxes },
   { href: "/dashboard/quotes", label: "Devis", icon: FileText },
   { href: "/dashboard/invoices", label: "Factures", icon: Receipt },

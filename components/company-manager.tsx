@@ -1,19 +1,33 @@
+// components/company-manager.tsx
+
 "use client"
 
 import type React from "react"
 import { useEffect, useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import Image from "next/image"
+import { toast } from "sonner" // NOUVEAU: Importation pour les notifications
+
+// NOUVEAU: Importations depuis shadcn/ui pour la modale (Dialog), les skeletons, etc.
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
-import Image from "next/image"
 
-// Type de l'objet Company, incluant le nouveau champ 'manager_name'
+// --- Les types restent inchangés ---
 type Company = {
   id: string
   name: string
@@ -31,7 +45,6 @@ type Company = {
 type Governorate = { id: number; name: string }
 type Delegation = { id: number; name: string; governorate_id: number }
 
-// État initial du formulaire, incluant le nouveau champ
 const initialFormData = {
   name: "",
   manager_name: "",
@@ -54,23 +67,34 @@ export function CompanyManager() {
   const [selectedGov, setSelectedGov] = useState<string>("")
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  
+  // NOUVEAU: États pour gérer l'UX
+  const [isFormOpen, setIsFormOpen] = useState(false) // Gère l'ouverture de la modale
+  const [isInitialLoading, setIsInitialLoading] = useState(true) // Gère le skeleton loader initial
+  const [isSubmitting, setIsSubmitting] = useState(false) // Gère le chargement du formulaire
+  const [logoPreview, setLogoPreview] = useState<string | null>(null) // Gère l'aperçu du logo
   const [error, setError] = useState<string | null>(null)
-  const formCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchInitialData = async () => {
+      setIsInitialLoading(true)
       await Promise.all([fetchCompanies(), fetchGovernorates(), fetchDelegations()])
+      setIsInitialLoading(false)
     }
     fetchInitialData()
   }, [])
 
   async function fetchCompanies() {
-    const { data, error } = await supabase.from("companies").select("*")
-    if (error) console.error("Erreur chargement entreprises:", error)
-    else setCompanies(data)
+    const { data, error } = await supabase.from("companies").select("*").order("name")
+    if (error) {
+      console.error("Erreur chargement entreprises:", error)
+      toast.error("Impossible de charger les entreprises.")
+    } else {
+      setCompanies(data)
+    }
   }
 
+  // fetchGovernorates et fetchDelegations restent inchangés...
   async function fetchGovernorates() {
     const { data, error } = await supabase.from("governorates").select("id, name")
     if (error) console.error("Erreur chargement gouvernorats:", error)
@@ -95,27 +119,43 @@ export function CompanyManager() {
     setFilteredDelegations(filtered)
   }
 
+  // MODIFIÉ: Gestion du logo avec aperçu
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setLogoFile(e.target.files[0])
+      const file = e.target.files[0]
+      setLogoFile(file)
+      setLogoPreview(URL.createObjectURL(file))
     }
   }
 
-  const resetForm = () => {
+  // MODIFIÉ: La fonction de reset ferme maintenant la modale et nettoie l'aperçu
+  const resetFormAndClose = () => {
     setEditingCompany(null)
     setFormData(initialFormData)
     setSelectedGov("")
     setSelectedDel("")
     setLogoFile(null)
-    const logoInput = document.getElementById("logo") as HTMLInputElement
-    if (logoInput) logoInput.value = ""
+    setLogoPreview(null)
+    setIsFormOpen(false)
+    setError(null)
   }
 
+  // NOUVEAU: Ouvre le formulaire pour une nouvelle entreprise
+  const handleAddNewClick = () => {
+    setEditingCompany(null)
+    setFormData(initialFormData)
+    setSelectedGov("")
+    setSelectedDel("")
+    setLogoPreview(null)
+    setIsFormOpen(true)
+  }
+
+  // MODIFIÉ: Ouvre le formulaire pour l'édition
   const handleEditClick = (company: Company) => {
     setEditingCompany(company)
     setFormData({
       name: company.name,
-      manager_name: company.manager_name || "", 
+      manager_name: company.manager_name || "",
       matricule_fiscal: company.matricule_fiscal || "",
       email: company.email || "",
       phone_number: company.phone_number || "",
@@ -133,20 +173,20 @@ export function CompanyManager() {
       setFilteredDelegations([])
     }
     setSelectedDel(company.delegation_id ? String(company.delegation_id) : "")
-    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    setLogoPreview(company.logo_url) // Affiche le logo existant
+    setIsFormOpen(true)
   }
 
+  // MODIFIÉ: Logique de soumission avec notifications et gestion d'état
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsLoading(true)
+    setIsSubmitting(true)
     setError(null)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setError("Utilisateur non authentifié.")
-      setIsLoading(false)
+      setIsSubmitting(false)
       return
     }
 
@@ -155,20 +195,21 @@ export function CompanyManager() {
     if (logoFile) {
       const fileExt = logoFile.name.split(".").pop()
       const filePath = `${user.id}/${uuidv4()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from("company_logos").upload(filePath, logoFile)
+      const { error: uploadError } = await supabase.storage.from("company_logos").upload(filePath, logoFile, { upsert: true })
       if (uploadError) {
         setError("Erreur lors de l'upload du logo.")
+        toast.error("Erreur lors de l'upload du logo.")
         console.error(uploadError)
-        setIsLoading(false)
+        setIsSubmitting(false)
         return
       }
       const { data: urlData } = supabase.storage.from("company_logos").getPublicUrl(filePath)
       logoPublicUrl = urlData.publicUrl
     }
-    
+
     const companyData = {
         name: formData.name,
-        manager_name: formData.manager_name, 
+        manager_name: formData.manager_name,
         matricule_fiscal: formData.matricule_fiscal,
         email: formData.email,
         phone_number: formData.phone_number,
@@ -181,38 +222,38 @@ export function CompanyManager() {
     }
 
     if (editingCompany) {
-      const { error: updateError } = await supabase
-        .from("companies")
-        .update(companyData)
-        .eq("id", editingCompany.id)
+      const { error: updateError } = await supabase.from("companies").update(companyData).eq("id", editingCompany.id)
       if (updateError) {
-        setError("Erreur lors de la mise à jour de l'entreprise.")
+        setError("Erreur lors de la mise à jour.")
+        toast.error(`Erreur: ${updateError.message}`)
         console.error(updateError)
       } else {
-        resetForm()
+        toast.success(`L'entreprise "${formData.name}" a été mise à jour.`)
+        resetFormAndClose()
         await fetchCompanies()
       }
     } else {
-      const { error: insertError } = await supabase.from("companies").insert({
-        ...companyData,
-        user_id: user.id
-      })
+      const { error: insertError } = await supabase.from("companies").insert({ ...companyData, user_id: user.id })
       if (insertError) {
-        setError("Erreur lors de la création de l'entreprise.")
+        setError("Erreur lors de la création.")
+        toast.error(`Erreur: ${insertError.message}`)
         console.error(insertError)
       } else {
-        resetForm()
+        toast.success("Nouvelle entreprise ajoutée avec succès !")
+        resetFormAndClose()
         await fetchCompanies()
       }
     }
-    setIsLoading(false)
+    setIsSubmitting(false)
   }
 
   return (
     <div className="space-y-8">
+      {/* --- CARTE LISTE DES ENTREPRISES --- */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Mes Entreprises</CardTitle>
+          <Button onClick={handleAddNewClick}>Ajouter une entreprise</Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -227,42 +268,63 @@ export function CompanyManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {companies.map((company) => (
-                  <TableRow key={company.id}>
-                    <TableCell>
-                      {company.logo_url && (
-                        <Image
-                          src={company.logo_url || "/placeholder.svg"}
-                          alt={`Logo de ${company.name}`}
-                          width={40}
-                          height={40}
-                          className="rounded-md object-contain"
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{company.name}</TableCell>
-                    <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
-                    <TableCell className="hidden md:table-cell">{company.email}</TableCell>
-                    <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
-                        Gérer
+                {isInitialLoading ? (
+                  // NOUVEAU: Skeleton loader pendant le chargement initial
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell><Skeleton className="h-10 w-10 rounded-md" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
+                      <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-[150px]" /></TableCell>
+                      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[180px]" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-[70px]" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : companies.length === 0 ? (
+                  // NOUVEAU: État vide si aucune entreprise n'est trouvée
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      Vous n'avez pas encore d'entreprise.
+                      <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
+                        Commencez par en ajouter une.
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  // Affichage normal des entreprises
+                  companies.map((company) => (
+                    <TableRow key={company.id}>
+                      <TableCell>
+                        {company.logo_url ? (
+                          <Image src={company.logo_url} alt={`Logo de ${company.name}`} width={40} height={40} className="rounded-md object-contain" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center text-muted-foreground text-xs">Pas de logo</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{company.name}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
+                      <TableCell className="hidden md:table-cell">{company.email}</TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
+                          Gérer
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
 
-      <Card ref={formCardRef}>
-        <CardHeader>
-          <CardTitle>{editingCompany ? `Modifier l'entreprise : ${editingCompany.name}` : "Ajouter une nouvelle entreprise"}</CardTitle>
-          <CardDescription>{editingCompany ? "Modifiez les informations ci-dessous." : "Remplissez les informations de votre entreprise."}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+      {/* NOUVEAU: Le formulaire est maintenant dans une modale (Dialog) */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingCompany ? `Modifier : ${editingCompany.name}` : "Ajouter une nouvelle entreprise"}</DialogTitle>
+            <DialogDescription>{editingCompany ? "Modifiez les informations ci-dessous." : "Remplissez les informations de votre entreprise."}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
             {/* Colonne 1 */}
             <div className="space-y-4">
               <div>
@@ -315,46 +377,33 @@ export function CompanyManager() {
 
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-2">
               <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <Label htmlFor="is_fully_exporting">Société totalement exportatrice ?</Label>
-                </div>
-                <Switch
-                  id="is_fully_exporting"
-                  checked={formData.is_fully_exporting}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))}
-                />
+                <Label htmlFor="is_fully_exporting" className="flex flex-col space-y-1"><span>Société totalement exportatrice ?</span></Label>
+                <Switch id="is_fully_exporting" checked={formData.is_fully_exporting} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))} />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <Label htmlFor="is_subject_to_fodec">Société soumise au Fodec ?</Label>
-                </div>
-                 <Switch
-                  id="is_subject_to_fodec"
-                  checked={formData.is_subject_to_fodec}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))}
-                />
+                <Label htmlFor="is_subject_to_fodec" className="flex flex-col space-y-1"><span>Société soumise au Fodec ?</span></Label>
+                 <Switch id="is_subject_to_fodec" checked={formData.is_subject_to_fodec} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))} />
               </div>
                <div className="sm:col-span-2">
                 <Label htmlFor="logo">Logo de l'entreprise</Label>
-                <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" />
+                <div className="flex items-center gap-4">
+                  {logoPreview && <Image src={logoPreview} alt="Aperçu" width={60} height={60} className="rounded-md object-contain bg-muted" />}
+                  <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" className="flex-1" />
+                </div>
               </div>
             </div>
-
-            {/* Boutons et Erreurs */}
-            <div className="md:col-span-2 mt-4 flex items-center gap-4">
-              <Button type="submit" disabled={isLoading} className="w-full md:w-auto">
-                {isLoading ? "Sauvegarde..." : editingCompany ? "Mettre à jour l'entreprise" : "Ajouter l'entreprise"}
-              </Button>
-              {editingCompany && (
-                <Button type="button" variant="ghost" onClick={resetForm} disabled={isLoading}>
+            {error && <p className="md:col-span-2 text-sm text-destructive">{error}</p>}
+            <DialogFooter className="md:col-span-2 mt-4">
+                <Button type="button" variant="ghost" onClick={resetFormAndClose} disabled={isSubmitting}>
                   Annuler
                 </Button>
-              )}
-               {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Sauvegarde..." : editingCompany ? "Mettre à jour" : "Ajouter l'entreprise"}
+                </Button>
+            </DialogFooter>
           </form>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

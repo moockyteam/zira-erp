@@ -1,3 +1,4 @@
+// components/quotes/quote-list.tsx
 "use client"
 
 import { useEffect, useState, useMemo } from "react"

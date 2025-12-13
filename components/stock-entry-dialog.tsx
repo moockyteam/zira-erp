@@ -29,6 +29,8 @@ type Item = { id: string; name: string; }
 type Supplier = { id: string; name: string; }
 
 interface StockEntryDialogProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
   companyId: string;
   items: Item[];
   suppliers: Supplier[];
@@ -82,9 +84,7 @@ export function StockEntryDialog({ companyId, items, suppliers, onEntrySuccess }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button>Nouvelle Entrée en Stock</Button>
-      </DialogTrigger>
+     
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Enregistrer une Entrée en Stock</DialogTitle>

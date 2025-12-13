@@ -1,608 +1,246 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Users, UserPlus, Package, Plus, ChevronsUpDown, Check, Trash2, Search } from "lucide-react"
+import { Users, UserPlus, Package, Plus, ChevronsUpDown, Check, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 
-// UI Components
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
 
-// --- TYPES ---
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
-type Customer = { id: string; name: string }
+type Customer = { id: string; name: string; is_subject_to_vat: boolean | null }
 type Item = { id: string; name: string; sale_price: number | null; reference: string | null }
+type QuoteLine = { local_id: string; id?: string; item_id: string | null; description: string; quantity: number; unit_price_ht: number; remise_percentage: number; tva_rate: number }
 
-type QuoteLine = {
-  local_id: string
-  id?: string
-  item_id: string | null
-  description: string
-  quantity: number
-  unit_price_ht: number
-  remise_percentage: number
-  tva_rate: number
-}
-
-// --- CONSTANTES ---
 const TVA_RATES = [19, 13, 7, 0]
-const FODEC_RATE = 0.01 // 1%
+const FODEC_RATE = 0.01
 
-interface QuoteFormProps {
-  initialData: any | null
-  companies: Company[]
-  customers: Customer[]
-  items: Item[]
-  defaultTerms: string | null
-}
+interface QuoteFormProps { initialData: any | null; companies: Company[]; customers: Customer[]; items: Item[]; defaultTerms: string | null }
 
-function QuoteFormContent({
-  setCompanyId,
-  customerId,
-  setCustomerId,
-  prospectName,
-  setProspectName,
-  quoteDate,
-  setQuoteDate,
-  companies,
-  customers,
-  isNew,
-}) {
-  const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
-  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customers, customerId])
-
-  const handleCustomerSelect = (customerIdValue: string) => {
-    setCustomerId(customerIdValue)
-    setProspectName("") // Clear prospect when customer is selected
-    setOpenCustomerPopover(false)
-  }
-
-  const handleProspectChange = (value: string) => {
-    setProspectName(value)
-    if (value) setCustomerId("") // Clear customer when prospect is entered
-  }
-
-  return (
-    <div className="space-y-8">
-      {/* En-tête avec dégradé */}
-      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold text-white">Informations générales</h2>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 border-l-4 border-indigo-500 bg-gradient-to-r from-indigo-50/50 to-transparent dark:from-indigo-950/30 p-6 rounded-lg">
-        {/* Société émettrice */}
-        <div className="space-y-1.5">
-          <Label>Société émettrice</Label>
-          <Select value={customerId} onValueChange={setCompanyId} disabled={!isNew}>
-            <SelectTrigger className="bg-transparent">
-              <SelectValue placeholder="Sélectionner une société" />
-            </SelectTrigger>
-            <SelectContent>
-              {companies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Date du devis */}
-        <div className="space-y-1.5">
-          <Label>Date du devis</Label>
-          <Input
-            type="date"
-            value={quoteDate}
-            onChange={(e) => setQuoteDate(e.target.value)}
-            className="bg-transparent"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-indigo-600" />
-            Client
-          </Label>
-          <Popover open={openCustomerPopover} onOpenChange={setOpenCustomerPopover}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={openCustomerPopover}
-                disabled={!!prospectName}
-                className="w-full justify-between font-normal bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {selectedCustomer ? selectedCustomer.name : "Rechercher un client..."}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
-              <Command>
-                <CommandInput placeholder="Rechercher un client..." />
-                <CommandList>
-                  <CommandEmpty>Aucun client trouvé.</CommandEmpty>
-                  <CommandGroup>
-                    {customers.map((customer) => (
-                      <CommandItem
-                        key={customer.id}
-                        value={customer.name}
-                        onSelect={() => handleCustomerSelect(customer.id)}
-                      >
-                        <Check
-                          className={cn("mr-2 h-4 w-4", customerId === customer.id ? "opacity-100" : "opacity-0")}
-                        />
-                        {customer.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-purple-600" />
-            Prospect (saisie libre)
-          </Label>
-          <Input
-            type="text"
-            placeholder="Nom du prospect..."
-            value={prospectName}
-            onChange={(e) => handleProspectChange(e.target.value)}
-            disabled={!!customerId}
-            className="bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LineItem({ line, items, onUpdate, onDelete }) {
-  const [openProductPopover, setOpenProductPopover] = useState(false)
-  const selectedItem = useMemo(() => items.find((item) => item.id === line.item_id), [items, line.item_id])
-
-  const handleProductSelect = (itemId: string) => {
-    const selectedProduct = items.find((item) => item.id === itemId)
-    if (selectedProduct) {
-      onUpdate({
-        ...line,
-        item_id: itemId,
-        description: `${selectedProduct.reference ? `[${selectedProduct.reference}] ` : ""}${selectedProduct.name}`,
-        unit_price_ht: selectedProduct.sale_price || 0,
-      })
-    }
-    setOpenProductPopover(false)
-  }
-
-  return (
-    <div className="grid grid-cols-12 gap-3 items-center p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-purple-200 dark:border-purple-900 hover:border-purple-400 transition-colors">
-      {/* Produit du stock */}
-      <div className="col-span-3">
-        <Popover open={openProductPopover} onOpenChange={setOpenProductPopover}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={openProductPopover}
-              className="w-full justify-between font-normal bg-transparent border-2"
-            >
-              {selectedItem ? (
-                <span className="truncate">{selectedItem.reference || selectedItem.name}</span>
-              ) : (
-                <span className="text-muted-foreground">Produit...</span>
-              )}
-              <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0">
-            <Command>
-              <CommandInput placeholder="Rechercher un produit..." />
-              <CommandList>
-                <CommandEmpty>Aucun produit trouvé.</CommandEmpty>
-                <CommandGroup>
-                  {items.map((item) => (
-                    <CommandItem key={item.id} value={item.name} onSelect={() => handleProductSelect(item.id)}>
-                      <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{item.name}</span>
-                        {item.reference && <span className="text-xs text-muted-foreground">{item.reference}</span>}
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {/* Description */}
-      <div className="col-span-3">
-        <Input
-          type="text"
-          placeholder="Description..."
-          value={line.description}
-          onChange={(e) => onUpdate({ ...line, description: e.target.value })}
-          className="border-2 bg-transparent"
-        />
-      </div>
-
-      {/* Quantité */}
-      <div className="col-span-1">
-        <Input
-          type="number"
-          placeholder="Qté"
-          value={line.quantity}
-          onChange={(e) => onUpdate({ ...line, quantity: Number.parseFloat(e.target.value) || 0 })}
-          className="border-2 bg-transparent"
-        />
-      </div>
-
-      {/* Prix unitaire HT */}
-      <div className="col-span-2">
-        <Input
-          type="number"
-          placeholder="Prix U. HT"
-          value={line.unit_price_ht}
-          onChange={(e) => onUpdate({ ...line, unit_price_ht: Number.parseFloat(e.target.value) || 0 })}
-          className="border-2 bg-transparent"
-        />
-      </div>
-
-      {/* Remise % */}
-      <div className="col-span-1">
-        <Input
-          type="number"
-          placeholder="Remise"
-          value={line.remise_percentage}
-          onChange={(e) => onUpdate({ ...line, remise_percentage: Number.parseFloat(e.target.value) || 0 })}
-          className="border-2 bg-transparent"
-        />
-      </div>
-
-      {/* TVA */}
-      <div className="col-span-1">
-        <Select
-          value={String(line.tva_rate)}
-          onValueChange={(v) => onUpdate({ ...line, tva_rate: Number.parseFloat(v) })}
-        >
-          <SelectTrigger className="border-2 bg-transparent">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TVA_RATES.map((rate) => (
-              <SelectItem key={rate} value={String(rate)}>
-                {rate}%
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Bouton supprimer */}
-      <div className="col-span-1 flex justify-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onDelete}
-          className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-export function QuoteForm({ initialData, companies, customers, items }: QuoteFormProps) {
+export function QuoteForm({ initialData, companies, customers, items, defaultTerms }: QuoteFormProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const supabase = createClient()
   const isNew = !initialData
 
-  // --- ÉTATS DU FORMULAIRE ---
-  const [companyId, setCompanyId] = useState(
-    initialData?.company_id || searchParams.get("companyId") || companies[0]?.id || "",
-  )
+  const [companyId, setCompanyId] = useState(initialData?.company_id || companies[0]?.id || "")
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
-  const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
   const [quoteDate, setQuoteDate] = useState(initialData?.quote_date || new Date().toISOString().split("T")[0])
+  
+  const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
+  const [prospectAddress, setProspectAddress] = useState(initialData?.prospect_address || "")
+  const [prospectEmail, setProspectEmail] = useState(initialData?.prospect_email || "")
+  const [prospectPhone, setProspectPhone] = useState(initialData?.prospect_phone || "")
 
-  const [lines, setLines] = useState<QuoteLine[]>(
-    initialData?.quote_lines?.map((l: any) => ({
-      ...l,
-      local_id: crypto.randomUUID(),
-      remise_percentage: l.remise_percentage || 0,
-    })) || [
-      {
-        local_id: crypto.randomUUID(),
-        item_id: null,
-        description: "",
-        quantity: 1,
-        unit_price_ht: 0,
-        remise_percentage: 0,
-        tva_rate: 19.0,
-      },
-    ],
-  )
+  const [lines, setLines] = useState<QuoteLine[]>(initialData?.quote_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [])
+  
+  const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
+  const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? true)
+
+  const [termsAndConditions, setTermsAndConditions] = useState(initialData?.terms_and_conditions || defaultTerms || "")
+  const [notes, setNotes] = useState(initialData?.notes || "")
 
   const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // --- CALCULS ---
+  
   const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
+  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
+  const defaultVatRate = useMemo(() => (selectedCustomer?.is_subject_to_vat === false ? 0 : 19), [selectedCustomer])
 
   const totals = useMemo(() => {
-    const total_ht_brut = lines.reduce((sum, line) => sum + line.quantity * line.unit_price_ht, 0)
-    const total_remise = lines.reduce(
-      (sum, line) => sum + line.quantity * line.unit_price_ht * (line.remise_percentage / 100),
-      0,
-    )
+    const total_ht_brut = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0), 0)
+    const total_remise = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * ((line.remise_percentage || 0) / 100), 0)
     const total_ht = total_ht_brut - total_remise
-
     const total_fodec = isFodecApplicable ? total_ht * FODEC_RATE : 0
     const base_tva = total_ht + total_fodec
-
-    const tva_details = TVA_RATES.map((rate) => {
-      const base = lines
-        .filter((l) => l.tva_rate === rate)
-        .reduce((s, l) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100), 0)
-      const base_fodec = base + (isFodecApplicable ? base * FODEC_RATE : 0)
-      const amount = base_fodec * (rate / 100)
-      return { rate, base: base_fodec, amount }
-    })
-
-    const total_tva = tva_details.reduce((sum, detail) => sum + detail.amount, 0)
-    const timbre = 1
+    const total_tva = lines.reduce((sum, line) => {
+      const line_ht = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+      const line_fodec = isFodecApplicable ? line_ht * FODEC_RATE : 0
+      return sum + (line_ht + line_fodec) * ((line.tva_rate || 0) / 100)
+    }, 0)
+    const timbre = hasStamp ? 1.000 : 0
     const total_ttc = base_tva + total_tva + timbre
-
     return { total_ht, total_remise, total_fodec, total_tva, total_ttc, timbre }
-  }, [lines, isFodecApplicable])
+  }, [lines, isFodecApplicable, hasStamp])
 
-  // --- GESTION DES LIGNES ---
-  const handleLineChange = useCallback(
-    (index: number, field: keyof QuoteLine, value: any) => {
-      const newLines = [...lines]
-      newLines[index][field] = value
-      setLines(newLines)
-    },
-    [lines],
-  )
-  const handleItemSelect = useCallback(
-    (index: number, itemId: string) => {
-      const selectedItem = items.find((item) => item.id === itemId)
-      if (selectedItem) {
-        const newLines = [...lines]
-        const line = { ...newLines[index] }
-        line.item_id = itemId
-        line.description = `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`
-        line.unit_price_ht = selectedItem.sale_price || 0
-        line.quantity = line.quantity || 1
-        newLines[index] = line
-        setLines(newLines)
-      }
-    },
-    [lines, items],
-  )
-  const addLine = () =>
-    setLines([
-      ...lines,
-      {
-        local_id: crypto.randomUUID(),
-        item_id: null,
-        description: "",
-        quantity: 1,
-        unit_price_ht: 0,
-        remise_percentage: 0,
-        tva_rate: 19.0,
-      },
-    ])
-  const removeLine = (index: number) => setLines(lines.filter((_, i) => i !== index))
+  const addLine = () => setLines([...lines, { local_id: crypto.randomUUID(), item_id: null, description: "", quantity: 1, unit_price_ht: 0, remise_percentage: 0, tva_rate: defaultVatRate }])
+  const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
+  const updateLine = (local_id: string, updatedValues: Partial<QuoteLine>) => {
+    setLines(lines.map(l => l.local_id === local_id ? { ...l, ...updatedValues } : l))
+  }
 
-  // --- SAUVEGARDE ---
-  const handleSave = async () => {
-    if (!companyId) {
-      setError("Veuillez sélectionner une entreprise.")
+ const handleSave = async () => {
+    if (!companyId || (!customerId && !prospectName.trim())) {
+      toast.error("Veuillez sélectionner une société et un client (ou prospect).")
       return
     }
-    if (!customerId && !prospectName.trim()) {
-      setError("Veuillez sélectionner un client ou saisir le nom d'un prospect.")
-      return
-    }
-    if (lines.length === 0 || lines.every((l) => !l.description.trim())) {
-      setError("Le devis doit contenir au moins une ligne.")
-      return
-    }
-
     setIsSaving(true)
-    setError(null)
 
     const quotePayload = {
-      company_id: companyId,
-      customer_id: customerId || null,
-      prospect_name: customerId ? null : prospectName,
-      quote_date: quoteDate,
-      status: initialData?.status || "BROUILLON",
+      company_id: companyId, customer_id: customerId || null,
+      prospect_name: customerId ? null : prospectName, prospect_address: customerId ? null : prospectAddress,
+      prospect_email: customerId ? null : prospectEmail, prospect_phone: customerId ? null : prospectPhone,
+      quote_date: quoteDate, status: initialData?.status || "BROUILLON", has_stamp: hasStamp,
+      show_remise_column: showRemise, total_ht: totals.total_ht, total_remise: totals.total_remise,
+      total_fodec: totals.total_fodec, total_tva: totals.total_tva, total_ttc: totals.total_ttc,
+      terms_and_conditions: termsAndConditions,
+      notes: notes,
     }
 
-    if (isNew) {
-      const { data: newQuote, error: quoteError } = await supabase
-        .from("quotes")
-        .insert(quotePayload)
-        .select("id")
-        .single()
-      if (quoteError) {
-        setIsSaving(false)
-        setError("Erreur création devis: " + quoteError.message)
-        return
-      }
+    const linesPayload = lines.map(line => {
+      const quantity = line.quantity || 0;
+      const unit_price_ht = line.unit_price_ht || 0;
+      const remise_percentage = line.remise_percentage || 0;
+      
+      const line_total_ht = quantity * unit_price_ht * (1 - (remise_percentage / 100));
 
-      const linesPayload = lines.map((line) => ({
-        quote_id: newQuote.id,
+      return {
         item_id: line.item_id,
         description: line.description,
-        quantity: line.quantity,
-        unit_price_ht: line.unit_price_ht,
-        remise_percentage: line.remise_percentage,
-        tva_rate: line.tva_rate,
-        line_total_ht: (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
-      }))
+        quantity: quantity,
+        unit_price_ht: unit_price_ht,
+        remise_percentage: remise_percentage,
+        tva_rate: line.tva_rate || 0,
+        line_total_ht: line_total_ht,
+      };
+    });
 
-      const { error: linesError } = await supabase.from("quote_lines").insert(linesPayload)
-      if (linesError) {
-        setError("Erreur ajout lignes: " + linesError.message)
-      } else {
-        router.push(`/dashboard/quotes`)
-        router.refresh()
+    if (isNew) {
+      const { data: newQuote, error: quoteError } = await supabase.from("quotes").insert(quotePayload).select("id").single()
+      if (quoteError) { toast.error("Erreur création devis: " + quoteError.message); setIsSaving(false); return }
+      if (linesPayload.length > 0) {
+        const { error: linesError } = await supabase.from("quote_lines").insert(linesPayload.map(l => ({ ...l, quote_id: newQuote.id })))
+        if (linesError) { toast.error("Erreur ajout lignes: " + linesError.message); setIsSaving(false); return }
       }
     } else {
       const { error: quoteUpdateError } = await supabase.from("quotes").update(quotePayload).eq("id", initialData.id)
-      if (quoteUpdateError) {
-        setIsSaving(false)
-        setError("Erreur MàJ devis: " + quoteUpdateError.message)
-        return
-      }
-
-      const { error: deleteError } = await supabase.from("quote_lines").delete().eq("quote_id", initialData.id)
-      if (deleteError) {
-        setIsSaving(false)
-        setError("Erreur suppression anciennes lignes: " + deleteError.message)
-        return
-      }
-
+      if (quoteUpdateError) { toast.error("Erreur MàJ devis: " + quoteUpdateError.message); setIsSaving(false); return }
+      await supabase.from("quote_lines").delete().eq("quote_id", initialData.id)
       if (lines.length > 0) {
-        const linesPayload = lines.map((line) => ({
-          quote_id: initialData.id,
-          item_id: line.item_id,
-          description: line.description,
-          quantity: line.quantity,
-          unit_price_ht: line.unit_price_ht,
-          remise_percentage: line.remise_percentage,
-          tva_rate: line.tva_rate,
-          line_total_ht: (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
-        }))
-        const { error: linesInsertError } = await supabase.from("quote_lines").insert(linesPayload)
-        if (linesInsertError) {
-          setError("Erreur insertion nouvelles lignes: " + linesInsertError.message)
-        }
+        const { error: linesInsertError } = await supabase.from("quote_lines").insert(linesPayload.map(l => ({ ...l, quote_id: initialData.id })))
+        if (linesInsertError) { toast.error("Erreur insertion lignes: " + linesInsertError.message); setIsSaving(false); return }
       }
-      router.push(`/dashboard/quotes`)
-      router.refresh()
     }
-
+    toast.success("Devis sauvegardé avec succès !")
+    router.push(`/dashboard/quotes`)
+    router.refresh()
     setIsSaving(false)
   }
 
   return (
     <div className="space-y-8">
-      {/* Formulaire principal */}
-      <div className="border-2 border-indigo-200 dark:border-indigo-900 rounded-lg shadow-lg p-6 bg-gradient-to-br from-white to-indigo-50/30 dark:from-gray-900 dark:to-indigo-950/20">
-        <QuoteFormContent
-          setCompanyId={setCompanyId}
-          customerId={customerId}
-          setCustomerId={setCustomerId}
-          prospectName={prospectName}
-          setProspectName={setProspectName}
-          quoteDate={quoteDate}
-          setQuoteDate={setQuoteDate}
-          companies={companies}
-          customers={customers}
-          isNew={isNew}
-        />
-
-        {/* Lignes du devis */}
-        <div className="mt-8 space-y-4">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Package className="h-6 w-6" />
-              Articles et Services
-            </h2>
+      <div className="border-2 p-6 rounded-lg space-y-6">
+        <h2 className="text-2xl font-bold">Informations générales</h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div><Label>Société émettrice</Label><Select onValueChange={setCompanyId} defaultValue={companyId} disabled={!isNew}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Date du devis</Label><Input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} /></div>
+        </div>
+        <div className="border p-4 rounded-md space-y-4">
+          <h3 className="font-semibold">Destinataire</h3>
+          <div>
+            <Label>Client existant</Label>
+            <Popover><PopoverTrigger asChild><Button variant="outline" role="combobox" disabled={!!prospectName} className="w-full justify-between font-normal">{selectedCustomer ? selectedCustomer.name : "Rechercher..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[--radix-popover-trigger-width] p-0"><Command><CommandInput/><CommandList><CommandEmpty>Aucun client.</CommandEmpty><CommandGroup>{customers.map(c => <CommandItem key={c.id} value={c.name} onSelect={() => setCustomerId(c.id)}><Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")}/>{c.name}</CommandItem>)}</CommandGroup></CommandList></Command></PopoverContent></Popover>
           </div>
-
-          <div className="grid grid-cols-12 gap-3 px-3 py-2 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-950 dark:to-pink-950 rounded-lg border-2 border-purple-300 dark:border-purple-700">
-            <div className="col-span-3 text-sm font-semibold text-purple-900 dark:text-purple-100">
-              Produit du stock
-            </div>
-            <div className="col-span-3 text-sm font-semibold text-purple-900 dark:text-purple-100">Description</div>
-            <div className="col-span-1 text-sm font-semibold text-purple-900 dark:text-purple-100">Quantité</div>
-            <div className="col-span-2 text-sm font-semibold text-purple-900 dark:text-purple-100">Prix U. HT (DT)</div>
-            <div className="col-span-1 text-sm font-semibold text-purple-900 dark:text-purple-100">Remise %</div>
-            <div className="col-span-1 text-sm font-semibold text-purple-900 dark:text-purple-100">TVA %</div>
-            <div className="col-span-1 text-sm font-semibold text-purple-900 dark:text-purple-100 text-center">
-              Action
-            </div>
-          </div>
-
-          <div className="border-l-4 border-purple-500 bg-gradient-to-r from-purple-50/50 to-transparent dark:from-purple-950/30 p-6 rounded-lg space-y-4">
-            {lines.map((line) => (
-              <LineItem
-                key={line.local_id}
-                line={line}
-                items={items}
-                onUpdate={(updatedLine) => {
-                  setLines((prev) => prev.map((l) => (l.local_id === line.local_id ? updatedLine : l)))
-                }}
-                onDelete={() => setLines((prev) => prev.filter((l) => l.local_id !== line.local_id))}
-              />
-            ))}
-            <Button
-              type="button"
-              onClick={addLine}
-              variant="outline"
-              className="w-full border-2 border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/30 bg-transparent"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Ajouter un article
-            </Button>
+          <div className="text-center text-sm text-muted-foreground">OU</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><Label>Nom du Prospect</Label><Input placeholder="Nom..." value={prospectName} onChange={e => setProspectName(e.target.value)} disabled={!!customerId} /></div>
+            <div><Label>Adresse</Label><Input placeholder="Adresse..." value={prospectAddress} onChange={e => setProspectAddress(e.target.value)} disabled={!!customerId} /></div>
+            <div><Label>Email</Label><Input type="email" placeholder="Email..." value={prospectEmail} onChange={e => setProspectEmail(e.target.value)} disabled={!!customerId} /></div>
+            <div><Label>Téléphone</Label><Input type="tel" placeholder="Téléphone..." value={prospectPhone} onChange={e => setProspectPhone(e.target.value)} disabled={!!customerId} /></div>
           </div>
         </div>
       </div>
 
-      <div className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white p-6 rounded-lg shadow-2xl border-2 border-indigo-400">
-        <div className="space-y-3">
-          <div className="flex justify-between items-center text-lg">
-            <span className="font-medium">Total HT</span>
-            <span className="font-bold">{totals.total_ht.toFixed(3)} DT</span>
-          </div>
-          <div className="flex justify-between items-center border-t border-white/30 pt-2">
-            <span className="font-medium">TVA</span>
-            <span className="font-bold">{totals.total_tva.toFixed(3)} DT</span>
-          </div>
-          <div className="flex justify-between items-center text-2xl font-bold border-t-2 border-white/50 pt-3">
-            <span>Total TTC</span>
-            <span>{totals.total_ttc.toFixed(3)} DT</span>
+      <div className="border-2 p-6 rounded-lg">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold flex items-center gap-2"><Package/> Articles et Services</h2>
+          <div className="flex items-center space-x-2"><Label htmlFor="show-remise">Afficher Remise</Label><Switch id="show-remise" checked={showRemise} onCheckedChange={setShowRemise} /></div>
+        </div>
+        
+        <div className="grid grid-cols-12 gap-2 items-center px-2 pb-2 border-b">
+          <div className="col-span-4 text-sm font-semibold text-muted-foreground">Description</div>
+          <div className="col-span-1 text-sm font-semibold text-muted-foreground">Qté</div>
+          <div className="col-span-2 text-sm font-semibold text-muted-foreground">Prix U. HT</div>
+          {showRemise && <div className="col-span-2 text-sm font-semibold text-muted-foreground">Remise %</div>}
+          <div className={cn("col-span-2 text-sm font-semibold text-muted-foreground", !showRemise && "col-span-4")}>TVA %</div>
+          <div className="col-span-1"></div>
+        </div>
+
+        <div className="space-y-2 mt-2">
+          {lines.map((line) => (
+            <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
+              <div className="col-span-4"><Input placeholder="Description de l'article ou service" value={line.description} onChange={e => updateLine(line.local_id, { description: e.target.value })} /></div>
+              <div className="col-span-1"><Input type="number" placeholder="1" value={line.quantity} onChange={e => updateLine(line.local_id, { quantity: parseFloat(e.target.value) || 0 })} /></div>
+              <div className="col-span-2"><Input type="number" placeholder="0.000" value={line.unit_price_ht} onChange={e => updateLine(line.local_id, { unit_price_ht: parseFloat(e.target.value) || 0 })} /></div>
+              {showRemise && <div className="col-span-2"><Input type="number" placeholder="0" value={line.remise_percentage} onChange={e => updateLine(line.local_id, { remise_percentage: parseFloat(e.target.value) || 0 })} /></div>}
+              <div className={cn("col-span-2", !showRemise && "col-span-4")}><Select value={String(line.tva_rate)} onValueChange={v => updateLine(line.local_id, { tva_rate: parseFloat(v) })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{TVA_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}</SelectContent></Select></div>
+              <div className="col-span-1 flex justify-center"><Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}><Trash2 className="h-4 w-4 text-red-500"/></Button></div>
+            </div>
+          ))}
+        </div>
+        <Button type="button" onClick={addLine} variant="outline" className="w-full mt-4 border-dashed"><Plus className="mr-2 h-4 w-4" />Ajouter une ligne</Button>
+      </div>
+
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value="item-1">
+          <AccordionTrigger className="text-lg font-semibold">Termes et Notes (Optionnel)</AccordionTrigger>
+          <AccordionContent>
+            <div className="grid gap-6 pt-4">
+              <div>
+                <Label htmlFor="terms">Termes et conditions</Label>
+                <Textarea
+                  id="terms"
+                  placeholder="Ex: Validité du devis, conditions de paiement..."
+                  value={termsAndConditions}
+                  onChange={(e) => setTermsAndConditions(e.target.value)}
+                  rows={5}
+                />
+              </div>
+              <div>
+                <Label htmlFor="notes">Notes internes (non visibles sur le PDF)</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Notes pour référence future..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 p-6 rounded-lg bg-gray-900 text-white">
+          <h3 className="text-xl font-bold mb-4">Récapitulatif</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between"><span>Total HT</span><span>{totals.total_ht.toFixed(3)} DT</span></div>
+            {isFodecApplicable && <div className="flex justify-between"><span>FODEC</span><span>{totals.total_fodec.toFixed(3)} DT</span></div>}
+            <div className="flex justify-between"><span>Total TVA</span><span>{totals.total_tva.toFixed(3)} DT</span></div>
+            {hasStamp && <div className="flex justify-between"><span>Timbre Fiscal</span><span>{totals.timbre.toFixed(3)} DT</span></div>}
+            <div className="flex justify-between text-2xl font-bold border-t pt-2 mt-2"><span>Total TTC</span><span>{totals.total_ttc.toFixed(3)} DT</span></div>
           </div>
         </div>
-        {error && <p className="mt-4 text-red-200 bg-red-500/20 p-3 rounded">{error}</p>}
-        <div className="mt-6 flex gap-4">
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex-1 bg-white text-indigo-600 hover:bg-indigo-50 font-bold text-lg h-12 shadow-lg"
-          >
-            {isSaving ? "Enregistrement..." : isNew ? "Créer le devis" : "Mettre à jour"}
-          </Button>
-          <Link href="/dashboard/quotes">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 bg-white/10 border-white text-white hover:bg-white/20"
-            >
-              Annuler
-            </Button>
-          </Link>
+        <div className="lg:col-span-1 p-6 rounded-lg border-2">
+          <h3 className="text-lg font-bold mb-4">Options du Document</h3>
+          <div className="flex items-center justify-between"><Label>Timbre Fiscal (1.000 DT)</Label><Switch checked={hasStamp} onCheckedChange={setHasStamp} /></div>
         </div>
+      </div>
+      
+      <div className="flex gap-4 pt-4 border-t">
+        <Button onClick={handleSave} disabled={isSaving} size="lg" className="bg-indigo-600 hover:bg-indigo-700">{isSaving ? "Enregistrement..." : "Sauvegarder le devis"}</Button>
+        <Link href="/dashboard/quotes"><Button type="button" variant="outline" size="lg">Annuler</Button></Link>
       </div>
     </div>
   )
