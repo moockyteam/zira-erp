@@ -1,4 +1,4 @@
-// Placez ce code dans : app/dashboard/invoices/page.tsx
+//  app/dashboard/invoices/page.tsx
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";

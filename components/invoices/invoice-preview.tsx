@@ -1,3 +1,5 @@
+// components/invoices/invoice-preview.tsx
+
 "use client"
 
 import Image from "next/image"
@@ -38,7 +40,6 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
               <p>Matricule Fiscal: {invoice.companies?.matricule_fiscal}</p>
               {invoice.companies?.email && <p>Email: {invoice.companies.email}</p>}
               {invoice.companies?.phone_number && <p>Tél: {invoice.companies.phone_number}</p>}
-              {/* <-- NOUVEAU: Affichage du nom du gérant s'il existe --> */}
               {invoice.companies?.manager_name && <p>Gérant: {invoice.companies.manager_name}</p>}
             </div>
           </div>
@@ -56,37 +57,22 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
           </div>
         </header>
 
-        {/* Le reste du fichier ne change pas */}
-        <section className="mb-6 grid grid-cols-2 gap-4">
+        <section className="mb-6">
           <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
-  <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
-  <p className="text-base font-bold">{invoice.customers?.name}</p>
-  
-  {/* LA CORRECTION EST ICI : On assemble la nouvelle adresse structurée */}
-  <p>
-    {[
-      invoice.customers?.street,
-      invoice.customers?.delegation,
-      invoice.customers?.governorate,
-      invoice.customers?.country
-    ].filter(Boolean).join(', ')}
-  </p>
-
-  {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
-  {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
-  {invoice.customers?.phone_number && <p>Tél: {invoice.customers.phone_number}</p>}
-</div>
-          {invoice.delivery_enabled && (
-            <div className="p-3 border rounded-md bg-gray-50 text-xs">
-              <h3 className="font-bold text-gray-600 mb-1">LIVRAISON</h3>
-              <p>
-                <span className="font-semibold">Chauffeur:</span> {invoice.driver_name || "N/A"}
-              </p>
-              <p>
-                <span className="font-semibold">Véhicule:</span> {invoice.vehicle_registration || "N/A"}
-              </p>
-            </div>
-          )}
+            <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
+            <p className="text-base font-bold">{invoice.customers?.name || invoice.prospect_name}</p>
+            <p>
+              {[
+                invoice.customers?.street,
+                invoice.customers?.delegation,
+                invoice.customers?.governorate,
+                invoice.customers?.country
+              ].filter(Boolean).join(', ')}
+            </p>
+            {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
+            {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
+            {invoice.customers?.phone_number && <p>Tél: {invoice.customers.phone_number}</p>}
+          </div>
         </section>
 
         <div className="mb-6">
@@ -96,16 +82,16 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                 <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
                 <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
                 <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
+                {invoice.show_remise_column && (
+                  <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
+                )}
                 <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
                 <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total TTC</th>
               </tr>
             </thead>
             <tbody>
               {invoice.invoice_lines.map((line: any, index: number) => {
                 const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100)
-                const lineTotalTTC = lineTotalHT * (1 + line.tva_rate / 100)
                 return (
                   <tr key={line.id || index}>
                     <td className="p-2 border-2 border-gray-800 align-top">{line.description}</td>
@@ -113,17 +99,16 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                     <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
                       {line.unit_price_ht.toFixed(3)}
                     </td>
-                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-                      {line.remise_percentage.toFixed(2)}%
-                    </td>
+                    {invoice.show_remise_column && (
+                      <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                        {line.remise_percentage.toFixed(2)}%
+                      </td>
+                    )}
                     <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
                       {line.tva_rate.toFixed(2)}%
                     </td>
                     <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
                       {lineTotalHT.toFixed(3)}
-                    </td>
-                    <td className="p-2 border-2 border-gray-800 text-right font-mono font-semibold align-top">
-                      {lineTotalTTC.toFixed(3)}
                     </td>
                   </tr>
                 )
@@ -147,8 +132,8 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                 <tbody>
                   {[19, 13, 7, 0].map((rate) => {
                     const base = invoice.invoice_lines
-                      .filter((l) => l.tva_rate === rate)
-                      .reduce((s, l) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100), 0)
+                      .filter((l: any) => l.tva_rate === rate)
+                      .reduce((s: number, l: any) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100), 0)
                     if (base === 0) return null
                     const base_fodec =
                       base + (isFodecApplicable ? base * (1 - invoice.escompte_percentage / 100) * FODEC_RATE : 0)

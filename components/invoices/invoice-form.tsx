@@ -1,54 +1,37 @@
-// components/invoices/invoice-form.tsx
 "use client"
-
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { format, addDays } from "date-fns"
-
+import { toast } from "sonner"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-
 import {
   PlusCircle,
   Trash2,
   Loader2,
-  AlertCircle,
   ChevronsUpDown,
   Check,
   Building2,
   User,
   Calendar,
   Package,
-  Truck,
   Receipt,
+  Save,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
-type Customer = {
-  id: string;
-  name: string;
-  balance: number | null;
-  street?: string;
-  delegation?: string;
-  governorate?: string;
-  country?: string;
-  matricule_fiscal?: string;
-  email?: string;
-  phone_number?: string;
-}
+type Customer = { id: string; name: string }
 type Item = { id: string; name: string; sale_price: number | null; reference: string | null; quantity_on_hand: number }
-type Quote = { id: string; quote_number: string }
-
 type InvoiceLine = {
   local_id: string
   item_id: string | null
@@ -68,14 +51,12 @@ export function InvoiceForm({
   companies,
   customers,
   items,
-  confirmedQuotes,
 }: {
   initialData: any | null
   quoteInitialData?: any | null
   companies: Company[]
   customers: Customer[]
   items: Item[]
-  confirmedQuotes: Quote[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -83,6 +64,7 @@ export function InvoiceForm({
 
   const [companyId, setCompanyId] = useState(initialData?.company_id || companies[0]?.id || "")
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
+  const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
   const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
   const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
@@ -99,27 +81,19 @@ export function InvoiceForm({
       },
     ],
   )
-  const [escomptePercentage, setEscomptePercentage] = useState(initialData?.escompte_percentage || 0)
-  const [hasStamp, setHasStamp] = useState(initialData?.has_stamp || false)
-  const [deliveryEnabled, setDeliveryEnabled] = useState(initialData?.delivery_enabled || false)
-  const [driverName, setDriverName] = useState(initialData?.driver_name || "")
-  const [vehicleRegistration, setVehicleRegistration] = useState(initialData?.vehicle_registration || "")
+  const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
+  const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? true)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [quoteId, setQuoteId] = useState(initialData?.quote_id || null)
-
-  const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
-  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
-  const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
 
   useEffect(() => {
     if (quoteInitialData && isNew) {
       setCompanyId(quoteInitialData.company_id)
       setCustomerId(quoteInitialData.customer_id || "")
-      setEscomptePercentage(quoteInitialData.escompte_percentage || 0)
-      setHasStamp(quoteInitialData.has_stamp || false)
+      setProspectName(quoteInitialData.prospect_name || "")
+      setHasStamp(quoteInitialData.has_stamp ?? true)
+      setShowRemise(quoteInitialData.show_remise_column ?? true)
       setQuoteId(quoteInitialData.id)
-
       const newLines = quoteInitialData.quote_lines.map((line: any) => ({
         local_id: crypto.randomUUID(),
         item_id: line.item_id,
@@ -133,6 +107,10 @@ export function InvoiceForm({
     }
   }, [quoteInitialData, isNew])
 
+  const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
+  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
+  const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
+
   const totals = useMemo(() => {
     const total_ht_brut = lines.reduce((sum, line) => sum + line.quantity * line.unit_price_ht, 0)
     const total_remise = lines.reduce(
@@ -140,12 +118,8 @@ export function InvoiceForm({
       0,
     )
     const total_ht_net = total_ht_brut - total_remise
-
-    const total_escompte = total_ht_net * (escomptePercentage / 100)
-    const net_commercial = total_ht_net - total_escompte
-    const total_fodec = isFodecApplicable ? net_commercial * FODEC_RATE : 0
-    const base_tva = net_commercial + total_fodec
-
+    const total_fodec = isFodecApplicable ? total_ht_net * FODEC_RATE : 0
+    const base_tva = total_ht_net + total_fodec
     const tva_details = TVA_RATES.map((rate) => {
       const base = lines
         .filter((line) => line.tva_rate === rate)
@@ -157,53 +131,20 @@ export function InvoiceForm({
     })
 
     const total_tva = tva_details.reduce((sum, detail) => sum + detail.amount, 0)
-    const timbre = hasStamp ? 1 : 0
+    const timbre = hasStamp ? 1.000 : 0
     const total_ttc = base_tva + total_tva + timbre
-
-    const ancien_solde = selectedCustomer?.balance || 0
-    const nouveau_solde = ancien_solde - total_ttc
 
     return {
       total_ht_net,
       total_remise,
-      total_escompte,
-      net_commercial,
       total_fodec,
       base_tva,
       tva_details,
       total_tva,
       timbre,
       total_ttc,
-      ancien_solde,
-      nouveau_solde,
     }
-  }, [lines, escomptePercentage, isFodecApplicable, hasStamp, selectedCustomer])
-
-  const handleLineChange = useCallback(
-    (index: number, field: keyof InvoiceLine, value: any) => {
-      const newLines = [...lines]
-      newLines[index][field] = value
-      setLines(newLines)
-    },
-    [lines],
-  )
-
-  const handleItemSelect = useCallback(
-    (index: number, itemId: string) => {
-      const selectedItem = items.find((item) => item.id === itemId)
-      if (selectedItem) {
-        const newLines = [...lines]
-        const line = { ...newLines[index] }
-        line.item_id = itemId
-        line.description = `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`
-        line.unit_price_ht = selectedItem.sale_price || 0
-        line.quantity = line.quantity || 1
-        newLines[index] = line
-        setLines(newLines)
-      }
-    },
-    [lines, items],
-  )
+  }, [lines, isFodecApplicable, hasStamp])
 
   const addLine = () =>
     setLines([
@@ -218,38 +159,48 @@ export function InvoiceForm({
         tva_rate: 19,
       },
     ])
-  const removeLine = (index: number) => setLines(lines.filter((_, i) => i !== index))
+  const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
+  const updateLine = (local_id: string, updatedValues: Partial<InvoiceLine>) => {
+    setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
+  }
+
+  // LA CORRECTION EST ICI
+  const handleItemSelect = (local_id: string, itemId: string) => {
+    const selectedItem = items.find((item) => item.id === itemId);
+    if (selectedItem) {
+      updateLine(local_id, {
+        item_id: itemId,
+        description: `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`,
+        unit_price_ht: selectedItem.sale_price || 0,
+      });
+    }
+  };
 
   const handleSave = async () => {
-    if (!companyId || !customerId) {
-      setError("Veuillez sélectionner une entreprise et un client.")
+    if (!companyId || (!customerId && !prospectName.trim())) {
+      toast.error("Veuillez sélectionner une entreprise et un client (ou saisir un prospect).")
       return
     }
     if (lines.length === 0 || lines.every((l) => !l.description.trim())) {
-      setError("La facture doit contenir au moins une ligne avec une description.")
+      toast.error("La facture doit contenir au moins une ligne avec une description.")
       return
     }
-
     setIsLoading(true)
-    setError(null)
     try {
       const invoicePayload = {
         company_id: companyId,
-        customer_id: customerId,
+        customer_id: customerId || null,
+        prospect_name: customerId ? null : prospectName,
         invoice_date: invoiceDate,
         due_date: dueDate,
         status: initialData?.status || "BROUILLON",
         total_ht: totals.total_ht_net,
         total_remise: totals.total_remise,
-        escompte_percentage: escomptePercentage,
-        total_escompte: totals.total_escompte,
         total_fodec: totals.total_fodec,
         total_tva: totals.total_tva,
         has_stamp: hasStamp,
         total_ttc: totals.total_ttc,
-        delivery_enabled: deliveryEnabled,
-        driver_name: deliveryEnabled ? driverName : null,
-        vehicle_registration: deliveryEnabled ? vehicleRegistration : null,
+        show_remise_column: showRemise,
         quote_id: quoteId,
       }
 
@@ -258,14 +209,14 @@ export function InvoiceForm({
           body: JSON.stringify({ companyId }),
           headers: { "Content-Type": "application/json" },
         })
-        if (numberError) throw new Error("Impossible de générer le numéro de facture. " + numberError.message)
+        if (numberError) throw new Error("Impossible de générer le numéro de facture.")
 
         const { data: newInvoice, error: invoiceError } = await supabase
           .from("invoices")
-          .insert({ ...invoicePayload, invoice_number: numberData.invoice_number, quote_id: quoteId })
+          .insert({ ...invoicePayload, invoice_number: numberData.invoice_number })
           .select("id")
           .single()
-        if (invoiceError) throw new Error("Erreur lors de la création de la facture. " + invoiceError.message)
+        if (invoiceError) throw new Error(invoiceError.message)
 
         const linesPayload = lines.map((line) => ({
           invoice_id: newInvoice.id,
@@ -278,17 +229,18 @@ export function InvoiceForm({
         }))
 
         const { error: linesError } = await supabase.from("invoice_lines").insert(linesPayload)
-        if (linesError) throw new Error("Erreur lors de l'ajout des lignes à la facture. " + linesError.message)
+        if (linesError) throw new Error(linesError.message)
+        
+        toast.success("Facture créée avec succès")
       } else {
         const { error: invoiceUpdateError } = await supabase
           .from("invoices")
           .update(invoicePayload)
           .eq("id", initialData.id)
-        if (invoiceUpdateError)
-          throw new Error("Erreur lors de la mise à jour de la facture. " + invoiceUpdateError.message)
+        if (invoiceUpdateError) throw new Error(invoiceUpdateError.message)
 
         const { error: deleteError } = await supabase.from("invoice_lines").delete().eq("invoice_id", initialData.id)
-        if (deleteError) throw new Error("Erreur lors de la suppression des anciennes lignes. " + deleteError.message)
+        if (deleteError) throw new Error(deleteError.message)
 
         if (lines.length > 0) {
           const linesPayload = lines.map((line) => ({
@@ -301,15 +253,15 @@ export function InvoiceForm({
             tva_rate: line.tva_rate,
           }))
           const { error: linesInsertError } = await supabase.from("invoice_lines").insert(linesPayload)
-          if (linesInsertError)
-            throw new Error("Erreur lors de l'insertion des nouvelles lignes. " + linesInsertError.message)
+          if (linesInsertError) throw new Error(linesInsertError.message)
         }
+        toast.success("Facture mise à jour avec succès")
       }
 
       router.push("/dashboard/invoices")
       router.refresh()
     } catch (e: any) {
-      setError(e.message)
+      toast.error("Erreur lors de la sauvegarde: " + e.message)
     } finally {
       setIsLoading(false)
     }
@@ -327,85 +279,6 @@ export function InvoiceForm({
           </div>
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
-          {selectedCustomer && (
-            <>
-              <div
-                className={cn(
-                  "p-4 rounded-lg border-2 transition-all hover:shadow-md",
-                  selectedCustomer.balance && selectedCustomer.balance < 0
-                    ? "bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-950/20 dark:to-red-950/20 border-rose-300 dark:border-rose-800"
-                    : selectedCustomer.balance && selectedCustomer.balance > 0
-                      ? "bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-300 dark:border-emerald-800"
-                      : "bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border-slate-300 dark:border-slate-700",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "p-2 rounded-full",
-                        selectedCustomer.balance && selectedCustomer.balance < 0
-                          ? "bg-rose-200 dark:bg-rose-900"
-                          : selectedCustomer.balance && selectedCustomer.balance > 0
-                            ? "bg-emerald-200 dark:bg-emerald-900"
-                            : "bg-slate-200 dark:bg-slate-700",
-                      )}
-                    >
-                      <User
-                        className={cn(
-                          "h-5 w-5",
-                          selectedCustomer.balance && selectedCustomer.balance < 0
-                            ? "text-rose-700 dark:text-rose-300"
-                            : selectedCustomer.balance && selectedCustomer.balance > 0
-                              ? "text-emerald-700 dark:text-emerald-300"
-                              : "text-slate-700 dark:text-slate-300",
-                        )}
-                      />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-base">Situation du client</h4>
-                      <span className="text-sm text-muted-foreground">
-                        {selectedCustomer.balance && selectedCustomer.balance < 0
-                          ? "Dette antérieure"
-                          : selectedCustomer.balance && selectedCustomer.balance > 0
-                            ? "Avoir disponible"
-                            : "Solde neutre"}
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    className={cn(
-                      "font-mono font-bold text-2xl",
-                      selectedCustomer.balance && selectedCustomer.balance < 0
-                        ? "text-rose-700 dark:text-rose-300"
-                        : selectedCustomer.balance && selectedCustomer.balance > 0
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : "text-slate-700 dark:text-slate-300",
-                    )}
-                  >
-                    {selectedCustomer.balance?.toFixed(3)} TND
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
-                <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
-                <p className="text-base font-bold">{selectedCustomer.name}</p>
-                <p>
-                  {[
-                    selectedCustomer.street,
-                    selectedCustomer.delegation,
-                    selectedCustomer.governorate,
-                    selectedCustomer.country
-                  ].filter(Boolean).join(', ')}
-                </p>
-                {selectedCustomer.matricule_fiscal && <p>MF: {selectedCustomer.matricule_fiscal}</p>}
-                {selectedCustomer.email && <p>Email: {selectedCustomer.email}</p>}
-                {selectedCustomer.phone_number && <p>Tél: {selectedCustomer.phone_number}</p>}
-              </div>
-            </>
-          )}
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="company" className="flex items-center gap-2">
@@ -425,7 +298,6 @@ export function InvoiceForm({
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <User className="h-4 w-4 text-emerald-600" />
@@ -439,13 +311,13 @@ export function InvoiceForm({
                     aria-expanded={openCustomerPopover}
                     className="w-full justify-between font-normal border-2 hover:border-emerald-500 transition-colors bg-transparent"
                   >
-                    {selectedCustomer ? selectedCustomer.name : "Rechercher un client..."}
+                    {selectedCustomer ? selectedCustomer.name : "Sélectionner un client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
+                <PopoverContent className="w-[300px] p-0">
                   <Command>
-                    <CommandInput placeholder="Taper pour rechercher..." />
+                    <CommandInput placeholder="Rechercher..." />
                     <CommandList>
                       <CommandEmpty>Aucun client trouvé.</CommandEmpty>
                       <CommandGroup>
@@ -455,6 +327,7 @@ export function InvoiceForm({
                             value={customer.name}
                             onSelect={() => {
                               setCustomerId(customer.id)
+                              setProspectName("")
                               setOpenCustomerPopover(false)
                             }}
                           >
@@ -470,6 +343,22 @@ export function InvoiceForm({
                 </PopoverContent>
               </Popover>
             </div>
+            
+            {!customerId && (
+              <div className="space-y-2">
+                <Label htmlFor="prospectName" className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-gray-500" />
+                  Ou Prospect
+                </Label>
+                <Input
+                  id="prospectName"
+                  placeholder="Nom du prospect"
+                  value={prospectName}
+                  onChange={(e) => setProspectName(e.target.value)}
+                  className="border-2 focus:border-gray-500"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="invoiceDate" className="flex items-center gap-2">
@@ -503,12 +392,16 @@ export function InvoiceForm({
       </Card>
 
       <Card className="border-l-4 border-l-emerald-500 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500 rounded-lg">
               <Package className="h-5 w-5 text-white" />
             </div>
             <CardTitle className="text-xl">Contenu de la Facture</CardTitle>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="show-remise">Afficher Remise</Label>
+            <Switch id="show-remise" checked={showRemise} onCheckedChange={setShowRemise} />
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -519,7 +412,7 @@ export function InvoiceForm({
                   <TableHead className="w-[35%] font-semibold">Description / Article</TableHead>
                   <TableHead className="text-right font-semibold">Qté</TableHead>
                   <TableHead className="text-right font-semibold">Prix U. HT</TableHead>
-                  <TableHead className="text-right font-semibold">Remise %</TableHead>
+                  {showRemise && <TableHead className="text-right font-semibold">Remise %</TableHead>}
                   <TableHead className="text-right font-semibold">TVA %</TableHead>
                   <TableHead className="text-right font-semibold">Total HT</TableHead>
                   <TableHead className="text-right font-semibold">Total TTC</TableHead>
@@ -527,7 +420,7 @@ export function InvoiceForm({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lines.map((line, index) => {
+                {lines.map((line) => {
                   const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100)
                   const lineTotalTTC = lineTotalHT * (1 + line.tva_rate / 100)
                   return (
@@ -540,7 +433,7 @@ export function InvoiceForm({
                           <CommandInput
                             placeholder="Saisir ou rechercher un article..."
                             value={line.description}
-                            onValueChange={(value) => handleLineChange(index, "description", value)}
+                            onValueChange={(value) => updateLine(line.local_id, { description: value })}
                             className="border-2 rounded-md focus:border-emerald-500 transition-colors"
                           />
                           <CommandList>
@@ -555,7 +448,7 @@ export function InvoiceForm({
                                 )
                                 .slice(0, 5)
                                 .map((item) => (
-                                  <CommandItem key={item.id} onSelect={() => handleItemSelect(index, item.id)}>
+                                  <CommandItem key={item.id} onSelect={() => handleItemSelect(line.local_id, item.id)}>
                                     {item.name}{" "}
                                     <span className="text-xs text-muted-foreground ml-2">
                                       (Stock: {item.quantity_on_hand})
@@ -570,7 +463,7 @@ export function InvoiceForm({
                         <Input
                           type="number"
                           value={line.quantity}
-                          onChange={(e) => handleLineChange(index, "quantity", Number.parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value) || 0 })}
                           className="text-right border-2"
                         />
                       </TableCell>
@@ -578,26 +471,24 @@ export function InvoiceForm({
                         <Input
                           type="number"
                           value={line.unit_price_ht}
-                          onChange={(e) =>
-                            handleLineChange(index, "unit_price_ht", Number.parseFloat(e.target.value) || 0)
-                          }
+                          onChange={(e) => updateLine(line.local_id, { unit_price_ht: Number.parseFloat(e.target.value) || 0 })}
                           className="text-right border-2"
                         />
                       </TableCell>
-                      <TableCell className="align-top">
-                        <Input
-                          type="number"
-                          value={line.remise_percentage}
-                          onChange={(e) =>
-                            handleLineChange(index, "remise_percentage", Number.parseFloat(e.target.value) || 0)
-                          }
-                          className="text-right border-2"
-                        />
-                      </TableCell>
+                      {showRemise && (
+                        <TableCell className="align-top">
+                          <Input
+                            type="number"
+                            value={line.remise_percentage}
+                            onChange={(e) => updateLine(line.local_id, { remise_percentage: Number.parseFloat(e.target.value) || 0 })}
+                            className="text-right border-2"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="align-top">
                         <Select
                           value={String(line.tva_rate)}
-                          onValueChange={(v) => handleLineChange(index, "tva_rate", Number.parseInt(v))}
+                          onValueChange={(v) => updateLine(line.local_id, { tva_rate: Number.parseInt(v) })}
                         >
                           <SelectTrigger className="border-2">
                             <SelectValue />
@@ -621,7 +512,7 @@ export function InvoiceForm({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeLine(index)}
+                          onClick={() => removeLine(line.local_id)}
                           className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-100 dark:hover:bg-rose-900/20"
                         >
                           <Trash2 className="h-4 w-4 text-rose-500" />
@@ -649,42 +540,6 @@ export function InvoiceForm({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-l-4 border-l-amber-500 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500 rounded-lg">
-                    <Truck className="h-5 w-5 text-white" />
-                  </div>
-                  <CardTitle>Informations de Livraison</CardTitle>
-                </div>
-                <Switch id="delivery-switch" checked={deliveryEnabled} onCheckedChange={setDeliveryEnabled} />
-              </div>
-            </CardHeader>
-            {deliveryEnabled && (
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
-                <div className="space-y-2">
-                  <Label htmlFor="driver_name">Nom du chauffeur</Label>
-                  <Input
-                    id="driver_name"
-                    value={driverName}
-                    onChange={(e) => setDriverName(e.target.value)}
-                    className="border-2 focus:border-amber-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="vehicle_registration">Matricule du véhicule</Label>
-                  <Input
-                    id="vehicle_registration"
-                    value={vehicleRegistration}
-                    onChange={(e) => setVehicleRegistration(e.target.value)}
-                    className="border-2 focus:border-amber-500"
-                  />
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
           <Card className="shadow-lg">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
               <div className="flex items-center gap-3">
@@ -724,30 +579,19 @@ export function InvoiceForm({
         <div className="lg:col-span-1 space-y-4">
           <Card className="border-2 border-indigo-500 shadow-xl sticky top-4">
             <CardHeader className="bg-gradient-to-br from-indigo-500 to-emerald-500 text-white">
-              <CardTitle className="text-xl">Totaux & Soldes</CardTitle>
+              <CardTitle className="text-xl">Totaux & Options</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 font-mono text-sm pt-6">
+              <div className="flex justify-between items-center p-2 bg-slate-50 dark:bg-slate-900/50 rounded mb-4">
+                <Label htmlFor="stamp-switch" className="flex items-center gap-2 cursor-pointer text-xs">
+                  <Switch id="stamp-switch" checked={hasStamp} onCheckedChange={setHasStamp} />
+                  Timbre Fiscal (1.000 DT)
+                </Label>
+              </div>
+
               <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                 <span className="text-muted-foreground">Total HT Net</span>
                 <span className="font-semibold">{totals.total_ht_net.toFixed(3)}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
-                <Label htmlFor="escompte" className="text-xs">
-                  Escompte (%)
-                </Label>
-                <Input
-                  id="escompte"
-                  type="number"
-                  className="w-24 h-8 text-right border-2"
-                  value={escomptePercentage}
-                  onChange={(e) => setEscomptePercentage(Number.parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <span className="text-muted-foreground">Montant Escompte</span>
-                <span className="text-rose-600 dark:text-rose-400">- {totals.total_escompte.toFixed(3)}</span>
               </div>
 
               {isFodecApplicable && (
@@ -759,11 +603,6 @@ export function InvoiceForm({
                 </div>
               )}
 
-              <div className="flex justify-between border-t pt-3 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <span className="text-muted-foreground">Base TVA</span>
-                <span className="font-semibold">{totals.base_tva.toFixed(3)}</span>
-              </div>
-
               <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                 <span className="text-muted-foreground">Total TVA</span>
                 <span className="font-semibold text-indigo-600 dark:text-indigo-400">
@@ -771,43 +610,26 @@ export function InvoiceForm({
                 </span>
               </div>
 
-              <div className="flex justify-between items-center p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
-                <Label htmlFor="stamp-switch" className="flex items-center gap-2 cursor-pointer text-xs">
-                  <Switch id="stamp-switch" checked={hasStamp} onCheckedChange={setHasStamp} />
-                  Timbre Fiscal
-                </Label>
-                <span>+ {totals.timbre.toFixed(3)}</span>
+              <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                <span className="text-muted-foreground">Timbre</span>
+                <span className="font-semibold">
+                  + {totals.timbre.toFixed(3)}
+                </span>
               </div>
 
               <div className="flex justify-between font-bold text-xl border-t-2 pt-4 mt-4 p-3 bg-gradient-to-r from-indigo-50 to-emerald-50 dark:from-indigo-950/20 dark:to-emerald-950/20 rounded-lg">
                 <span>Total TTC</span>
                 <span className="text-indigo-600 dark:text-indigo-400">{totals.total_ttc.toFixed(3)} TND</span>
               </div>
-
-              <div className="border-t-2 pt-4 mt-4 space-y-3">
-                <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                  <span className="text-muted-foreground">Ancien Solde</span>
-                  <span className="font-semibold">{totals.ancien_solde.toFixed(3)} TND</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg p-3 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 rounded-lg border-2 border-emerald-300 dark:border-emerald-800">
-                  <span>Nouveau Solde</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">{totals.nouveau_solde.toFixed(3)} TND</span>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {error && (
-        <Alert variant="destructive" className="border-2">
-          <AlertCircle className="h-5 w-5" />
-          <AlertTitle className="font-semibold">Erreur</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex justify-end pt-4">
+      <div className="flex justify-end gap-4 pt-4 border-t">
+        <Link href="/dashboard/invoices">
+          <Button variant="outline" type="button">Annuler</Button>
+        </Link>
         <Button
           onClick={handleSave}
           disabled={isLoading}
@@ -817,12 +639,12 @@ export function InvoiceForm({
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Sauvegarde en cours...
+              Traitement...
             </>
           ) : (
             <>
-              <Check className="mr-2 h-5 w-5" />
-              Enregistrer la Facture
+              <Save className="mr-2 h-5 w-5" />
+              {isNew ? "Créer la facture" : "Mettre à jour"}
             </>
           )}
         </Button>

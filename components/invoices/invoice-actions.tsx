@@ -14,10 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-// --- CORRECTION: J'ai ajouté Truck ici ---
-import { MoreHorizontal, Edit, Send, DollarSign, Ban, Trash2, Eye, Printer, History, Truck } from "lucide-react"
+// --- MODIFIÉ: 'Eye' a été supprimé des imports ---
+import { MoreHorizontal, Edit, Send, DollarSign, Ban, Trash2, Printer, History, Truck } from "lucide-react"
 import { PaymentDialog } from "./payment-dialog"
-import { InvoicePreviewDialog } from "./invoice-preview-dialog"
+// --- MODIFIÉ: 'InvoicePreviewDialog' a été supprimé des imports ---
 import { HistoryDialog } from "./history-dialog"
 
 type InvoiceStatus = 'BROUILLON' | 'ENVOYE' | 'PAYEE' | 'PARTIELLEMENT_PAYEE' | 'ANNULEE';
@@ -61,7 +61,6 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
     }
   }
 
-  // --- CORRECTION: On utilise la fonction handlePrint ---
   const handlePrint = () => {
     window.open(`/dashboard/invoices/print/${invoice.id}?print=true`, '_blank');
   }
@@ -77,13 +76,8 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         
-        <InvoicePreviewDialog invoiceId={invoice.id}>
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-              <Eye className="mr-2 h-4 w-4" /> Aperçu
-          </DropdownMenuItem>
-        </InvoicePreviewDialog>
+        {/* --- SUPPRIMÉ: Le bloc <InvoicePreviewDialog> a été entièrement retiré --- */}
 
-        {/* --- CORRECTION: On appelle handlePrint au clic --- */}
         <DropdownMenuItem onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer / PDF
         </DropdownMenuItem>
@@ -116,13 +110,12 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
         )}
 
         {(invoice.status === 'ENVOYE' || invoice.status === 'PARTIELLEMENT_PAYEE') && (
-          // --- CORRECTION: On enveloppe tout dans un fragment ---
           <>
             <PaymentDialog
               invoiceId={invoice.id}
               invoiceNumber={invoice.invoice_number}
               amountDue={invoice.amount_due}
-              onActionSuccess={onActionSuccess}
+              onPaymentSuccess={onActionSuccess} // Corrigé pour correspondre à la prop
             >
               <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                 <DollarSign className="mr-2 h-4 w-4 text-green-600" /> Enregistrer un paiement
@@ -131,7 +124,7 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
             
             <Link href={`/dashboard/delivery-notes/new?fromInvoice=${invoice.id}`}>
               <DropdownMenuItem>
-                <Truck className="h-4 w-4 mr-2" />
+                <Truck className="mr-2 h-4 w-4" />
                 Créer un Bon de Livraison
               </DropdownMenuItem>
             </Link>
