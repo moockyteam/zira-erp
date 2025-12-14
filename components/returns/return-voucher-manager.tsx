@@ -1,39 +1,77 @@
+//components/returns/return-voucher-manager.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { CompanySelector } from "@/components/company-selector"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { PlusCircle, Package, PackageX, TrendingDown } from "lucide-react"
 import { ReturnVoucherActions } from "./return-voucher-actions"
+import { ReturnVoucherForm } from "./return-voucher-form"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }) {
   const supabase = createClient()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [returns, setReturns] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingReturn, setEditingReturn] = useState<any | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
     if (userCompanies?.length === 1) setSelectedCompanyId(userCompanies[0].id)
   }, [userCompanies])
+
   useEffect(() => {
     if (selectedCompanyId) fetchReturns(selectedCompanyId)
-    else setReturns([])
+    else {
+      setReturns([])
+      setIsLoading(false)
+    }
   }, [selectedCompanyId])
 
   const fetchReturns = async (companyId: string) => {
     setIsLoading(true)
-    const { data } = await supabase
+    // --- LA CORRECTION EST ICI ---
+    // On demande explicitement de récupérer aussi les lignes associées
+    const { data, error } = await supabase
       .from("return_vouchers")
-      .select(`*, customers(name)`)
+      .select(`
+        *, 
+        customers(id, name),
+        return_voucher_lines(*)
+      `)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
-    setReturns(data || [])
+    
+    if (error) {
+      console.error("Erreur lors du chargement des bons de retour:", error);
+      // Gérer l'erreur avec un toast serait une bonne pratique
+    } else {
+      setReturns(data || [])
+    }
+    // --- FIN DE LA CORRECTION ---
     setIsLoading(false)
   }
+
+  const handleOpenForm = (returnVoucher: any | null) => {
+    setEditingReturn(returnVoucher)
+    setIsFormOpen(true)
+  }
+
+  const filteredReturns = useMemo(() => {
+    if (!returns) return []
+    return returns.filter(r =>
+      r.return_voucher_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.customers?.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [returns, searchTerm])
 
   const totalReturns = returns.length
   const thisMonthReturns = returns.filter((r) => {
@@ -101,14 +139,15 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
                     Liste de toutes les marchandises retournées par vos clients
                   </CardDescription>
                 </div>
-                <Link href={`/dashboard/returns/new?companyId=${selectedCompanyId}`} passHref>
-                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all">
-                    <PlusCircle className="h-4 w-4 mr-2" /> Nouveau Bon de Retour
-                  </Button>
-                </Link>
+                <Button onClick={() => handleOpenForm(null)} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all">
+                  <PlusCircle className="h-4 w-4 mr-2" /> Nouveau Bon de Retour
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="pt-6">
+              <div className="mb-4">
+                <Input placeholder="Rechercher par N° ou client..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+              </div>
               <div className="rounded-lg border-2 border-border overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -116,19 +155,17 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
                       <TableHead className="font-semibold border-r-2">Numéro</TableHead>
                       <TableHead className="font-semibold border-r-2">Client</TableHead>
                       <TableHead className="font-semibold border-r-2">Date</TableHead>
-                      <TableHead className="font-semibold border-r-2">Réf. Document</TableHead>
+                      <TableHead className="font-semibold border-r-2">Statut</TableHead>
                       <TableHead className="font-semibold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          Chargement...
-                        </TableCell>
-                      </TableRow>
-                    ) : returns.length > 0 ? (
-                      returns.map((r) => (
+                      Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full"/></TableCell></TableRow>)
+                    ) : filteredReturns.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center h-24">Aucun bon de retour.</TableCell></TableRow>
+                    ) : (
+                      filteredReturns.map((r) => (
                         <TableRow
                           key={r.id}
                           className="hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-colors border-b-2"
@@ -138,18 +175,12 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
                           <TableCell className="border-r-2">
                             {new Date(r.return_date).toLocaleDateString("fr-FR")}
                           </TableCell>
-                          <TableCell className="border-r-2">{r.source_document_ref || "-"}</TableCell>
+                          <TableCell className="border-r-2"><Badge variant={r.status === 'RETOURNE' ? 'success' : 'secondary'}>{r.status}</Badge></TableCell>
                           <TableCell>
-                            <ReturnVoucherActions returnVoucher={r} />
+                            <ReturnVoucherActions returnVoucher={r} onEdit={() => handleOpenForm(r)} onActionSuccess={() => fetchReturns(selectedCompanyId!)} />
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          Aucun bon de retour pour le moment
-                        </TableCell>
-                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -157,6 +188,16 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
             </CardContent>
           </Card>
         </>
+      )}
+
+      {isFormOpen && (
+        <ReturnVoucherForm
+          isOpen={isFormOpen}
+          onOpenChange={setIsFormOpen}
+          companyId={selectedCompanyId!}
+          initialData={editingReturn}
+          onSuccess={() => fetchReturns(selectedCompanyId!)}
+        />
       )}
     </div>
   )

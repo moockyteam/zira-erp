@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { PlusCircle, FileText, TrendingUp, Clock, CheckCircle2 } from "lucide-react"
 import { InvoiceActions } from "./invoice-actions"
 import { CompanySelector } from "@/components/company-selector"
+import { useSearchParams } from "next/navigation" // NOUVEAU
+
 
 type CompanyForList = { id: string; name: string; logo_url: string | null }
 type InvoiceStatus = "BROUILLON" | "ENVOYE" | "PAYEE" | "PARTIELLEMENT_PAYEE" | "ANNULEE"
@@ -29,12 +31,19 @@ type Invoice = {
 
 export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[] }) {
   const supabase = createClient()
-
+ const searchParams = useSearchParams() 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [stats, setStats] = useState({ total: 0, paid: 0, pending: 0, overdue: 0 })
-
+  useEffect(() => {
+    const customerIdFromUrl = searchParams.get('customerId')
+    if (customerIdFromUrl) {
+      // Ici, vous pourriez pré-filtrer la liste si vous le souhaitez,
+      // ou simplement afficher la page normalement.
+      // Pour l'instant, on ne fait rien de plus, mais le lien fonctionnera.
+    }
+  }, [searchParams])
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id)

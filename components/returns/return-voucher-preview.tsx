@@ -3,7 +3,14 @@
 import Image from "next/image"
 
 export function ReturnVoucherPreview({ returnVoucher }: { returnVoucher: any }) {
-  if (!returnVoucher) return null
+  // Sécurité pour éviter un crash si les données sont manquantes
+  if (!returnVoucher) {
+    return (
+      <div className="p-8 text-center text-red-500">
+        Erreur : Impossible de charger les données du bon de retour pour l'aperçu.
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
@@ -13,8 +20,8 @@ export function ReturnVoucherPreview({ returnVoucher }: { returnVoucher: any }) 
             {returnVoucher.companies?.logo_url && (
               <div className="relative w-24 h-24 print:w-20 print:h-20 flex-shrink-0">
                 <Image
-                  src={returnVoucher.companies.logo_url || "/placeholder.svg"}
-                  alt="Logo"
+                  src={returnVoucher.companies.logo_url}
+                  alt="Logo de l'entreprise"
                   fill
                   className="object-contain"
                 />
@@ -47,9 +54,23 @@ export function ReturnVoucherPreview({ returnVoucher }: { returnVoucher: any }) 
           <div className="p-3 border rounded-md bg-gray-50">
             <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
             <p className="text-base font-bold break-words">{returnVoucher.customers?.name}</p>
-            <p>Adresse: {returnVoucher.customers?.address}</p>
+            <p>
+              Adresse: {[
+                returnVoucher.customers?.street,
+                returnVoucher.customers?.delegation,
+                returnVoucher.customers?.governorate,
+                returnVoucher.customers?.country
+              ].filter(Boolean).join(', ')}
+            </p>
             <p>Téléphone: {returnVoucher.customers?.phone_number}</p>
+            <p>Matricule Fiscal: {returnVoucher.customers?.matricule_fiscal}</p>
           </div>
+        </section>
+
+        <section className="text-xs border p-3 rounded-md mb-6 bg-gray-50">
+          <h4 className="font-bold mb-1 text-gray-600">INFORMATIONS DE TRANSPORT</h4>
+          <p><span className="font-semibold">Chauffeur:</span> {returnVoucher.driver_name || "N/A"}</p>
+          <p><span className="font-semibold">Véhicule:</span> {returnVoucher.vehicle_registration || "N/A"}</p>
         </section>
 
         <div className="mb-6">
@@ -64,24 +85,24 @@ export function ReturnVoucherPreview({ returnVoucher }: { returnVoucher: any }) 
               </tr>
             </thead>
             <tbody>
-              {returnVoucher.return_voucher_lines?.map((line: any) => (
-                <tr key={line.id}>
-                  <td className="p-2 border-2 border-gray-800 align-top">{line.items?.reference || "N/A"}</td>
-                  <td className="p-2 border-2 border-gray-800 align-top">{line.items?.name}</td>
-                  <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
-                  <td className="p-2 border-2 border-gray-800 align-top">{line.reason}</td>
+              {returnVoucher.return_voucher_lines && returnVoucher.return_voucher_lines.length > 0 ? (
+                returnVoucher.return_voucher_lines.map((line: any) => (
+                  <tr key={line.id}>
+                    <td className="p-2 border-2 border-gray-800 align-top">{line.items?.reference || "N/A"}</td>
+                    <td className="p-2 border-2 border-gray-800 align-top">{line.items?.name}</td>
+                    <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
+                    <td className="p-2 border-2 border-gray-800 align-top">{line.reason}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="p-4 border-2 border-gray-800 text-center text-muted-foreground">
+                    Aucun article sur ce bon de retour.
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
-        </div>
-
-        <div className="text-xs border p-2 rounded-md mb-8 bg-gray-50">
-          <h4 className="font-bold mb-1">Informations de Transport</h4>
-          <p>
-            <span className="font-semibold">Chauffeur:</span> {returnVoucher.driver_name || "N/A"} |{" "}
-            <span className="font-semibold">Véhicule:</span> {returnVoucher.vehicle_registration || "N/A"}
-          </p>
         </div>
 
         <div className="pt-16" style={{ pageBreakInside: "avoid" }}>

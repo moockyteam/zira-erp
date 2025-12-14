@@ -1,3 +1,4 @@
+//app/dashboard/returns/pages.tsx
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ReturnVoucherManager } from "@/components/returns/return-voucher-manager"
