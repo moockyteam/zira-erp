@@ -1,4 +1,4 @@
-// Placez ce code dans : app/dashboard/delivery-notes/page.tsx
+// app/dashboard/delivery-notes/page.tsx
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";

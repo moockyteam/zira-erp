@@ -1,13 +1,15 @@
-// Remplacez le contenu de : components/delivery-notes/delivery-note-actions.tsx
+// components/delivery-notes/delivery-note-actions.tsx
 
 "use client"
 
 import { useState } from "react"
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Truck, Ban, Eye, Printer, Edit } from "lucide-react"
+// LA CORRECTION EST ICI
+import { MoreHorizontal, Truck, Ban, Eye, Printer, Edit, Archive, CheckCircle } from "lucide-react"
 import { DeliveryNotePreviewDialog } from "./delivery-note-preview-dialog";
 
 export function DnActions({ dn, onActionSuccess }: { dn: any, onActionSuccess: () => void }) {
@@ -15,11 +17,29 @@ export function DnActions({ dn, onActionSuccess }: { dn: any, onActionSuccess: (
   const [isUpdating, setIsUpdating] = useState(false)
 
   const updateStatus = async (newStatus: string) => {
+    if (newStatus === 'LIVRE') {
+      if (!window.confirm("Confirmez-vous la livraison ? Cette action déduira les articles du stock.")) {
+        return;
+      }
+    }
+
     setIsUpdating(true)
+    
+    if (newStatus === 'LIVRE') {
+      const { error: deductError } = await supabase.rpc('deduct_stock_from_delivery_note', { p_dn_id: dn.id })
+      if (deductError) {
+        toast.error("Erreur lors de la déduction du stock: " + deductError.message)
+        setIsUpdating(false)
+        return
+      }
+      toast.success("Stock mis à jour avec succès.")
+    }
+
     const { error } = await supabase.from('delivery_notes').update({ status: newStatus }).eq('id', dn.id)
     if (error) {
-      alert("Erreur lors de la mise à jour du statut: " + error.message)
+      toast.error("Erreur lors de la mise à jour du statut: " + error.message)
     } else {
+      toast.success(`Bon de livraison marqué comme ${newStatus}.`)
       onActionSuccess()
     }
     setIsUpdating(false)
@@ -60,12 +80,18 @@ export function DnActions({ dn, onActionSuccess }: { dn: any, onActionSuccess: (
                     </DropdownMenuItem>
                 </Link>
                 <DropdownMenuItem onClick={() => updateStatus('LIVRE')}>
-                    <Truck className="mr-2 h-4 w-4 text-green-500"/> Marquer comme Livré
+                    <Truck className="mr-2 h-4 w-4 text-green-500"/> Marquer comme Livré & Sortir du Stock
                 </DropdownMenuItem>
                  <DropdownMenuItem onClick={() => updateStatus('ANNULE')} className="text-red-600">
                     <Ban className="mr-2 h-4 w-4"/> Annuler
                 </DropdownMenuItem>
             </>
+        )}
+        
+        {dn.status === 'LIVRE' && (
+            <DropdownMenuItem disabled>
+                <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Déjà livré
+            </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

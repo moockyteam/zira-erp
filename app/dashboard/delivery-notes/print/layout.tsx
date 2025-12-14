@@ -1,4 +1,4 @@
-// Créez le dossier et le fichier : app/dashboard/delivery-notes/print/layout.tsx
+//app/dashboard/delivery-notes/print/layout.tsx
 
 import type React from "react"
 

@@ -1,5 +1,4 @@
-// Placez ce code dans : app/dashboard/delivery-notes/[dnId]/page.tsx
-
+//app/dashboard/delivery-notes/[dnId]/page.tsx
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DeliveryNoteForm } from "@/components/delivery-notes/delivery-note-form"
@@ -27,22 +26,6 @@ export default async function DnEditorPage({
 
   const { data: companies } = await supabase.from("companies").select("id, name").eq("user_id", user.id)
   if (!companies || companies.length === 0) {
-    return (
-      <div className="p-8 text-center max-w-md mx-auto mt-12">
-        <div className="p-8 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 shadow-lg">
-          <h1 className="text-2xl font-bold mb-4 text-indigo-900">Aucune entreprise trouvée</h1>
-          <p className="mb-6 text-indigo-700">
-            Vous devez d'abord créer une entreprise avant de pouvoir créer un bon de livraison.
-          </p>
-          <Link
-            href="/dashboard/companies"
-            className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-md transition-all"
-          >
-            Créer ma première entreprise
-          </Link>
-        </div>
-      </div>
-    )
   }
 
   let companyIdForData = companies[0].id
@@ -63,15 +46,19 @@ export default async function DnEditorPage({
   }
 
   const isNew = dnId === "new"
-  const dnData = null
+  let dnData = null
   if (!isNew) {
-    // Logique d'édition d'un BL existant
+    const { data } = await supabase.from("delivery_notes").select("*, delivery_note_lines(*)").eq("id", dnId).single()
+    if (!data) redirect("/dashboard/delivery-notes")
+    dnData = data
+    companyIdForData = data.company_id
   }
 
   const { data: customers } = await supabase
     .from("customers")
-    .select("id, name, address")
+    .select("*")
     .eq("company_id", companyIdForData)
+
   const { data: items } = await supabase
     .from("items")
     .select("id, name, reference, quantity_on_hand, sale_price")

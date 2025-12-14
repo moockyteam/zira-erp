@@ -1,4 +1,4 @@
-// Créez ce nouveau fichier : components/delivery-notes/delivery-note-preview-dialog.tsx
+// components/delivery-notes/delivery-note-preview-dialog.tsx
 
 "use client"
 

@@ -1,4 +1,4 @@
-// Remplacez le contenu de : app/dashboard/delivery-notes/print/[dnId]/page.tsx
+//  app/dashboard/delivery-notes/print/[dnId]/page.tsx
 
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";

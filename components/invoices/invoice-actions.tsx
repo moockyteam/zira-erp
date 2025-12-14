@@ -5,6 +5,7 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
+import { toast } from "sonner" // NOUVEAU: Pour des notifications plus propres
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,10 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-// --- MODIFIÉ: 'Eye' a été supprimé des imports ---
-import { MoreHorizontal, Edit, Send, DollarSign, Ban, Trash2, Printer, History, Truck } from "lucide-react"
+// NOUVEAU: Ajout de l'icône 'Archive'
+import { MoreHorizontal, Edit, Send, DollarSign, Ban, Trash2, Printer, History, Truck, Archive } from "lucide-react"
 import { PaymentDialog } from "./payment-dialog"
-// --- MODIFIÉ: 'InvoicePreviewDialog' a été supprimé des imports ---
 import { HistoryDialog } from "./history-dialog"
 
 type InvoiceStatus = 'BROUILLON' | 'ENVOYE' | 'PAYEE' | 'PARTIELLEMENT_PAYEE' | 'ANNULEE';
@@ -41,8 +41,9 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
     setIsUpdating(true)
     const { error } = await supabase.from('invoices').update({ status: newStatus }).eq('id', invoice.id)
     if (error) {
-      alert("Erreur lors de la mise à jour du statut: " + error.message)
+      toast.error("Erreur lors de la mise à jour: " + error.message)
     } else {
+      toast.success(`Facture marquée comme ${newStatus}.`)
       onActionSuccess()
     }
     setIsUpdating(false)
@@ -53,12 +54,29 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
       setIsUpdating(true)
       const { error } = await supabase.from('invoices').delete().eq('id', invoice.id)
       if (error) {
-        alert("Erreur lors de la suppression: " + error.message)
+        toast.error("Erreur lors de la suppression: " + error.message)
       } else {
+        toast.success("Facture supprimée.")
         onActionSuccess()
       }
       setIsUpdating(false)
     }
+  }
+
+  // NOUVEAU: La fonction pour appeler la déduction de stock
+  const deductStock = async () => {
+    if (!window.confirm("Confirmez-vous la déduction des quantités du stock ? Cette action est irréversible.")) {
+      return
+    }
+    setIsUpdating(true)
+    const { error } = await supabase.rpc('deduct_stock_from_invoice', { p_invoice_id: invoice.id })
+    if (error) {
+      toast.error("Erreur lors de la déduction du stock: " + error.message)
+    } else {
+      toast.success("Stock mis à jour avec succès.")
+      onActionSuccess() // Pour rafraîchir l'historique et potentiellement d'autres données
+    }
+    setIsUpdating(false)
   }
 
   const handlePrint = () => {
@@ -76,8 +94,6 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         
-        {/* --- SUPPRIMÉ: Le bloc <InvoicePreviewDialog> a été entièrement retiré --- */}
-
         <DropdownMenuItem onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer / PDF
         </DropdownMenuItem>
@@ -109,13 +125,18 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
           </>
         )}
 
-        {(invoice.status === 'ENVOYE' || invoice.status === 'PARTIELLEMENT_PAYEE') && (
+        {(invoice.status === 'ENVOYE' || invoice.status === 'PARTIELLEMENT_PAYEE' || invoice.status === 'PAYEE') && (
           <>
+            {/* NOUVEAU: Le bouton "Déduire du Stock" est maintenant ici */}
+            <DropdownMenuItem onClick={deductStock}>
+              <Archive className="mr-2 h-4 w-4 text-purple-500" /> Déduire du Stock
+            </DropdownMenuItem>
+
             <PaymentDialog
               invoiceId={invoice.id}
               invoiceNumber={invoice.invoice_number}
               amountDue={invoice.amount_due}
-              onPaymentSuccess={onActionSuccess} // Corrigé pour correspondre à la prop
+              onPaymentSuccess={onActionSuccess}
             >
               <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                 <DollarSign className="mr-2 h-4 w-4 text-green-600" /> Enregistrer un paiement
