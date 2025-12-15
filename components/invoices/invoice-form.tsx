@@ -174,50 +174,52 @@ export function InvoiceForm({
     }
   };
 
-  const handleSave = async () => {
-    if (!companyId || (!customerId && !prospectName.trim())) {
-      toast.error("Veuillez sélectionner une entreprise et un client (ou saisir un prospect).")
+    const handleSave = async () => {
+    if (!companyId || !customerId) {
+      toast.error("Veuillez sélectionner une entreprise et un client.")
       return
     }
     if (lines.length === 0 || lines.every((l) => !l.description.trim())) {
-      toast.error("La facture doit contenir au moins une ligne avec une description.")
+      toast.error("Le BL doit contenir au moins une ligne.")
       return
     }
+
     setIsLoading(true)
     try {
-      const invoicePayload = {
+      // On prépare les données du BL SANS le numéro pour l'instant
+      const dnPayload = {
         company_id: companyId,
-        customer_id: customerId || null,
-        prospect_name: customerId ? null : prospectName,
-        invoice_date: invoiceDate,
-        due_date: dueDate,
-        status: initialData?.status || "BROUILLON",
-        total_ht: totals.total_ht_net,
-        total_remise: totals.total_remise,
-        total_fodec: totals.total_fodec,
-        total_tva: totals.total_tva,
-        has_stamp: hasStamp,
-        total_ttc: totals.total_ttc,
+        customer_id: customerId,
+        delivery_date: deliveryDate,
+        delivery_address: deliveryAddress,
+        driver_name: driverName || null,
+        vehicle_registration: vehicleRegistration || null,
+        notes: notes || null,
+        status: "BROUILLON",
+        is_valued: isValued,
         show_remise_column: showRemise,
-        quote_id: quoteId,
+        // ... (vous pouvez ajouter les totaux ici si vous les stockez)
       }
 
       if (isNew) {
-        const { data: numberData, error: numberError } = await supabase.functions.invoke("get-next-invoice-number", {
-          body: JSON.stringify({ companyId }),
-          headers: { "Content-Type": "application/json" },
-        })
-        if (numberError) throw new Error("Impossible de générer le numéro de facture.")
+        // Étape 1: Appeler la fonction RPC pour obtenir le numéro
+        const { data: numberData, error: numberError } = await supabase.rpc(
+          "get_next_delivery_note_number",
+          { p_company_id: companyId }
+        )
+        if (numberError) throw new Error("Impossible de générer le numéro de BL.")
 
-        const { data: newInvoice, error: invoiceError } = await supabase
-          .from("invoices")
-          .insert({ ...invoicePayload, invoice_number: numberData.invoice_number })
+        // Étape 2: Insérer le BL AVEC le numéro obtenu
+        const { data: newDn, error: dnError } = await supabase
+          .from("delivery_notes")
+          .insert({ ...dnPayload, delivery_note_number: numberData })
           .select("id")
           .single()
-        if (invoiceError) throw new Error(invoiceError.message)
+        if (dnError) throw new Error("Erreur lors de la création du BL: " + dnError.message)
 
+        // Étape 3: Insérer les lignes
         const linesPayload = lines.map((line) => ({
-          invoice_id: newInvoice.id,
+          delivery_note_id: newDn.id,
           item_id: line.item_id,
           description: line.description,
           quantity: line.quantity,
@@ -225,41 +227,40 @@ export function InvoiceForm({
           remise_percentage: line.remise_percentage,
           tva_rate: line.tva_rate,
         }))
-
-        const { error: linesError } = await supabase.from("invoice_lines").insert(linesPayload)
-        if (linesError) throw new Error(linesError.message)
-        
-        toast.success("Facture créée avec succès")
-      } else {
-        const { error: invoiceUpdateError } = await supabase
-          .from("invoices")
-          .update(invoicePayload)
-          .eq("id", initialData.id)
-        if (invoiceUpdateError) throw new Error(invoiceUpdateError.message)
-
-        const { error: deleteError } = await supabase.from("invoice_lines").delete().eq("invoice_id", initialData.id)
-        if (deleteError) throw new Error(deleteError.message)
-
-        if (lines.length > 0) {
-          const linesPayload = lines.map((line) => ({
-            invoice_id: initialData.id,
-            item_id: line.item_id,
-            description: line.description,
-            quantity: line.quantity,
-            unit_price_ht: line.unit_price_ht,
-            remise_percentage: line.remise_percentage,
-            tva_rate: line.tva_rate,
-          }))
-          const { error: linesInsertError } = await supabase.from("invoice_lines").insert(linesPayload)
-          if (linesInsertError) throw new Error(linesInsertError.message)
+        if (linesPayload.length > 0) {
+            const { error: linesError } = await supabase.from("delivery_note_lines").insert(linesPayload)
+            if (linesError) throw new Error("Erreur lors de l'ajout des lignes.")
         }
-        toast.success("Facture mise à jour avec succès")
+        
+        toast.success("Bon de livraison enregistré avec succès")
+      } else {
+        // Logique de mise à jour (ne change pas car on ne modifie pas le numéro)
+        const { error: updateError } = await supabase.from("delivery_notes").update(dnPayload).eq("id", initialData.id);
+        if (updateError) throw new Error("Erreur lors de la mise à jour du BL: " + updateError.message);
+        
+        await supabase.from("delivery_note_lines").delete().eq("delivery_note_id", initialData.id);
+        
+        const linesPayload = lines.map((line) => ({
+          delivery_note_id: initialData.id,
+          item_id: line.item_id,
+          description: line.description,
+          quantity: line.quantity,
+          unit_price_ht: line.unit_price_ht,
+          remise_percentage: line.remise_percentage,
+          tva_rate: line.tva_rate,
+        }))
+        if (linesPayload.length > 0) {
+            const { error: linesError } = await supabase.from("delivery_note_lines").insert(linesPayload)
+            if (linesError) throw new Error("Erreur lors de la mise à jour des lignes.")
+        }
+        
+        toast.success("Bon de livraison mis à jour.")
       }
 
-      router.push("/dashboard/invoices")
+      router.push("/dashboard/delivery-notes")
       router.refresh()
     } catch (e: any) {
-      toast.error("Erreur lors de la sauvegarde: " + e.message)
+      toast.error(e.message)
     } finally {
       setIsLoading(false)
     }
@@ -419,8 +420,8 @@ export function InvoiceForm({
               </TableHeader>
               <TableBody>
                 {lines.map((line, index) => {
-                  const unitPriceTTC = line.unit_price_ht * (1 + line.tva_rate / 100);
-                  const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100);
+                  const unitPriceTTC = (line.unit_price_ht || 0) * (1 + (line.tva_rate || 0) / 100);
+                  const lineTotalHT = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100);
                   
                   return (
                     <TableRow
@@ -474,7 +475,7 @@ export function InvoiceForm({
                           className="text-right border-2"
                         />
                       </TableCell>
-                      
+
                       {showRemise && (
                         <TableCell className="align-top">
                           <Input
@@ -502,7 +503,7 @@ export function InvoiceForm({
                           </SelectContent>
                         </Select>
                       </TableCell>
-
+                      
                       <TableCell className="align-top font-mono text-right pt-3 text-muted-foreground">
                         {unitPriceTTC.toFixed(3)}
                       </TableCell>
@@ -648,6 +649,12 @@ export function InvoiceForm({
               <Save className="mr-2 h-5 w-5" />
               {isNew ? "Créer la facture" : "Mettre à jour"}
             </>
+          )}
+        </Button>
+      </div>
+    </div>
+  )
+}
           )}
         </Button>
       </div>
