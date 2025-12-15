@@ -57,30 +57,41 @@ className="object-contain"
 
     <div className="mb-6">
       <table className="w-full text-left border-collapse">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="p-2 border font-semibold w-[50%]">Description / Article</th>
-            <th className="p-2 border font-semibold text-right">Qté</th>
-            {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">Prix U. HT</th>}
-            {deliveryNote.is_valued && deliveryNote.show_remise_column && <th className="p-2 border font-semibold text-right">Remise %</th>}
-            {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">Total HT</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {deliveryNote.delivery_note_lines.map((line: any) => {
-            const lineTotalHT = line.quantity * line.unit_price_ht * (1 - (line.remise_percentage || 0) / 100)
-            return (
-              <tr key={line.id}>
-                <td className="p-2 border">{line.description}</td>
-                <td className="p-2 border text-right">{line.quantity}</td>
-                {deliveryNote.is_valued && <td className="p-2 border text-right font-mono">{line.unit_price_ht.toFixed(3)}</td>}
-                {deliveryNote.is_valued && deliveryNote.show_remise_column && <td className="p-2 border text-right font-mono">{(line.remise_percentage || 0).toFixed(2)}%</td>}
-                {deliveryNote.is_valued && <td className="p-2 border text-right font-mono font-semibold">{lineTotalHT.toFixed(3)}</td>}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+  <thead className="bg-gray-100">
+    <tr>
+      <th className="p-2 border font-semibold w-[50%]">Description / Article</th>
+      <th className="p-2 border font-semibold text-right">Qté</th>
+      {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">Prix U. HT</th>}
+      {deliveryNote.is_valued && deliveryNote.show_remise_column && <th className="p-2 border font-semibold text-right">Remise %</th>}
+      {/* NOUVEAU: Ajout de l'en-tête PU TTC */}
+      {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">Prix U. TTC</th>}
+      {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">Total HT</th>}
+    </tr>
+  </thead>
+  <tbody>
+    {deliveryNote.delivery_note_lines.map((line: any) => {
+      const unitPriceTTC = line.unit_price_ht * (1 + line.tva_rate / 100);
+      const lineTotalHT = line.quantity * line.unit_price_ht * (1 - (line.remise_percentage || 0) / 100);
+      return (
+        <tr key={line.id}>
+          <td className="p-2 border">{line.description}</td>
+          <td className="p-2 border text-right">{line.quantity}</td>
+          {deliveryNote.is_valued && <td className="p-2 border text-right font-mono">{line.unit_price_ht.toFixed(3)}</td>}
+          {deliveryNote.is_valued && deliveryNote.show_remise_column && <td className="p-2 border text-right font-mono">{(line.remise_percentage || 0).toFixed(2)}%</td>}
+          
+          {/* NOUVEAU: Affichage de la cellule PU TTC */}
+          {deliveryNote.is_valued && (
+            <td className="p-2 border text-right font-mono">
+              {unitPriceTTC.toFixed(3)}
+            </td>
+          )}
+
+          {deliveryNote.is_valued && <td className="p-2 border text-right font-mono font-semibold">{lineTotalHT.toFixed(3)}</td>}
+        </tr>
+      )
+    })}
+  </tbody>
+</table>
     </div>
 
     {deliveryNote.is_valued && (

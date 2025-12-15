@@ -112,9 +112,9 @@ export function InvoiceForm({
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
 
   const totals = useMemo(() => {
-    const total_ht_brut = lines.reduce((sum, line) => sum + line.quantity * line.unit_price_ht, 0)
+    const total_ht_brut = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0), 0)
     const total_remise = lines.reduce(
-      (sum, line) => sum + line.quantity * line.unit_price_ht * (line.remise_percentage / 100),
+      (sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * ((line.remise_percentage || 0) / 100),
       0,
     )
     const total_ht_net = total_ht_brut - total_remise
@@ -123,8 +123,7 @@ export function InvoiceForm({
     const tva_details = TVA_RATES.map((rate) => {
       const base = lines
         .filter((line) => line.tva_rate === rate)
-        .reduce((sum, line) => sum + line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100), 0)
-
+        .reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100), 0)
       const base_with_fodec_share = base + (isFodecApplicable ? base * FODEC_RATE : 0)
       const amount = base_with_fodec_share * (rate / 100)
       return { rate, base: base_with_fodec_share, amount }
@@ -411,9 +410,9 @@ export function InvoiceForm({
                   <TableHead className="w-[30%] font-semibold">Description / Article</TableHead>
                   <TableHead className="text-right font-semibold">Qté</TableHead>
                   <TableHead className="text-right font-semibold">Prix U. HT</TableHead>
-                  <TableHead className="text-right font-semibold">Prix U. TTC</TableHead>
                   {showRemise && <TableHead className="text-right font-semibold">Remise %</TableHead>}
                   <TableHead className="text-right font-semibold">TVA %</TableHead>
+                  <TableHead className="text-right font-semibold">Prix U. TTC</TableHead>
                   <TableHead className="text-right font-semibold">Total HT</TableHead>
                   <TableHead className="text-center font-semibold">Act</TableHead>
                 </TableRow>
@@ -476,10 +475,6 @@ export function InvoiceForm({
                         />
                       </TableCell>
                       
-                      <TableCell className="align-top font-mono text-right pt-3 text-muted-foreground">
-                        {unitPriceTTC.toFixed(3)}
-                      </TableCell>
-
                       {showRemise && (
                         <TableCell className="align-top">
                           <Input
@@ -507,6 +502,11 @@ export function InvoiceForm({
                           </SelectContent>
                         </Select>
                       </TableCell>
+
+                      <TableCell className="align-top font-mono text-right pt-3 text-muted-foreground">
+                        {unitPriceTTC.toFixed(3)}
+                      </TableCell>
+
                       <TableCell className="align-top font-mono text-right pt-3 font-semibold text-indigo-600 dark:text-indigo-400">
                         {lineTotalHT.toFixed(3)}
                       </TableCell>
