@@ -77,44 +77,53 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
 
         <div className="mb-6">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
-                {invoice.show_remise_column && (
-                  <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
-                )}
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.invoice_lines.map((line: any, index: number) => {
-                const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100)
-                return (
-                  <tr key={line.id || index}>
-                    <td className="p-2 border-2 border-gray-800 align-top">{line.description}</td>
-                    <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
-                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-                      {line.unit_price_ht.toFixed(3)}
-                    </td>
-                    {invoice.show_remise_column && (
-                      <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-                        {line.remise_percentage.toFixed(2)}%
-                      </td>
-                    )}
-                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-                      {line.tva_rate.toFixed(2)}%
-                    </td>
-                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-                      {lineTotalHT.toFixed(3)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+  <thead className="bg-gray-100">
+    <tr>
+      <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
+      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
+      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
+      {/* NOUVEAU: Ajout de l'en-tête de colonne */}
+      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. TTC</th>
+      {invoice.show_remise_column && (
+        <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
+      )}
+      <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
+      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
+    </tr>
+  </thead>
+  <tbody>
+    {invoice.invoice_lines.map((line: any, index: number) => {
+      const unitPriceTTC = line.unit_price_ht * (1 + line.tva_rate / 100);
+      const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100);
+      return (
+        <tr key={line.id || index}>
+          <td className="p-2 border-2 border-gray-800 align-top">{line.description}</td>
+          <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
+          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+            {line.unit_price_ht.toFixed(3)}
+          </td>
+          
+          {/* NOUVEAU: Affichage de la colonne PU TTC calculée */}
+          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+            {unitPriceTTC.toFixed(3)}
+          </td>
+
+          {invoice.show_remise_column && (
+            <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+              {line.remise_percentage.toFixed(2)}%
+            </td>
+          )}
+          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+            {line.tva_rate.toFixed(2)}%
+          </td>
+          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+            {lineTotalHT.toFixed(3)}
+          </td>
+        </tr>
+      )
+    })}
+  </tbody>
+</table>
         </div>
 
         <div className="pt-4" style={{ pageBreakInside: "avoid" }}>

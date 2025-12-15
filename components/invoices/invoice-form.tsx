@@ -164,7 +164,6 @@ export function InvoiceForm({
     setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
   }
 
-  // LA CORRECTION EST ICI
   const handleItemSelect = (local_id: string, itemId: string) => {
     const selectedItem = items.find((item) => item.id === itemId);
     if (selectedItem) {
@@ -409,20 +408,21 @@ export function InvoiceForm({
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[35%] font-semibold">Description / Article</TableHead>
+                  <TableHead className="w-[30%] font-semibold">Description / Article</TableHead>
                   <TableHead className="text-right font-semibold">Qté</TableHead>
                   <TableHead className="text-right font-semibold">Prix U. HT</TableHead>
+                  <TableHead className="text-right font-semibold">Prix U. TTC</TableHead>
                   {showRemise && <TableHead className="text-right font-semibold">Remise %</TableHead>}
                   <TableHead className="text-right font-semibold">TVA %</TableHead>
                   <TableHead className="text-right font-semibold">Total HT</TableHead>
-                  <TableHead className="text-right font-semibold">Total TTC</TableHead>
                   <TableHead className="text-center font-semibold">Act</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lines.map((line) => {
-                  const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100)
-                  const lineTotalTTC = lineTotalHT * (1 + line.tva_rate / 100)
+                {lines.map((line, index) => {
+                  const unitPriceTTC = line.unit_price_ht * (1 + line.tva_rate / 100);
+                  const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100);
+                  
                   return (
                     <TableRow
                       key={line.local_id}
@@ -475,6 +475,11 @@ export function InvoiceForm({
                           className="text-right border-2"
                         />
                       </TableCell>
+                      
+                      <TableCell className="align-top font-mono text-right pt-3 text-muted-foreground">
+                        {unitPriceTTC.toFixed(3)}
+                      </TableCell>
+
                       {showRemise && (
                         <TableCell className="align-top">
                           <Input
@@ -502,11 +507,8 @@ export function InvoiceForm({
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="align-top font-mono text-right pt-4 font-semibold text-indigo-600 dark:text-indigo-400">
+                      <TableCell className="align-top font-mono text-right pt-3 font-semibold text-indigo-600 dark:text-indigo-400">
                         {lineTotalHT.toFixed(3)}
-                      </TableCell>
-                      <TableCell className="align-top font-mono font-bold text-right pt-4 text-lg text-emerald-600 dark:text-emerald-400">
-                        {lineTotalTTC.toFixed(3)}
                       </TableCell>
                       <TableCell className="align-top text-center">
                         <Button
