@@ -4,20 +4,24 @@
 
 import Image from "next/image"
 import writtenNumber from "written-number"
-import { FODEC_RATE } from "@/constants" 
+
+const FODEC_RATE = 0.01
 
 export function InvoicePreview({ invoice }: { invoice: any }) {
   if (!invoice) return null
 
-  const totalInWords = (total: number) => {
-    if (total <= 0) return ""
-    const [integerPart, decimalPart] = total.toFixed(3).split(".")
+  const totalInWords = (total: number, netToPay: number, hasWithholding: boolean) => {
+    const amountToConvert = hasWithholding ? netToPay : total
+    if (amountToConvert <= 0) return ""
+    const [integerPart, decimalPart] = amountToConvert.toFixed(3).split(".")
     const integerWords = writtenNumber(Number.parseInt(integerPart), { lang: "fr" })
     const decimalWords = writtenNumber(Number.parseInt(decimalPart), { lang: "fr" })
-    return `Arrêtée la présente facture à la somme de : ${integerWords} dinars et ${decimalWords} millimes.`
+    const label = hasWithholding ? "Arrêtée la présente facture au net à payer de" : "Arrêtée la présente facture à la somme de"
+    return `${label} : ${integerWords} dinars et ${decimalWords} millimes.`
   }
 
   const isFodecApplicable = invoice.total_fodec > 0
+  const netToPay = invoice.total_ttc - (invoice.withholding_tax_amount || 0)
 
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
@@ -67,7 +71,9 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                 invoice.customers?.delegation,
                 invoice.customers?.governorate,
                 invoice.customers?.country
-              ].filter(Boolean).join(', ')}
+              ]
+                .filter(Boolean)
+                .join(", ")}
             </p>
             {invoice.customers?.matricule_fiscal && <p>MF: {invoice.customers.matricule_fiscal}</p>}
             {invoice.customers?.email && <p>Email: {invoice.customers.email}</p>}
@@ -77,53 +83,50 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
 
         <div className="mb-6">
           <table className="w-full text-left border-collapse">
-  <thead className="bg-gray-100">
-    <tr>
-      <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
-      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
-      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
-      {invoice.show_remise_column && (
-        <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
-      )}
-      <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
-      {/* MODIFIÉ: L'en-tête est maintenant ici */}
-      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. TTC</th>
-      <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
-    </tr>
-  </thead>
-  <tbody>
-    {invoice.invoice_lines.map((line: any, index: number) => {
-      const unitPriceTTC = line.unit_price_ht * (1 + line.tva_rate / 100);
-      const lineTotalHT = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100);
-      return (
-        <tr key={line.id || index}>
-          <td className="p-2 border-2 border-gray-800 align-top">{line.description}</td>
-          <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
-          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-            {line.unit_price_ht.toFixed(3)}
-          </td>
-          {invoice.show_remise_column && (
-            <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-              {line.remise_percentage.toFixed(2)}%
-            </td>
-          )}
-          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-            {line.tva_rate.toFixed(2)}%
-          </td>
-          
-          {/* MODIFIÉ: La cellule est maintenant ici */}
-          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-            {unitPriceTTC.toFixed(3)}
-          </td>
-
-          <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
-            {lineTotalHT.toFixed(3)}
-          </td>
-        </tr>
-      )
-    })}
-  </tbody>
-</table>
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. TTC</th>
+                {invoice.show_remise_column && (
+                  <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
+                )}
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.invoice_lines.map((line: any, index: number) => {
+                const unitPriceTTC = (line.unit_price_ht || 0) * (1 + (line.tva_rate || 0) / 100)
+                const lineTotalHT =
+                  (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+                return (
+                  <tr key={line.id || index}>
+                    <td className="p-2 border-2 border-gray-800 align-top">{line.description}</td>
+                    <td className="p-2 border-2 border-gray-800 text-right align-top">{line.quantity}</td>
+                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                      {(line.unit_price_ht || 0).toFixed(3)}
+                    </td>
+                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                      {unitPriceTTC.toFixed(3)}
+                    </td>
+                    {invoice.show_remise_column && (
+                      <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                        {(line.remise_percentage || 0).toFixed(2)}%
+                      </td>
+                    )}
+                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                      {(line.tva_rate || 0).toFixed(2)}%
+                    </td>
+                    <td className="p-2 border-2 border-gray-800 text-right font-mono align-top">
+                      {lineTotalHT.toFixed(3)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
 
         <div className="pt-4" style={{ pageBreakInside: "avoid" }}>
@@ -142,7 +145,10 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                   {[19, 13, 7, 0].map((rate) => {
                     const base = invoice.invoice_lines
                       .filter((l: any) => l.tva_rate === rate)
-                      .reduce((s: number, l: any) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100), 0)
+                      .reduce(
+                        (s: number, l: any) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100),
+                        0
+                      )
                     if (base === 0) return null
                     const base_fodec =
                       base + (isFodecApplicable ? base * (1 - invoice.escompte_percentage / 100) * FODEC_RATE : 0)
@@ -164,13 +170,7 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                 <span className="font-sans text-muted-foreground">Total HT Net</span>
                 <span>{invoice.total_ht.toFixed(3)}</span>
               </div>
-              {invoice.total_escompte > 0 && (
-                <div className="flex justify-between">
-                  <span className="font-sans text-muted-foreground">Escompte</span>
-                  <span>- {invoice.total_escompte.toFixed(3)}</span>
-                </div>
-              )}
-              {isFodecApplicable && (
+              {invoice.total_fodec > 0 && (
                 <div className="flex justify-between">
                   <span className="font-sans text-muted-foreground">FODEC (1%)</span>
                   <span>+ {invoice.total_fodec.toFixed(3)}</span>
@@ -190,6 +190,18 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                 <span className="font-sans">Total TTC</span>
                 <span>{invoice.total_ttc.toFixed(3)} TND</span>
               </div>
+              {invoice.has_withholding_tax && (
+                <>
+                  <div className="flex justify-between text-red-600">
+                    <span className="font-sans">Retenue (1.5%)</span>
+                    <span>- {invoice.withholding_tax_amount.toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg border-t-2 pt-2 mt-2 text-emerald-600">
+                    <span className="font-sans">NET À PAYER</span>
+                    <span>{netToPay.toFixed(3)} TND</span>
+                  </div>
+                </>
+              )}
             </div>
           </footer>
 
@@ -198,7 +210,9 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
             <p className="whitespace-pre-wrap">{invoice.notes || "Aucune condition spécifiée."}</p>
           </div>
 
-          <div className="mt-4 pt-4 border-t text-[8pt] italic text-gray-600">{totalInWords(invoice.total_ttc)}</div>
+          <div className="mt-4 pt-4 border-t text-[8pt] italic text-gray-600">
+            {totalInWords(invoice.total_ttc, netToPay, invoice.has_withholding_tax)}
+          </div>
         </div>
       </div>
     </div>

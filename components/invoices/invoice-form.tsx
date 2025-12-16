@@ -42,8 +42,9 @@ type InvoiceLine = {
   tva_rate: number
 }
 
-const TVA_RATES = [19, 13, 7, 0]
-const FODEC_RATE = 0.01
+const TVA_RATES = [19, 13, 7, 0];
+const FODEC_RATE = 0.01;
+const WITHHOLDING_TAX_RATE = 0.015;
 
 export function InvoiceForm({
   initialData,
@@ -69,20 +70,11 @@ export function InvoiceForm({
   const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
   const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
   const [lines, setLines] = useState<InvoiceLine[]>(
-    initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [
-      {
-        local_id: crypto.randomUUID(),
-        item_id: null,
-        description: "",
-        quantity: 1,
-        unit_price_ht: 0,
-        remise_percentage: 0,
-        tva_rate: 19,
-      },
-    ],
+    initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
   )
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
   const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? true)
+  const [hasWithholdingTax, setHasWithholdingTax] = useState(initialData?.has_withholding_tax ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [quoteId, setQuoteId] = useState(initialData?.quote_id || null)
 
@@ -108,42 +100,49 @@ export function InvoiceForm({
   }, [quoteInitialData, isNew])
 
   const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
-  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
 
   const totals = useMemo(() => {
-    const total_ht_brut = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0), 0)
-    const total_remise = lines.reduce(
-      (sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * ((line.remise_percentage || 0) / 100),
+    const total_ht_net = lines.reduce(
+      (sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
       0,
     )
-    const total_ht_net = total_ht_brut - total_remise
     const total_fodec = isFodecApplicable ? total_ht_net * FODEC_RATE : 0
     const base_tva = total_ht_net + total_fodec
+    const total_tva = lines.reduce((sum, line) => {
+      const line_ht = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+      const line_fodec = isFodecApplicable ? line_ht * FODEC_RATE : 0
+      return sum + (line_ht + line_fodec) * ((line.tva_rate || 0) / 100)
+    }, 0)
+    const timbre = hasStamp ? 1.0 : 0
+    const total_ttc = base_tva + total_tva + timbre
+    const withholding_tax_amount = hasWithholdingTax ? total_ht_net * WITHHOLDING_TAX_RATE : 0
+    const net_to_pay = total_ttc - withholding_tax_amount
+
     const tva_details = TVA_RATES.map((rate) => {
       const base = lines
         .filter((line) => line.tva_rate === rate)
-        .reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100), 0)
+        .reduce(
+          (sum, line) =>
+            sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
+          0,
+        )
       const base_with_fodec_share = base + (isFodecApplicable ? base * FODEC_RATE : 0)
       const amount = base_with_fodec_share * (rate / 100)
       return { rate, base: base_with_fodec_share, amount }
     })
 
-    const total_tva = tva_details.reduce((sum, detail) => sum + detail.amount, 0)
-    const timbre = hasStamp ? 1.000 : 0
-    const total_ttc = base_tva + total_tva + timbre
-
     return {
       total_ht_net,
-      total_remise,
       total_fodec,
-      base_tva,
       tva_details,
       total_tva,
       timbre,
       total_ttc,
+      withholding_tax_amount,
+      net_to_pay,
     }
-  }, [lines, isFodecApplicable, hasStamp])
+  }, [lines, isFodecApplicable, hasStamp, hasWithholdingTax])
 
   const addLine = () =>
     setLines([
@@ -164,15 +163,15 @@ export function InvoiceForm({
   }
 
   const handleItemSelect = (local_id: string, itemId: string) => {
-    const selectedItem = items.find((item) => item.id === itemId);
+    const selectedItem = items.find((item) => item.id === itemId)
     if (selectedItem) {
       updateLine(local_id, {
         item_id: itemId,
         description: `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`,
         unit_price_ht: selectedItem.sale_price || 0,
-      });
+      })
     }
-  };
+  }
 
   const handleSave = async () => {
     if (!companyId || (!customerId && !prospectName.trim())) {
@@ -193,13 +192,14 @@ export function InvoiceForm({
         due_date: dueDate,
         status: initialData?.status || "BROUILLON",
         total_ht: totals.total_ht_net,
-        total_remise: totals.total_remise,
         total_fodec: totals.total_fodec,
         total_tva: totals.total_tva,
         has_stamp: hasStamp,
         total_ttc: totals.total_ttc,
         show_remise_column: showRemise,
         quote_id: quoteId,
+        has_withholding_tax: hasWithholdingTax,
+        withholding_tax_amount: totals.withholding_tax_amount,
       }
 
       if (isNew) {
@@ -228,7 +228,7 @@ export function InvoiceForm({
 
         const { error: linesError } = await supabase.from("invoice_lines").insert(linesPayload)
         if (linesError) throw new Error(linesError.message)
-        
+
         toast.success("Facture créée avec succès")
       } else {
         const { error: invoiceUpdateError } = await supabase
@@ -309,7 +309,7 @@ export function InvoiceForm({
                     aria-expanded={openCustomerPopover}
                     className="w-full justify-between font-normal border-2 hover:border-emerald-500 transition-colors bg-transparent"
                   >
-                    {selectedCustomer ? selectedCustomer.name : "Sélectionner un client..."}
+                    {customers.find((c) => c.id === customerId)?.name || "Sélectionner un client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -341,7 +341,7 @@ export function InvoiceForm({
                 </PopoverContent>
               </Popover>
             </div>
-            
+
             {!customerId && (
               <div className="space-y-2">
                 <Label htmlFor="prospectName" className="flex items-center gap-2">
@@ -375,7 +375,7 @@ export function InvoiceForm({
             <div className="space-y-2">
               <Label htmlFor="dueDate" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-amber-600" />
-                Date d'échéance
+                Date d&apos;échéance
               </Label>
               <Input
                 id="dueDate"
@@ -418,10 +418,11 @@ export function InvoiceForm({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lines.map((line, index) => {
-                  const unitPriceTTC = (line.unit_price_ht || 0) * (1 + (line.tva_rate || 0) / 100);
-                  const lineTotalHT = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100);
-                  
+                {lines.map((line) => {
+                  const unitPriceTTC = (line.unit_price_ht || 0) * (1 + (line.tva_rate || 0) / 100)
+                  const lineTotalHT =
+                    (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+
                   return (
                     <TableRow
                       key={line.local_id}
@@ -462,7 +463,9 @@ export function InvoiceForm({
                         <Input
                           type="number"
                           value={line.quantity}
-                          onChange={(e) => updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value) || 0 })
+                          }
                           className="text-right border-2"
                         />
                       </TableCell>
@@ -470,7 +473,9 @@ export function InvoiceForm({
                         <Input
                           type="number"
                           value={line.unit_price_ht}
-                          onChange={(e) => updateLine(line.local_id, { unit_price_ht: Number.parseFloat(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            updateLine(line.local_id, { unit_price_ht: Number.parseFloat(e.target.value) || 0 })
+                          }
                           className="text-right border-2"
                         />
                       </TableCell>
@@ -480,7 +485,11 @@ export function InvoiceForm({
                           <Input
                             type="number"
                             value={line.remise_percentage}
-                            onChange={(e) => updateLine(line.local_id, { remise_percentage: Number.parseFloat(e.target.value) || 0 })}
+                            onChange={(e) =>
+                              updateLine(line.local_id, {
+                                remise_percentage: Number.parseFloat(e.target.value) || 0,
+                              })
+                            }
                             className="text-right border-2"
                           />
                         </TableCell>
@@ -502,7 +511,7 @@ export function InvoiceForm({
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      
+
                       <TableCell className="align-top font-mono text-right pt-3 text-muted-foreground">
                         {unitPriceTTC.toFixed(3)}
                       </TableCell>
@@ -583,45 +592,59 @@ export function InvoiceForm({
             <CardHeader className="bg-gradient-to-br from-indigo-500 to-emerald-500 text-white">
               <CardTitle className="text-xl">Totaux & Options</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 font-mono text-sm pt-6">
-              <div className="flex justify-between items-center p-2 bg-slate-50 dark:bg-slate-900/50 rounded mb-4">
-                <Label htmlFor="stamp-switch" className="flex items-center gap-2 cursor-pointer text-xs">
+            <CardContent className="space-y-3 pt-6">
+              <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
+                <Label htmlFor="stamp-switch" className="flex items-center gap-2 cursor-pointer text-sm">
                   <Switch id="stamp-switch" checked={hasStamp} onCheckedChange={setHasStamp} />
-                  Timbre Fiscal (1.000 DT)
+                  Timbre Fiscal
+                </Label>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
+                <Label htmlFor="withholding-switch" className="flex items-center gap-2 cursor-pointer text-sm">
+                  <Switch
+                    id="withholding-switch"
+                    checked={hasWithholdingTax}
+                    onCheckedChange={setHasWithholdingTax}
+                  />
+                  Retenue à la Source (1.5%)
                 </Label>
               </div>
 
-              <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <span className="text-muted-foreground">Total HT Net</span>
-                <span className="font-semibold">{totals.total_ht_net.toFixed(3)}</span>
-              </div>
-
-              {isFodecApplicable && (
-                <div className="flex justify-between p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
-                  <span className="font-medium text-blue-700 dark:text-blue-300">FODEC (1%)</span>
-                  <span className="font-semibold text-blue-700 dark:text-blue-300">
-                    + {totals.total_fodec.toFixed(3)}
-                  </span>
+              <div className="border-t pt-3 space-y-2 font-mono text-sm">
+                <div className="flex justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                  <span className="text-muted-foreground">Total HT Net</span>
+                  <span>{totals.total_ht_net.toFixed(3)}</span>
                 </div>
-              )}
-
-              <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <span className="text-muted-foreground">Total TVA</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                  + {totals.total_tva.toFixed(3)}
-                </span>
-              </div>
-
-              <div className="flex justify-between p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <span className="text-muted-foreground">Timbre</span>
-                <span className="font-semibold">
-                  + {totals.timbre.toFixed(3)}
-                </span>
-              </div>
-
-              <div className="flex justify-between font-bold text-xl border-t-2 pt-4 mt-4 p-3 bg-gradient-to-r from-indigo-50 to-emerald-50 dark:from-indigo-950/20 dark:to-emerald-950/20 rounded-lg">
-                <span>Total TTC</span>
-                <span className="text-indigo-600 dark:text-indigo-400">{totals.total_ttc.toFixed(3)} TND</span>
+                {isFodecApplicable && (
+                  <div className="flex justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <span className="text-muted-foreground">FODEC (1%)</span>
+                    <span>+ {totals.total_fodec.toFixed(3)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                  <span className="text-muted-foreground">Total TVA</span>
+                  <span>+ {totals.total_tva.toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                  <span className="text-muted-foreground">Timbre</span>
+                  <span>+ {totals.timbre.toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-base border-t pt-2 mt-2 p-1">
+                  <span>Total TTC</span>
+                  <span>{totals.total_ttc.toFixed(3)} TND</span>
+                </div>
+                {hasWithholdingTax && (
+                  <>
+                    <div className="flex justify-between text-red-600 dark:text-red-400 p-1">
+                      <span>Retenue (1.5%)</span>
+                      <span>- {totals.withholding_tax_amount.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t-2 border-emerald-500 pt-3 mt-3 text-emerald-600 dark:text-emerald-400 p-2 rounded bg-emerald-50 dark:bg-emerald-950/20">
+                      <span>NET À PAYER</span>
+                      <span>{totals.net_to_pay.toFixed(3)} TND</span>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -630,7 +653,9 @@ export function InvoiceForm({
 
       <div className="flex justify-end gap-4 pt-4 border-t">
         <Link href="/dashboard/invoices">
-          <Button variant="outline" type="button">Annuler</Button>
+          <Button variant="outline" type="button">
+            Annuler
+          </Button>
         </Link>
         <Button
           onClick={handleSave}

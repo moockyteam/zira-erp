@@ -63,7 +63,7 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
   const filteredPOs = useMemo(() => {
     return purchaseOrders.filter(po =>
       po.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      po.suppliers?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      (po.suppliers?.name && po.suppliers.name.toLowerCase().includes(searchTerm.toLowerCase()))
     )
   }, [purchaseOrders, searchTerm])
 
@@ -123,7 +123,12 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
                       <TableCell><Badge variant={getStatusVariant(po.status)}>{po.status}</Badge></TableCell>
                       <TableCell className="text-right font-mono">{po.total_ttc.toFixed(3)} TND</TableCell>
                       <TableCell>
-                        <PurchaseOrderActions poId={po.id} currentStatus={po.status} onStatusChange={handleStatusChange} />
+                        <PurchaseOrderActions 
+                          poId={po.id} 
+                          currentStatus={po.status} 
+                          onStatusChange={handleStatusChange} 
+                          onActionSuccess={() => fetchPOs(selectedCompanyId!)}
+                        />
                       </TableCell>
                     </TableRow>
                   ))
