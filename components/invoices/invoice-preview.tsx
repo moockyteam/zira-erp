@@ -262,6 +262,34 @@ export function InvoicePreview({ invoice, language = "fr" }: { invoice: any; lan
             <p className="whitespace-pre-wrap">{invoice.notes || t.noConditions}</p>
           </div>
 
+          {(invoice.bank_name || invoice.iban || invoice.rib || invoice.bic_swift) && (
+            <div className="mt-4 p-3 border rounded-md bg-gray-50 text-xs">
+              <h4 className="font-bold mb-2 text-gray-700">{t.bankDetails || "Coordonnées Bancaires"}</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {invoice.bank_name && (
+                  <div>
+                    <span className="font-semibold">Banque:</span> {invoice.bank_name}
+                  </div>
+                )}
+                {invoice.rib && (
+                  <div>
+                    <span className="font-semibold">RIB:</span> {invoice.rib}
+                  </div>
+                )}
+                {invoice.iban && (
+                  <div className="col-span-2">
+                    <span className="font-semibold">IBAN:</span> {invoice.iban}
+                  </div>
+                )}
+                {invoice.bic_swift && (
+                  <div>
+                    <span className="font-semibold">BIC/SWIFT:</span> {invoice.bic_swift}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 pt-4 border-t text-[8pt] italic text-gray-600">
             {totalInWords(invoice.total_ttc, netToPay, invoice.has_withholding_tax)}
           </div>

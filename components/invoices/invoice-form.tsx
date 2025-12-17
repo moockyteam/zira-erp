@@ -26,6 +26,7 @@ import {
   Package,
   Receipt,
   Save,
+  CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -84,6 +85,10 @@ export function InvoiceForm({
   const [hasWithholdingTax, setHasWithholdingTax] = useState(initialData?.has_withholding_tax ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [quoteId, setQuoteId] = useState(initialData?.quote_id || null)
+  const [bankName, setBankName] = useState(initialData?.bank_name || "")
+  const [iban, setIban] = useState(initialData?.iban || "")
+  const [bicSwift, setBicSwift] = useState(initialData?.bic_swift || "")
+  const [rib, setRib] = useState(initialData?.rib || "")
 
   useEffect(() => {
     if (quoteInitialData && isNew) {
@@ -211,6 +216,10 @@ export function InvoiceForm({
         quote_id: quoteId,
         has_withholding_tax: hasWithholdingTax,
         withholding_tax_amount: totals.withholding_tax_amount,
+        bank_name: bankName || null,
+        iban: iban || null,
+        bic_swift: bicSwift || null,
+        rib: rib || null,
       }
 
       if (isNew) {
@@ -680,6 +689,54 @@ export function InvoiceForm({
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="rounded-lg border bg-card p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-emerald-600" />
+            Coordonnées Bancaires (optionnel)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="bank_name">Nom de la Banque</Label>
+              <Input
+                id="bank_name"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="Ex: Banque de Tunisie"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rib">RIB</Label>
+              <Input
+                id="rib"
+                value={rib}
+                onChange={(e) => setRib(e.target.value)}
+                placeholder="Ex: 12345678901234567890"
+                maxLength={24}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="iban">IBAN</Label>
+              <Input
+                id="iban"
+                value={iban}
+                onChange={(e) => setIban(e.target.value.toUpperCase())}
+                placeholder="Ex: TN59 1234 5678 9012 3456 7890"
+                maxLength={34}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bic_swift">Code BIC/SWIFT</Label>
+              <Input
+                id="bic_swift"
+                value={bicSwift}
+                onChange={(e) => setBicSwift(e.target.value.toUpperCase())}
+                placeholder="Ex: BTUBTNTT"
+                maxLength={11}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
