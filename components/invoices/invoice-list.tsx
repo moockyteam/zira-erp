@@ -13,7 +13,6 @@ import { InvoiceActions } from "./invoice-actions"
 import { CompanySelector } from "@/components/company-selector"
 import { useSearchParams } from "next/navigation" // NOUVEAU
 
-
 type CompanyForList = { id: string; name: string; logo_url: string | null }
 type InvoiceStatus = "BROUILLON" | "ENVOYE" | "PAYEE" | "PARTIELLEMENT_PAYEE" | "ANNULEE"
 
@@ -27,17 +26,25 @@ type Invoice = {
   status: InvoiceStatus
   total_paid: number
   amount_due: number
+  currency: string
 }
 
 export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[] }) {
   const supabase = createClient()
- const searchParams = useSearchParams() 
+  const searchParams = useSearchParams()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [stats, setStats] = useState({ total: 0, paid: 0, pending: 0, overdue: 0 })
+  const [stats, setStats] = useState({
+    total: 0,
+    paid: 0,
+    pending: 0,
+    overdue: 0,
+    byCurrency: {} as Record<string, { total: number; paid: number; pending: number }>,
+  })
+
   useEffect(() => {
-    const customerIdFromUrl = searchParams.get('customerId')
+    const customerIdFromUrl = searchParams.get("customerId")
     if (customerIdFromUrl) {
       // Ici, vous pourriez pré-filtrer la liste si vous le souhaitez,
       // ou simplement afficher la page normalement.
@@ -63,7 +70,7 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
     const { data, error } = await supabase
       .from("invoices_with_totals")
       .select(
-        `id, invoice_number, customers ( name ), invoice_date, due_date, total_ttc, status, total_paid, amount_due`,
+        `id, invoice_number, customers ( name ), invoice_date, due_date, total_ttc, status, total_paid, amount_due, currency`,
       )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
@@ -72,17 +79,29 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
       console.error("Erreur lors du chargement des factures:", error)
     } else {
       setInvoices(data as Invoice[])
-      const totalAmount = data.reduce((sum, inv) => sum + inv.total_ttc, 0)
-      const paidAmount = data.filter((inv) => inv.status === "PAYEE").reduce((sum, inv) => sum + inv.total_ttc, 0)
-      const pendingAmount = data
-        .filter((inv) => inv.status === "ENVOYE" || inv.status === "PARTIELLEMENT_PAYEE")
-        .reduce((sum, inv) => sum + inv.amount_due, 0)
+
+      const totalsByCurrency: Record<string, { total: number; paid: number; pending: number }> = {}
+
+      data.forEach((inv) => {
+        const curr = inv.currency || "TND"
+        if (!totalsByCurrency[curr]) {
+          totalsByCurrency[curr] = { total: 0, paid: 0, pending: 0 }
+        }
+        totalsByCurrency[curr].total += inv.total_ttc
+        if (inv.status === "PAYEE") {
+          totalsByCurrency[curr].paid += inv.total_ttc
+        }
+        if (inv.status === "ENVOYE" || inv.status === "PARTIELLEMENT_PAYEE") {
+          totalsByCurrency[curr].pending += inv.amount_due
+        }
+      })
+
       const overdueCount = data.filter(
         (inv) =>
           (inv.status === "ENVOYE" || inv.status === "PARTIELLEMENT_PAYEE") && new Date(inv.due_date) < new Date(),
       ).length
 
-      setStats({ total: totalAmount, paid: paidAmount, pending: pendingAmount, overdue: overdueCount })
+      setStats({ total: 0, paid: 0, pending: 0, overdue: overdueCount, byCurrency: totalsByCurrency })
     }
 
     setIsLoading(false)
@@ -146,60 +165,72 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-l-4 border-l-indigo-500 hover:shadow-lg transition-shadow">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Facturé</p>
-                  <p className="text-2xl font-bold mt-1">{stats.total.toFixed(0)} TND</p>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-muted-foreground">Total Facturé</p>
                 <div className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-full">
                   <TrendingUp className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(stats.byCurrency).map(([currency, amounts]) => (
+                  <p key={currency} className="text-lg font-bold">
+                    {amounts.total.toFixed(currency === "TND" ? 3 : 2)} {currency}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-l-4 border-l-emerald-500 hover:shadow-lg transition-shadow">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Payé</p>
-                  <p className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
-                    {stats.paid.toFixed(0)} TND
-                  </p>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-muted-foreground">Payé</p>
                 <div className="p-3 bg-emerald-100 dark:bg-emerald-900/20 rounded-full">
                   <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(stats.byCurrency).map(([currency, amounts]) => (
+                  <p key={currency} className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {amounts.paid.toFixed(currency === "TND" ? 3 : 2)} {currency}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-l-4 border-l-amber-500 hover:shadow-lg transition-shadow">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">En Attente</p>
-                  <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
-                    {stats.pending.toFixed(0)} TND
-                  </p>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-muted-foreground">En Attente</p>
                 <div className="p-3 bg-amber-100 dark:bg-amber-900/20 rounded-full">
                   <Clock className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(stats.byCurrency).map(([currency, amounts]) => (
+                  <p key={currency} className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                    {amounts.pending.toFixed(currency === "TND" ? 3 : 2)} {currency}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-l-4 border-l-rose-500 hover:shadow-lg transition-shadow">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">En Retard</p>
-                  <p className="text-2xl font-bold mt-1 text-rose-600 dark:text-rose-400">{stats.overdue}</p>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-muted-foreground">En Retard</p>
                 <div className="p-3 bg-rose-100 dark:bg-rose-900/20 rounded-full">
                   <FileText className="h-6 w-6 text-rose-600 dark:text-rose-400" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(stats.byCurrency).map(([currency, amounts]) => (
+                  <p key={currency} className="text-lg font-bold text-rose-600 dark:text-rose-400">
+                    {stats.overdue}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -230,6 +261,7 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
                     <TableHead className="font-semibold">Date Facture</TableHead>
                     <TableHead className="font-semibold">Date Échéance</TableHead>
                     <TableHead className="font-semibold">Statut</TableHead>
+                    <TableHead className="font-semibold">Devise</TableHead>
                     <TableHead className="text-right font-semibold">Montant TTC</TableHead>
                     <TableHead className="text-center font-semibold">Actions</TableHead>
                   </TableRow>
@@ -237,7 +269,7 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center p-12">
+                      <TableCell colSpan={8} className="text-center p-12">
                         <div className="flex flex-col items-center gap-3">
                           <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent"></div>
                           <p className="text-muted-foreground">Chargement des factures...</p>
@@ -261,8 +293,14 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
                             {invoice.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-medium">
+                            {invoice.currency || "TND"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right font-mono font-bold text-lg">
-                          {invoice.total_ttc.toFixed(3)} TND
+                          {invoice.total_ttc.toFixed((invoice.currency || "TND") === "TND" ? 3 : 2)}{" "}
+                          {invoice.currency || "TND"}
                         </TableCell>
                         <TableCell className="text-center">
                           <InvoiceActions invoice={invoice} onActionSuccess={() => fetchInvoices(selectedCompanyId!)} />
@@ -271,7 +309,7 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center p-12">
+                      <TableCell colSpan={8} className="text-center p-12">
                         <div className="flex flex-col items-center gap-4">
                           <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
                             <FileText className="h-12 w-12 text-muted-foreground" />

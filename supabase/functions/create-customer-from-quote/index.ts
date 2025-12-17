@@ -79,4 +79,4 @@ Deno.serve(async (req) => {
       status: 500, // On retourne une erreur 500 pour mieux voir le problème
     });
   }
-})  
+})

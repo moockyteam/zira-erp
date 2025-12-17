@@ -42,9 +42,15 @@ type InvoiceLine = {
   tva_rate: number
 }
 
-const TVA_RATES = [19, 13, 7, 0];
-const FODEC_RATE = 0.01;
-const WITHHOLDING_TAX_RATE = 0.015;
+const TVA_RATES = [19, 13, 7, 0]
+const FODEC_RATE = 0.01
+const WITHHOLDING_TAX_RATE = 0.015
+
+const CURRENCIES = [
+  { code: "TND", symbol: "TND", label: "Dinar Tunisien" },
+  { code: "USD", symbol: "$", label: "Dollar US" },
+  { code: "EUR", symbol: "€", label: "Euro" },
+]
 
 export function InvoiceForm({
   initialData,
@@ -69,6 +75,7 @@ export function InvoiceForm({
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
   const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
   const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
+  const [currency, setCurrency] = useState(initialData?.currency || quoteInitialData?.currency || "TND")
   const [lines, setLines] = useState<InvoiceLine[]>(
     initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
   )
@@ -86,6 +93,7 @@ export function InvoiceForm({
       setHasStamp(quoteInitialData.has_stamp ?? true)
       setShowRemise(quoteInitialData.show_remise_column ?? true)
       setQuoteId(quoteInitialData.id)
+      setCurrency(quoteInitialData.currency || "TND")
       const newLines = quoteInitialData.quote_lines.map((line: any) => ({
         local_id: crypto.randomUUID(),
         item_id: line.item_id,
@@ -101,6 +109,8 @@ export function InvoiceForm({
 
   const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
+
+  const currencySymbol = useMemo(() => CURRENCIES.find((c) => c.code === currency)?.symbol || currency, [currency])
 
   const totals = useMemo(() => {
     const total_ht_net = lines.reduce(
@@ -191,6 +201,7 @@ export function InvoiceForm({
         invoice_date: invoiceDate,
         due_date: dueDate,
         status: initialData?.status || "BROUILLON",
+        currency: currency,
         total_ht: totals.total_ht_net,
         total_fodec: totals.total_fodec,
         total_tva: totals.total_tva,
@@ -385,6 +396,25 @@ export function InvoiceForm({
                 className="border-2 focus:border-amber-500"
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="currency" className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-purple-600" />
+                Devise
+              </Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger id="currency" className="border-2 focus:border-purple-500">
+                  <SelectValue placeholder="Sélectionner..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((curr) => (
+                    <SelectItem key={curr.code} value={curr.code}>
+                      {curr.symbol} - {curr.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -550,6 +580,7 @@ export function InvoiceForm({
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Moved financial recap to the right column and adjusted structure */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="shadow-lg">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
@@ -588,6 +619,7 @@ export function InvoiceForm({
         </div>
 
         <div className="lg:col-span-1 space-y-4">
+          {/* Simplified the financial recap section to be more direct */}
           <Card className="border-2 border-indigo-500 shadow-xl sticky top-4">
             <CardHeader className="bg-gradient-to-br from-indigo-500 to-emerald-500 text-white">
               <CardTitle className="text-xl">Totaux & Options</CardTitle>
@@ -601,11 +633,7 @@ export function InvoiceForm({
               </div>
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
                 <Label htmlFor="withholding-switch" className="flex items-center gap-2 cursor-pointer text-sm">
-                  <Switch
-                    id="withholding-switch"
-                    checked={hasWithholdingTax}
-                    onCheckedChange={setHasWithholdingTax}
-                  />
+                  <Switch id="withholding-switch" checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
                   Retenue à la Source (1.5%)
                 </Label>
               </div>
@@ -631,7 +659,9 @@ export function InvoiceForm({
                 </div>
                 <div className="flex justify-between font-bold text-base border-t pt-2 mt-2 p-1">
                   <span>Total TTC</span>
-                  <span>{totals.total_ttc.toFixed(3)} TND</span>
+                  <span>
+                    {totals.total_ttc.toFixed(3)} {currencySymbol}
+                  </span>
                 </div>
                 {hasWithholdingTax && (
                   <>
@@ -641,7 +671,9 @@ export function InvoiceForm({
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t-2 border-emerald-500 pt-3 mt-3 text-emerald-600 dark:text-emerald-400 p-2 rounded bg-emerald-50 dark:bg-emerald-950/20">
                       <span>NET À PAYER</span>
-                      <span>{totals.net_to_pay.toFixed(3)} TND</span>
+                      <span>
+                        {totals.net_to_pay.toFixed(3)} {currencySymbol}
+                      </span>
                     </div>
                   </>
                 )}

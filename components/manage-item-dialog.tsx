@@ -215,4 +215,3 @@ export function ManageItemDialog({ item: initialItem, isOpen, onOpenChange, onSu
     </Dialog>
   )
 }
-   

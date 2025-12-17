@@ -23,6 +23,7 @@ type Quote = {
   quote_date: string
   total_ttc: number
   status: QuoteStatus
+  currency: string
 }
 
 export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }) {
@@ -50,7 +51,9 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
     setIsLoading(true)
     const { data, error } = await supabase
       .from("quotes")
-      .select(`id, quote_number, customer_id, prospect_name, customers ( name ), quote_date, total_ttc, status`)
+      .select(
+        `id, quote_number, customer_id, prospect_name, customers ( name ), quote_date, total_ttc, status, currency`,
+      )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
 
@@ -67,14 +70,30 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
   }
 
   const stats = useMemo(() => {
-    const total = quotes.reduce((sum, q) => sum + q.total_ttc, 0)
+    const totalByCurrency: Record<string, number> = {}
+    const confirmedByCurrency: Record<string, number> = {}
+
+    quotes.forEach((q) => {
+      const curr = q.currency || "TND"
+      totalByCurrency[curr] = (totalByCurrency[curr] || 0) + q.total_ttc
+      if (q.status === "CONFIRME") {
+        confirmedByCurrency[curr] = (confirmedByCurrency[curr] || 0) + q.total_ttc
+      }
+    })
+
     const brouillons = quotes.filter((q) => q.status === "BROUILLON").length
     const envoyes = quotes.filter((q) => q.status === "ENVOYE").length
     const confirmes = quotes.filter((q) => q.status === "CONFIRME").length
     const refuses = quotes.filter((q) => q.status === "REFUSE").length
-    const montantConfirmes = quotes.filter((q) => q.status === "CONFIRME").reduce((sum, q) => sum + q.total_ttc, 0)
 
-    return { total, brouillons, envoyes, confirmes, refuses, montantConfirmes }
+    return {
+      totalByCurrency,
+      confirmedByCurrency,
+      brouillons,
+      envoyes,
+      confirmes,
+      refuses,
+    }
   }, [quotes])
 
   const getStatusVariant = (status: QuoteStatus) => {
@@ -120,8 +139,12 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">
-                  {stats.total.toFixed(3)} TND
+                <div className="space-y-1">
+                  {Object.entries(stats.totalByCurrency).map(([currency, amount]) => (
+                    <div key={currency} className="text-xl font-bold text-indigo-700 dark:text-indigo-400">
+                      {amount.toFixed(currency === "TND" ? 3 : 2)} {currency}
+                    </div>
+                  ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{quotes.length} devis au total</p>
               </CardContent>
@@ -136,7 +159,7 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
-                  {stats.brouillons + stats.envoyes}
+                  {quotes.filter((q) => q.status === "BROUILLON" || q.status === "ENVOYE").length}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {stats.brouillons} brouillon{stats.brouillons > 1 ? "s" : ""}, {stats.envoyes} envoyé
@@ -153,8 +176,12 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                  {stats.montantConfirmes.toFixed(3)} TND
+                <div className="space-y-1">
+                  {Object.entries(stats.confirmedByCurrency).map(([currency, amount]) => (
+                    <div key={currency} className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+                      {amount.toFixed(currency === "TND" ? 3 : 2)} {currency}
+                    </div>
+                  ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {stats.confirmes} devis confirmé{stats.confirmes > 1 ? "s" : ""}
@@ -204,6 +231,7 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                       <TableHead className="font-bold">Client / Prospect</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold">Statut</TableHead>
+                      <TableHead className="font-bold">Devise</TableHead>
                       <TableHead className="text-right font-bold">Montant TTC</TableHead>
                       <TableHead className="font-bold">Actions</TableHead>
                     </TableRow>
@@ -211,7 +239,7 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12">
+                        <TableCell colSpan={7} className="text-center py-12">
                           <div className="flex flex-col items-center gap-2">
                             <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
                             <p className="text-muted-foreground">Chargement des devis...</p>
@@ -234,8 +262,14 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                               {quote.status}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium">
+                              {quote.currency || "TND"}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-right font-mono font-semibold text-lg">
-                            {quote.total_ttc.toFixed(3)} TND
+                            {quote.total_ttc.toFixed((quote.currency || "TND") === "TND" ? 3 : 2)}{" "}
+                            {quote.currency || "TND"}
                           </TableCell>
                           <TableCell>
                             <QuoteActions
@@ -248,7 +282,7 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12">
+                        <TableCell colSpan={7} className="text-center py-12">
                           <div className="flex flex-col items-center gap-2">
                             <FileText className="h-12 w-12 text-muted-foreground/50" />
                             <p className="text-muted-foreground">Aucun devis pour cette entreprise.</p>

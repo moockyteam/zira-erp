@@ -1,39 +1,38 @@
 // Fichier : app/dashboard/invoices/print/[invoiceId]/page.tsx
 
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
-import { InvoicePreview } from "@/components/invoices/invoice-preview";
-import { PrintTrigger } from "@/components/print-trigger"; // <-- NOUVELLE IMPORTATION
+import { createClient } from "@/lib/supabase/server"
+import { notFound } from "next/navigation"
+import { InvoicePreview } from "@/components/invoices/invoice-preview"
+import { PrintTrigger } from "@/components/print-trigger" // <-- NOUVELLE IMPORTATION
 
-export default async function PrintInvoicePage({ 
+export default async function PrintInvoicePage({
   params,
-  searchParams 
-}: { 
-  params: Promise<{ invoiceId: string }>,
+  searchParams,
+}: {
+  params: Promise<{ invoiceId: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const { invoiceId } = await params;
-  const resolvedSearchParams = await searchParams;
-  const supabase = await createClient();
-  
+  const { invoiceId } = await params
+  const resolvedSearchParams = await searchParams
+  const supabase = await createClient()
+
   const { data: invoice, error } = await supabase
-    .from('invoices')
+    .from("invoices")
     .select(`*, companies(*), customers(*), invoice_lines(*)`)
-    .eq('id', invoiceId)
-    .single();
+    .eq("id", invoiceId)
+    .single()
 
   if (error || !invoice) {
-    return notFound();
+    return notFound()
   }
 
-  const shouldPrint = resolvedSearchParams.print === 'true';
+  const shouldPrint = resolvedSearchParams.print === "true"
+  const language = (resolvedSearchParams.lang as string) || "fr"
 
   return (
     <>
-      <InvoicePreview invoice={invoice} />
-
-      {/* --- CHANGEMENT : On remplace l'ancien script par notre nouveau composant --- */}
+      <InvoicePreview invoice={invoice} language={language} />
       {shouldPrint && <PrintTrigger />}
     </>
-  );
+  )
 }

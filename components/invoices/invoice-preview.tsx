@@ -1,23 +1,37 @@
-// components/invoices/invoice-preview.tsx
-
 "use client"
 
 import Image from "next/image"
 import writtenNumber from "written-number"
+import { TRANSLATIONS, type Language } from "@/lib/translations"
 
 const FODEC_RATE = 0.01
 
-export function InvoicePreview({ invoice }: { invoice: any }) {
+const getCurrencySymbol = (currency: string) => {
+  const symbols: Record<string, string> = {
+    TND: "TND",
+    USD: "$",
+    EUR: "€",
+  }
+  return symbols[currency] || currency
+}
+
+export function InvoicePreview({ invoice, language = "fr" }: { invoice: any; language?: string }) {
   if (!invoice) return null
+
+  const t = TRANSLATIONS[language as Language] || TRANSLATIONS.fr
+  const currencySymbol = getCurrencySymbol(invoice.currency || "TND")
 
   const totalInWords = (total: number, netToPay: number, hasWithholding: boolean) => {
     const amountToConvert = hasWithholding ? netToPay : total
     if (amountToConvert <= 0) return ""
     const [integerPart, decimalPart] = amountToConvert.toFixed(3).split(".")
-    const integerWords = writtenNumber(Number.parseInt(integerPart), { lang: "fr" })
-    const decimalWords = writtenNumber(Number.parseInt(decimalPart), { lang: "fr" })
-    const label = hasWithholding ? "Arrêtée la présente facture au net à payer de" : "Arrêtée la présente facture à la somme de"
-    return `${label} : ${integerWords} dinars et ${decimalWords} millimes.`
+    const langCode = language === "fr" ? "fr" : language === "es" ? "es" : language === "pt" ? "pt" : "en"
+    const integerWords = writtenNumber(Number.parseInt(integerPart), { lang: langCode })
+    const decimalWords = writtenNumber(Number.parseInt(decimalPart), { lang: langCode })
+    const label = hasWithholding ? t.amountInWordsWithholding : t.amountInWordsSuffix
+    const currencyName = invoice.currency === "USD" ? t.dollars : invoice.currency === "EUR" ? t.euros : t.dinars
+    const smallUnit = invoice.currency === "TND" ? t.millimes : t.centimes
+    return `${t.amountInWords} ${label} : ${integerWords} ${currencyName} ${t.notesAndConditions.toLowerCase().includes("et") ? "et" : "and"} ${decimalWords} ${smallUnit}.`
   }
 
   const isFodecApplicable = invoice.total_fodec > 0
@@ -48,29 +62,55 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
             </div>
           </div>
           <div className="text-right text-xs">
-            <h1 className="text-2xl font-bold tracking-wide">FACTURE</h1>
+            <h1 className="text-2xl font-bold tracking-wide">{t.invoice}</h1>
             <p>
-              <span className="font-semibold">Numéro :</span> {invoice.invoice_number}
+              <span className="font-semibold">{t.invoiceNumber} :</span> {invoice.invoice_number}
             </p>
             <p>
-              <span className="font-semibold">Date :</span> {new Date(invoice.invoice_date).toLocaleDateString("fr-FR")}
+              <span className="font-semibold">{t.date} :</span>{" "}
+              {new Date(invoice.invoice_date).toLocaleDateString(
+                language === "fr"
+                  ? "fr-FR"
+                  : language === "es"
+                    ? "es-ES"
+                    : language === "de"
+                      ? "de-DE"
+                      : language === "it"
+                        ? "it-IT"
+                        : language === "pt"
+                          ? "pt-PT"
+                          : "en-US",
+              )}
             </p>
             <p>
-              <span className="font-semibold">Échéance :</span> {new Date(invoice.due_date).toLocaleDateString("fr-FR")}
+              <span className="font-semibold">{t.dueDate} :</span>{" "}
+              {new Date(invoice.due_date).toLocaleDateString(
+                language === "fr"
+                  ? "fr-FR"
+                  : language === "es"
+                    ? "es-ES"
+                    : language === "de"
+                      ? "de-DE"
+                      : language === "it"
+                        ? "it-IT"
+                        : language === "pt"
+                          ? "pt-PT"
+                          : "en-US",
+              )}
             </p>
           </div>
         </header>
 
         <section className="mb-6">
           <div className="p-3 border rounded-md bg-gray-50 text-xs break-words">
-            <h3 className="font-bold text-gray-600 mb-1">CLIENT</h3>
+            <h3 className="font-bold text-gray-600 mb-1">{t.client}</h3>
             <p className="text-base font-bold">{invoice.customers?.name || invoice.prospect_name}</p>
             <p>
               {[
                 invoice.customers?.street,
                 invoice.customers?.delegation,
                 invoice.customers?.governorate,
-                invoice.customers?.country
+                invoice.customers?.country,
               ]
                 .filter(Boolean)
                 .join(", ")}
@@ -85,15 +125,15 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-100">
               <tr>
-                <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">Description / Article</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Qté</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. HT</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Prix U. TTC</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold w-[35%]">{t.description}</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.quantity}</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.unitPriceHT}</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.unitPriceTTC}</th>
                 {invoice.show_remise_column && (
-                  <th className="p-2 border-2 border-gray-800 font-semibold text-right">Remise %</th>
+                  <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.discount}</th>
                 )}
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">TVA %</th>
-                <th className="p-2 border-2 border-gray-800 font-semibold text-right">Total HT</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.vat}</th>
+                <th className="p-2 border-2 border-gray-800 font-semibold text-right">{t.totalHT}</th>
               </tr>
             </thead>
             <tbody>
@@ -132,13 +172,13 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
         <div className="pt-4" style={{ pageBreakInside: "avoid" }}>
           <footer className="grid grid-cols-2 gap-4 items-start">
             <div className="p-3 border rounded-md bg-gray-50 text-xs">
-              <h4 className="font-bold mb-2">Récapitulatif TVA</h4>
+              <h4 className="font-bold mb-2">{t.vatSummary}</h4>
               <table className="w-full">
                 <thead>
                   <tr>
-                    <th className="font-semibold text-left">Taux</th>
-                    <th className="font-semibold text-right">Base</th>
-                    <th className="font-semibold text-right">Montant</th>
+                    <th className="font-semibold text-left">{t.rate}</th>
+                    <th className="font-semibold text-right">{t.base}</th>
+                    <th className="font-semibold text-right">{t.amount}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -147,7 +187,7 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
                       .filter((l: any) => l.tva_rate === rate)
                       .reduce(
                         (s: number, l: any) => s + l.quantity * l.unit_price_ht * (1 - l.remise_percentage / 100),
-                        0
+                        0,
                       )
                     if (base === 0) return null
                     const base_fodec =
@@ -167,38 +207,50 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
 
             <div className="p-3 border rounded-md font-mono text-xs">
               <div className="flex justify-between">
-                <span className="font-sans text-muted-foreground">Total HT Net</span>
-                <span>{invoice.total_ht.toFixed(3)}</span>
+                <span className="font-sans text-muted-foreground">{t.totalHTNet}</span>
+                <span>
+                  {invoice.total_ht.toFixed(3)} {currencySymbol}
+                </span>
               </div>
               {invoice.total_fodec > 0 && (
                 <div className="flex justify-between">
-                  <span className="font-sans text-muted-foreground">FODEC (1%)</span>
-                  <span>+ {invoice.total_fodec.toFixed(3)}</span>
+                  <span className="font-sans text-muted-foreground">{t.fodec}</span>
+                  <span>
+                    + {invoice.total_fodec.toFixed(3)} {currencySymbol}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="font-sans text-muted-foreground">Total TVA</span>
-                <span>+ {invoice.total_tva.toFixed(3)}</span>
+                <span className="font-sans text-muted-foreground">{t.totalVAT}</span>
+                <span>
+                  + {invoice.total_tva.toFixed(3)} {currencySymbol}
+                </span>
               </div>
               {invoice.has_stamp && (
                 <div className="flex justify-between">
-                  <span className="font-sans text-muted-foreground">Timbre Fiscal</span>
-                  <span>+ 1.000</span>
+                  <span className="font-sans text-muted-foreground">{t.stampDuty}</span>
+                  <span>+ 1.000 {currencySymbol}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
-                <span className="font-sans">Total TTC</span>
-                <span>{invoice.total_ttc.toFixed(3)} TND</span>
+                <span className="font-sans">{t.totalTTC}</span>
+                <span>
+                  {invoice.total_ttc.toFixed(3)} {currencySymbol}
+                </span>
               </div>
               {invoice.has_withholding_tax && (
                 <>
                   <div className="flex justify-between text-red-600">
-                    <span className="font-sans">Retenue (1.5%)</span>
-                    <span>- {invoice.withholding_tax_amount.toFixed(3)}</span>
+                    <span className="font-sans">{t.withholding}</span>
+                    <span>
+                      - {invoice.withholding_tax_amount.toFixed(3)} {currencySymbol}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold text-lg border-t-2 pt-2 mt-2 text-emerald-600">
-                    <span className="font-sans">NET À PAYER</span>
-                    <span>{netToPay.toFixed(3)} TND</span>
+                    <span className="font-sans">{t.netToPay}</span>
+                    <span>
+                      {netToPay.toFixed(3)} {currencySymbol}
+                    </span>
                   </div>
                 </>
               )}
@@ -206,8 +258,8 @@ export function InvoicePreview({ invoice }: { invoice: any }) {
           </footer>
 
           <div className="mt-4 text-xs">
-            <h4 className="font-bold mb-1">Notes et Conditions</h4>
-            <p className="whitespace-pre-wrap">{invoice.notes || "Aucune condition spécifiée."}</p>
+            <h4 className="font-bold mb-1">{t.notesAndConditions}</h4>
+            <p className="whitespace-pre-wrap">{invoice.notes || t.noConditions}</p>
           </div>
 
           <div className="mt-4 pt-4 border-t text-[8pt] italic text-gray-600">
