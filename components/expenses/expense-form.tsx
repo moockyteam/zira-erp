@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
-import { format, addMonths, addWeeks, addYears } from "date-fns"
+import { format, addMonths, addYears } from "date-fns"
 import { v4 as uuidv4 } from "uuid"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,6 +52,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   const [notes, setNotes] = useState("")
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [currency, setCurrency] = useState<string>("TND")
 
   // États pour récurrence
   const [isRecurring, setIsRecurring] = useState(false)
@@ -81,7 +82,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
 
     if (isVatApplicable) {
       TVA_RATES.forEach((rate) => {
-        const baseVal = tvaBases[rate] ? parseFloat(tvaBases[rate]) : 0
+        const baseVal = tvaBases[rate] ? Number.parseFloat(tvaBases[rate]) : 0
         if (baseVal > 0) {
           const amount = baseVal * (rate / 100)
           ht += baseVal
@@ -90,26 +91,32 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
         }
       })
     } else {
-      ht = parseFloat(totalAmount) || 0
+      ht = Number.parseFloat(totalAmount) || 0
     }
 
     const ttc = ht + tva
     const withholding = hasWithholdingTax ? ht * withholdingTaxRate : 0
     const net = ttc - withholding
 
-    return { 
-      totalHT: ht, 
-      totalTVA: tva, 
-      totalTTC: ttc, 
-      withholdingAmount: withholding, 
-      netToPay: net, 
-      tvaDetails: details 
+    return {
+      totalHT: ht,
+      totalTVA: tva,
+      totalTTC: ttc,
+      withholdingAmount: withholding,
+      netToPay: net,
+      tvaDetails: details,
     }
   }, [isVatApplicable, tvaBases, totalAmount, hasWithholdingTax, withholdingTaxRate])
 
   // On déstructure APRES le useMemo pour éviter le ReferenceError
   const { totalHT, totalTVA, totalTTC, withholdingAmount, netToPay, tvaDetails } = calculatedValues
   // -------------------------------------------------------------
+
+  const formatCurrency = (value: number) => {
+    const decimals = currency === "TND" ? 3 : 2
+    const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : ""
+    return `${value.toFixed(decimals)} ${symbol || currency}`
+  }
 
   const fetchCategories = async () => {
     if (!selectedCompanyId) return
@@ -152,14 +159,25 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
       // 1. Calcul de la PROCHAINE date (Futur)
       const startDateObj = new Date(recurringStartDate)
       let nextDateObj = new Date(startDateObj)
-      
+
       switch (recurringFrequency) {
-        case "MENSUEL": nextDateObj = addMonths(startDateObj, 1); break;
-        case "BIMENSUEL": nextDateObj = addMonths(startDateObj, 2); break;
-        case "TRIMESTRIEL": nextDateObj = addMonths(startDateObj, 3); break;
-        case "SEMESTRIEL": nextDateObj = addMonths(startDateObj, 6); break;
-        case "ANNUEL": nextDateObj = addYears(startDateObj, 1); break;
-        default: nextDateObj = addMonths(startDateObj, 1);
+        case "MENSUEL":
+          nextDateObj = addMonths(startDateObj, 1)
+          break
+        case "BIMENSUEL":
+          nextDateObj = addMonths(startDateObj, 2)
+          break
+        case "TRIMESTRIEL":
+          nextDateObj = addMonths(startDateObj, 3)
+          break
+        case "SEMESTRIEL":
+          nextDateObj = addMonths(startDateObj, 6)
+          break
+        case "ANNUEL":
+          nextDateObj = addYears(startDateObj, 1)
+          break
+        default:
+          nextDateObj = addMonths(startDateObj, 1)
       }
       const nextExecutionCalculated = format(nextDateObj, "yyyy-MM-dd")
 
@@ -182,7 +200,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
         total_ttc: totalTTC,
         has_withholding_tax: hasWithholdingTax,
         withholding_tax_amount: withholdingAmount,
-        currency: "TND"
+        currency: currency, // Added currency to recurring expense
       }
 
       // 2. Création de la règle de récurrence
@@ -216,16 +234,17 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
         attachment_url,
         notes: notes + " (Première occurrence)",
         is_recurring: true,
-        recurring_expense_id: recurringData.id
+        recurring_expense_id: recurringData.id,
+        currency: currency, // Added currency to first expense
       }
 
       const { error: expenseError } = await supabase.from("expenses").insert(firstExpensePayload)
-      
+
       if (expenseError) {
-         console.error("Erreur insertion historique", expenseError)
-         toast.warning("Récurrence activée, mais la dépense d'aujourd'hui n'a pas pu être créée.")
+        console.error("Erreur insertion historique", expenseError)
+        toast.warning("Récurrence activée, mais la dépense d'aujourd'hui n'a pas pu être créée.")
       } else {
-         toast.success("Dépense enregistrée et récurrence activée.")
+        toast.success("Dépense enregistrée et récurrence activée.")
       }
 
       router.push("/dashboard/expenses")
@@ -253,6 +272,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
       status: isDeferredPayment ? "EN_ATTENTE" : "PAYE",
       attachment_url,
       notes,
+      currency: currency, // Added currency to regular expense
     }
 
     const { data: expenseData, error } = await supabase.from("expenses").insert(payload).select().single()
@@ -273,6 +293,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
           payment_method: p.payment_method,
           reference: p.reference,
           status: "pending",
+          currency: currency, // Added currency to schedule
         }))
 
       if (scheduleData.length > 0) {
@@ -290,7 +311,8 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   }
 
   // --- FONCTIONS UI ---
-  const addSchedulePayment = () => setSchedulePayments([...schedulePayments, { due_date: "", amount: "", payment_method: "Virement", reference: "" }])
+  const addSchedulePayment = () =>
+    setSchedulePayments([...schedulePayments, { due_date: "", amount: "", payment_method: "Virement", reference: "" }])
   const removeSchedulePayment = (index: number) => setSchedulePayments(schedulePayments.filter((_, i) => i !== index))
   const updateSchedulePayment = (index: number, field: string, value: string) => {
     const updated = [...schedulePayments]
@@ -299,11 +321,14 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   }
   const generateSchedules = () => {
     const { totalAmount, firstPaymentDate, numberOfPayments, intervalValue, intervalUnit } = scheduleConfig
-    if (!totalAmount || !firstPaymentDate || !numberOfPayments) { toast.error("Champs manquants"); return }
+    if (!totalAmount || !firstPaymentDate || !numberOfPayments) {
+      toast.error("Champs manquants")
+      return
+    }
     const total = Number.parseFloat(totalAmount)
     const numPayments = Number.parseInt(numberOfPayments)
     const interval = Number.parseInt(intervalValue)
-    const amountPerPayment = (total / numPayments).toFixed(3)
+    const amountPerPayment = (total / numPayments).toFixed(currency === "TND" ? 3 : 2)
     const generatedSchedules = []
     for (let i = 0; i < numPayments; i++) {
       const paymentDate = new Date(firstPaymentDate)
@@ -312,7 +337,10 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
       else if (intervalUnit === "months") paymentDate.setMonth(paymentDate.getMonth() + i * interval)
       generatedSchedules.push({
         due_date: paymentDate.toISOString().split("T")[0],
-        amount: i === numPayments - 1 ? (total - Number.parseFloat(amountPerPayment) * (numPayments - 1)).toFixed(3) : amountPerPayment,
+        amount:
+          i === numPayments - 1
+            ? (total - Number.parseFloat(amountPerPayment) * (numPayments - 1)).toFixed(currency === "TND" ? 3 : 2)
+            : amountPerPayment,
         payment_method: "Virement",
         reference: "",
       })
@@ -322,176 +350,440 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader><CardTitle>1. Informations Générales</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label>Société</Label>
-            {companies && companies.length > 1 ? (
-              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                <SelectTrigger><SelectValue placeholder="Choisir une société" /></SelectTrigger>
-                <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            ) : (<Input value={companies.find(c => c.id === selectedCompanyId)?.name || ""} disabled />)}
-          </div>
-          <div className="space-y-2">
-            <Label>Catégorie</Label>
-            <div className="flex gap-2">
-              <Select value={categoryId} onValueChange={setCategoryId} disabled={!selectedCompanyId}>
-                <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
-                <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-              {selectedCompanyId && <CategoryCreator companyId={selectedCompanyId} tableName="expense_categories" onCategoryCreated={fetchCategories} />}
+    <div className="space-y-8 max-w-7xl mx-auto">
+      <Card className="shadow-sm">
+        <CardHeader className="bg-muted/30">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              1
+            </span>
+            Informations Générales
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Société *</Label>
+              {companies && companies.length > 1 ? (
+                <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Choisir une société" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  className="h-11"
+                  value={companies.find((c) => c.id === selectedCompanyId)?.name || ""}
+                  disabled
+                />
+              )}
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Bénéficiaire</Label>
-            <Input value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} placeholder="Fournisseur..." />
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Catégorie *</Label>
+              <div className="flex gap-2">
+                <Select value={categoryId} onValueChange={setCategoryId} disabled={!selectedCompanyId}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Sélectionner une catégorie..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedCompanyId && (
+                  <CategoryCreator
+                    companyId={selectedCompanyId}
+                    tableName="expense_categories"
+                    onCategoryCreated={fetchCategories}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Bénéficiaire *</Label>
+              <Input
+                className="h-11"
+                value={beneficiary}
+                onChange={(e) => setBeneficiary(e.target.value)}
+                placeholder="Nom du fournisseur ou prestataire..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Devise *</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TND">🇹🇳 TND - Dinar Tunisien</SelectItem>
+                  <SelectItem value="USD">🇺🇸 USD - Dollar Américain</SelectItem>
+                  <SelectItem value="EUR">🇪🇺 EUR - Euro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>2. Type & Montants</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between border p-4 rounded-lg">
-             <Label className="font-semibold">Dépense Récurrente ?</Label>
-             <Switch checked={isRecurring} onCheckedChange={(c) => { setIsRecurring(c); if(c) setHasPaymentSchedule(false); }} />
+      <Card className="shadow-sm">
+        <CardHeader className="bg-muted/30">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              2
+            </span>
+            Type & Montants
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800 p-5 rounded-lg">
+            <div className="space-y-1">
+              <Label className="font-semibold text-base">Dépense Récurrente</Label>
+              <p className="text-sm text-muted-foreground">Activer pour créer une dépense automatique périodique</p>
+            </div>
+            <Switch
+              checked={isRecurring}
+              onCheckedChange={(c) => {
+                setIsRecurring(c)
+                if (c) setHasPaymentSchedule(false)
+              }}
+            />
           </div>
 
           {isRecurring && (
-            <div className="grid grid-cols-2 gap-4 bg-muted/50 p-4 rounded">
-               <div>
-                  <Label>Fréquence</Label>
-                  <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
-                     <SelectTrigger><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                        <SelectItem value="MENSUEL">Mensuel</SelectItem>
-                        <SelectItem value="BIMENSUEL">Bimensuel</SelectItem>
-                        <SelectItem value="TRIMESTRIEL">Trimestriel</SelectItem>
-                        <SelectItem value="SEMESTRIEL">Semestriel</SelectItem>
-                        <SelectItem value="ANNUEL">Annuel</SelectItem>
-                     </SelectContent>
-                  </Select>
-               </div>
-               <div>
-                  <Label>Date du 1er Paiement</Label>
-                  <Input type="date" value={recurringStartDate} onChange={(e) => setRecurringStartDate(e.target.value)} />
-               </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50/50 dark:bg-blue-950/20 p-6 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Fréquence de récurrence *</Label>
+                <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MENSUEL">📅 Mensuel (tous les mois)</SelectItem>
+                    <SelectItem value="BIMENSUEL">📅 Bimensuel (tous les 2 mois)</SelectItem>
+                    <SelectItem value="TRIMESTRIEL">📅 Trimestriel (tous les 3 mois)</SelectItem>
+                    <SelectItem value="SEMESTRIEL">📅 Semestriel (tous les 6 mois)</SelectItem>
+                    <SelectItem value="ANNUEL">📅 Annuel (tous les ans)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Date du 1er Paiement *</Label>
+                <Input
+                  className="h-11"
+                  type="date"
+                  value={recurringStartDate}
+                  onChange={(e) => setRecurringStartDate(e.target.value)}
+                />
+              </div>
             </div>
           )}
 
           {!isRecurring && (
-             <div className="flex items-center justify-between border p-4 rounded-lg">
-                <Label className="font-semibold">Échéancier ?</Label>
-                <Switch checked={hasPaymentSchedule} onCheckedChange={setHasPaymentSchedule} />
-             </div>
+            <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-200 dark:border-amber-800 p-5 rounded-lg">
+              <div className="space-y-1">
+                <Label className="font-semibold text-base">Paiement Échelonné</Label>
+                <p className="text-sm text-muted-foreground">Diviser le paiement en plusieurs échéances</p>
+              </div>
+              <Switch checked={hasPaymentSchedule} onCheckedChange={setHasPaymentSchedule} />
+            </div>
           )}
 
-          {/* Configuration Échéancier (si activé) */}
+          {/* Configuration Échéancier */}
           {hasPaymentSchedule && !isRecurring && (
-             <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded space-y-4">
-                <div className="grid grid-cols-4 gap-2">
-                   <Input type="number" placeholder="Total" value={scheduleConfig.totalAmount} onChange={e => setScheduleConfig({...scheduleConfig, totalAmount: e.target.value})} />
-                   <Input type="date" value={scheduleConfig.firstPaymentDate} onChange={e => setScheduleConfig({...scheduleConfig, firstPaymentDate: e.target.value})} />
-                   <Input type="number" placeholder="Nbr" value={scheduleConfig.numberOfPayments} onChange={e => setScheduleConfig({...scheduleConfig, numberOfPayments: e.target.value})} />
-                   <Button onClick={generateSchedules}>Générer</Button>
+            <div className="bg-amber-50/50 dark:bg-amber-950/20 p-6 rounded-lg border border-amber-200 dark:border-amber-800 space-y-4">
+              <h4 className="font-semibold text-sm">Configuration de l'échéancier</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Montant Total</Label>
+                  <Input
+                    className="h-11"
+                    type="number"
+                    placeholder="0.000"
+                    value={scheduleConfig.totalAmount}
+                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, totalAmount: e.target.value })}
+                  />
                 </div>
-                {schedulePayments.map((p, i) => (
-                   <div key={i} className="flex gap-2">
-                      <Input type="date" value={p.due_date} onChange={e => updateSchedulePayment(i, 'due_date', e.target.value)} />
-                      <Input type="number" value={p.amount} onChange={e => updateSchedulePayment(i, 'amount', e.target.value)} />
-                      <Button size="icon" variant="ghost" onClick={() => removeSchedulePayment(i)}>X</Button>
-                   </div>
-                ))}
-             </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">1ère Échéance</Label>
+                  <Input
+                    className="h-11"
+                    type="date"
+                    value={scheduleConfig.firstPaymentDate}
+                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, firstPaymentDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Nombre d'échéances</Label>
+                  <Input
+                    className="h-11"
+                    type="number"
+                    placeholder="2"
+                    value={scheduleConfig.numberOfPayments}
+                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, numberOfPayments: e.target.value })}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={generateSchedules} className="w-full h-11">
+                    Générer
+                  </Button>
+                </div>
+              </div>
+              {schedulePayments.map((p, i) => (
+                <div key={i} className="flex gap-3 items-center bg-white dark:bg-slate-900 p-3 rounded border">
+                  <span className="text-sm font-semibold min-w-[80px]">Échéance {i + 1}</span>
+                  <Input
+                    className="h-10"
+                    type="date"
+                    value={p.due_date}
+                    onChange={(e) => updateSchedulePayment(i, "due_date", e.target.value)}
+                  />
+                  <Input
+                    className="h-10"
+                    type="number"
+                    value={p.amount}
+                    onChange={(e) => updateSchedulePayment(i, "amount", e.target.value)}
+                  />
+                  <Button size="icon" variant="destructive" onClick={() => removeSchedulePayment(i)}>
+                    X
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
-          
-          {/* MONTANTS */}
-          <div className="space-y-4 pt-4 border-t">
+
+          <div className="space-y-6 pt-4 border-t-2">
+            <h4 className="font-semibold text-base">Calcul des Montants</h4>
+
             {!isVatApplicable && (
-               <div><Label>Montant Total TTC</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} /></div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Montant Total TTC *</Label>
+                <Input
+                  className="h-12 text-lg font-semibold"
+                  type="number"
+                  value={totalAmount}
+                  onChange={(e) => setTotalAmount(e.target.value)}
+                  placeholder="0.000"
+                />
+              </div>
             )}
-            
-            <div className="flex items-center space-x-2">
-               <Switch checked={isVatApplicable} onCheckedChange={setIsVatApplicable} />
-               <Label>Appliquer TVA</Label>
+
+            <div className="flex items-center space-x-3 bg-muted/50 p-4 rounded-lg">
+              <Switch checked={isVatApplicable} onCheckedChange={setIsVatApplicable} id="vat-switch" />
+              <div>
+                <Label htmlFor="vat-switch" className="font-semibold cursor-pointer">
+                  TVA Applicable
+                </Label>
+                <p className="text-xs text-muted-foreground">Activer pour décomposer HT + TVA</p>
+              </div>
             </div>
 
             {isVatApplicable && (
-               <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded">
-                  {TVA_RATES.map(r => (
-                     <div key={r}>
-                        <Label>Base HT {r}%</Label>
-                        <Input type="number" value={tvaBases[r] || ''} onChange={e => setTvaBases({...tvaBases, [r]: e.target.value})} />
-                     </div>
+              <div className="space-y-4 bg-slate-50 dark:bg-slate-900 p-6 rounded-lg border">
+                <h5 className="font-semibold text-sm">Décomposition par taux de TVA</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {TVA_RATES.map((rate) => (
+                    <div key={rate} className="space-y-2">
+                      <Label className="text-sm font-medium">Base HT à {rate}%</Label>
+                      <Input
+                        className="h-11"
+                        type="number"
+                        value={tvaBases[rate] || ""}
+                        onChange={(e) => setTvaBases({ ...tvaBases, [rate]: e.target.value })}
+                        placeholder="0.000"
+                      />
+                    </div>
                   ))}
-               </div>
+                </div>
+              </div>
             )}
+
+            <div className="space-y-4 pt-4 border-t">
+              <div className="flex items-center space-x-3 bg-muted/50 p-4 rounded-lg">
+                <Switch checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} id="withholding-switch" />
+                <div>
+                  <Label htmlFor="withholding-switch" className="font-semibold cursor-pointer">
+                    Retenue à la Source
+                  </Label>
+                  <p className="text-xs text-muted-foreground">Appliquer une retenue fiscale</p>
+                </div>
+              </div>
+              {hasWithholdingTax && (
+                <div className="ml-6 space-y-3">
+                  <Label className="text-sm font-semibold">Taux de retenue</Label>
+                  <Select
+                    value={withholdingTaxRate.toString()}
+                    onValueChange={(v) => setWithholdingTaxRate(Number.parseFloat(v))}
+                  >
+                    <SelectTrigger className="h-11 w-full md:w-[250px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WITHHOLDING_TAX_RATES.map((r) => (
+                        <SelectItem key={r.value} value={r.value.toString()}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 rounded-lg border-2 border-primary/20">
+            <h4 className="font-bold text-lg mb-4">Récapitulatif</h4>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-primary/20">
+                <span className="text-sm font-medium">Total HT</span>
+                <span className="text-lg font-semibold">{formatCurrency(totalHT)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-primary/20">
+                <span className="text-sm font-medium">Total TVA</span>
+                <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(totalTVA)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-primary/20">
+                <span className="text-sm font-medium">Total TTC</span>
+                <span className="text-lg font-semibold">{formatCurrency(totalTTC)}</span>
+              </div>
+              {hasWithholdingTax && (
+                <div className="flex justify-between items-center py-2 border-b border-primary/20">
+                  <span className="text-sm font-medium">Retenue à la source</span>
+                  <span className="text-lg font-semibold text-red-600 dark:text-red-400">
+                    - {formatCurrency(withholdingAmount)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-3 bg-primary text-primary-foreground rounded-md px-4 mt-2">
+                <span className="font-bold text-base">NET À PAYER</span>
+                <span className="text-2xl font-bold">{formatCurrency(netToPay)}</span>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-         <CardHeader><CardTitle>3. Paiement & Retenue</CardTitle></CardHeader>
-         <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-               <Switch checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
-               <Label>Retenue à la source</Label>
+      <Card className="shadow-sm">
+        <CardHeader className="bg-muted/30">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              3
+            </span>
+            Paiement & Dates
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Méthode de Paiement *</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Virement">💳 Virement Bancaire</SelectItem>
+                  <SelectItem value="Chèque">🏦 Chèque</SelectItem>
+                  <SelectItem value="Traite">📋 Traite</SelectItem>
+                  <SelectItem value="Espèces">💵 Espèces</SelectItem>
+                  <SelectItem value="Carte">💳 Carte Bancaire</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            {hasWithholdingTax && (
-               <Select value={withholdingTaxRate.toString()} onValueChange={v => setWithholdingTaxRate(parseFloat(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{WITHHOLDING_TAX_RATES.map(r => <SelectItem key={r.value} value={r.value.toString()}>{r.label}</SelectItem>)}</SelectContent>
-               </Select>
+
+            {!isRecurring && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  {isDeferredPayment ? "Date d'engagement" : "Date de Paiement *"}
+                </Label>
+                <Input
+                  className="h-11"
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
             )}
-            
-            <div className="grid grid-cols-2 gap-4 pt-4">
-               <div>
-                  <Label>Méthode</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                     <SelectTrigger><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                        <SelectItem value="Virement">Virement</SelectItem>
-                        <SelectItem value="Chèque">Chèque</SelectItem>
-                        <SelectItem value="Espèces">Espèces</SelectItem>
-                        <SelectItem value="Traite">Traite</SelectItem>
-                     </SelectContent>
-                  </Select>
-               </div>
-               <div>
-                  <Label>Date de Paiement</Label>
-                  {/* Si récurrence, on utilise recurringStartDate, sinon paymentDate */}
-                  <Input type="date" value={isRecurring ? recurringStartDate : paymentDate} onChange={e => isRecurring ? setRecurringStartDate(e.target.value) : setPaymentDate(e.target.value)} />
-               </div>
-               <div className="col-span-2">
-                  <Label>Notes</Label>
-                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} />
-               </div>
+
+            {isDeferredPayment && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Date d'Échéance *</Label>
+                <Input className="h-11" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Référence / N° Pièce</Label>
+              <Input
+                className="h-11"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="Numéro de facture, référence..."
+              />
             </div>
-         </CardContent>
+          </div>
+        </CardContent>
       </Card>
 
-      <Card className="sticky bottom-0 bg-background border-t-2 border-primary">
-         <CardContent className="pt-6 flex justify-between items-center">
-            <div className="text-sm font-mono space-y-1">
-               <div>HT: {totalHT.toFixed(3)}</div>
-               <div>TVA: {totalTVA.toFixed(3)}</div>
-               {hasWithholdingTax && <div className="text-red-500">RS: -{withholdingAmount.toFixed(3)}</div>}
-            </div>
-            <div className="text-right">
-               <div className="text-sm text-muted-foreground">NET À PAYER</div>
-               <div className="text-2xl font-bold">{netToPay.toFixed(3)} TND</div>
-            </div>
-         </CardContent>
+      <Card className="shadow-sm">
+        <CardHeader className="bg-muted/30">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              4
+            </span>
+            Notes & Pièce Jointe
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Notes Internes</Label>
+            <Textarea
+              className="min-h-[100px]"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ajouter des notes, commentaires ou détails supplémentaires..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Pièce Jointe (Facture, Reçu...)</Label>
+            <Input
+              type="file"
+              onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="h-11 cursor-pointer"
+            />
+            <p className="text-xs text-muted-foreground">Formats acceptés: PDF, JPG, PNG (Max 5MB)</p>
+          </div>
+        </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-4">
-        <Button variant="outline" onClick={() => router.back()}>Annuler</Button>
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Enregistrer
+      <div className="flex justify-end gap-4 pb-8">
+        <Button variant="outline" size="lg" onClick={() => router.back()} className="min-w-[150px]">
+          Annuler
+        </Button>
+        <Button size="lg" onClick={handleSave} disabled={isSaving || !selectedCompanyId} className="min-w-[200px]">
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Enregistrement...
+            </>
+          ) : (
+            "Enregistrer la Dépense"
+          )}
         </Button>
       </div>
     </div>
