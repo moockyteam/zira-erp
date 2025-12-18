@@ -1,5 +1,3 @@
-// components/expenses/expense-form-dialog.tsx
-
 "use client"
 
 import { useState, useEffect } from "react";
@@ -42,10 +40,20 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
 
   const fetchDropdownData = async () => {
     if (companyId) {
+      // --- MODIFICATION ICI ---
+      // On utilise .or() pour récupérer les globales (NULL) et celles de l'entreprise
       const [catRes, supRes] = await Promise.all([
-        supabase.from("expense_categories").select("*").eq("company_id", companyId),
-        supabase.from("suppliers").select("id, name").eq("company_id", companyId)
+        supabase
+          .from("expense_categories")
+          .select("*")
+          .or(`company_id.is.null,company_id.eq.${companyId}`)
+          .order("name"),
+        supabase
+          .from("suppliers")
+          .select("id, name")
+          .eq("company_id", companyId)
       ]);
+      // ------------------------
       setCategories(catRes.data || []);
       setSuppliers(supRes.data || []);
     }

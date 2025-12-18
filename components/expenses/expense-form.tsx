@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from "next/navigation"
-import { format } from "date-fns"
+import { format, addMonths, addWeeks, addYears } from "date-fns"
 import { v4 as uuidv4 } from "uuid"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,13 +25,19 @@ const WITHHOLDING_TAX_RATES = [
   { label: "0.5%", value: 0.005 },
 ]
 
-export function ExpenseForm({ companyId }: { companyId: string }) {
+export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
 
-  const [categories, setCategories] = useState<any[]>([])
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(() => {
+    const paramId = searchParams.get("companyId")
+    if (paramId) return paramId
+    if (companies && companies.length === 1) return companies[0].id
+    return ""
+  })
 
+  const [categories, setCategories] = useState<any[]>([])
   const [categoryId, setCategoryId] = useState("")
   const [beneficiary, setBeneficiary] = useState("")
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"))
@@ -47,12 +53,14 @@ export function ExpenseForm({ companyId }: { companyId: string }) {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
+  // États pour récurrence
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringFrequency, setRecurringFrequency] = useState<string>("MENSUEL")
   const [recurringStartDate, setRecurringStartDate] = useState(format(new Date(), "yyyy-MM-dd"))
   const [recurringEndDate, setRecurringEndDate] = useState("")
   const [recurringTitle, setRecurringTitle] = useState("")
 
+  // États pour échéancier
   const [hasPaymentSchedule, setHasPaymentSchedule] = useState(false)
   const [scheduleConfig, setScheduleConfig] = useState({
     totalAmount: "",
@@ -61,73 +69,75 @@ export function ExpenseForm({ companyId }: { companyId: string }) {
     intervalValue: "1",
     intervalUnit: "months" as "days" | "weeks" | "months",
   })
-  const [schedulePayments, setSchedulePayments] = useState<
-    Array<{
-      due_date: string
-      amount: string
-      payment_method: string
-      reference: string
-    }>
-  >([])
+  const [schedulePayments, setSchedulePayments] = useState<any[]>([])
 
   const isDeferredPayment = paymentMethod === "Chèque" || paymentMethod === "Traite"
 
-  const { totalHT, totalTVA, totalTTC, withholdingAmount, netToPay, tvaDetails } = useMemo(() => {
-    let ht = 0,
-      tva = 0
+  // --- CORRECTION DU USEMEMO (Erreur ReferenceError résolue) ---
+  const calculatedValues = useMemo(() => {
+    let ht = 0
+    let tva = 0
     const details: any[] = []
 
     if (isVatApplicable) {
       TVA_RATES.forEach((rate) => {
-        const base = Number.parseFloat(tvaBases[rate]) || 0
-        if (base > 0) {
-          const amount = base * (rate / 100)
-          ht += base
+        const baseVal = tvaBases[rate] ? parseFloat(tvaBases[rate]) : 0
+        if (baseVal > 0) {
+          const amount = baseVal * (rate / 100)
+          ht += baseVal
           tva += amount
-          details.push({ rate, base, amount })
+          details.push({ rate, base: baseVal, amount })
         }
       })
     } else {
-      ht = Number.parseFloat(totalAmount) || 0
+      ht = parseFloat(totalAmount) || 0
     }
 
     const ttc = ht + tva
     const withholding = hasWithholdingTax ? ht * withholdingTaxRate : 0
     const net = ttc - withholding
 
-    return {
-      totalHT: ht,
-      totalTVA: tva,
-      totalTTC: ttc,
-      withholdingAmount: withholding,
-      netToPay: net,
-      tvaDetails: details,
+    return { 
+      totalHT: ht, 
+      totalTVA: tva, 
+      totalTTC: ttc, 
+      withholdingAmount: withholding, 
+      netToPay: net, 
+      tvaDetails: details 
     }
   }, [isVatApplicable, tvaBases, totalAmount, hasWithholdingTax, withholdingTaxRate])
 
+  // On déstructure APRES le useMemo pour éviter le ReferenceError
+  const { totalHT, totalTVA, totalTTC, withholdingAmount, netToPay, tvaDetails } = calculatedValues
+  // -------------------------------------------------------------
+
   const fetchCategories = async () => {
-    console.log("[v0] fetchCategories called, companyId:", companyId)
-    if (companyId) {
-      const { data, error } = await supabase
-        .from("expense_categories")
-        .select("*")
-        .or(`company_id.is.null,company_id.eq.${companyId}`)
-        .order("name")
-      console.log("[v0] Categories fetched:", data, "error:", error)
-      setCategories(data || [])
-    }
+    if (!selectedCompanyId) return
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .select("*")
+      .or(`company_id.is.null,company_id.eq.${selectedCompanyId}`)
+      .order("name")
+    if (error) console.error("Erreur catégories:", error)
+    setCategories(data || [])
   }
 
   useEffect(() => {
-    console.log("[v0] useEffect triggered, companyId:", companyId)
-    fetchCategories()
-  }, [companyId])
+    if (selectedCompanyId) {
+      fetchCategories()
+    }
+  }, [selectedCompanyId])
 
   const handleSave = async () => {
+    if (!selectedCompanyId) {
+      toast.error("Veuillez sélectionner une entreprise")
+      return
+    }
+
     setIsSaving(true)
     let attachment_url = null
     if (attachmentFile) {
-      const filePath = `${companyId}/${uuidv4()}`
+      const filePath = `${selectedCompanyId}/${uuidv4()}`
       const { error: uploadError } = await supabase.storage.from("expense_attachments").upload(filePath, attachmentFile)
       if (uploadError) {
         toast.error("Erreur d'upload: " + uploadError.message)
@@ -137,37 +147,97 @@ export function ExpenseForm({ companyId }: { companyId: string }) {
       attachment_url = supabase.storage.from("expense_attachments").getPublicUrl(filePath).data.publicUrl
     }
 
+    // --- LOGIQUE DÉPENSE RÉCURRENTE ---
     if (isRecurring) {
+      // 1. Calcul de la PROCHAINE date (Futur)
+      const startDateObj = new Date(recurringStartDate)
+      let nextDateObj = new Date(startDateObj)
+      
+      switch (recurringFrequency) {
+        case "MENSUEL": nextDateObj = addMonths(startDateObj, 1); break;
+        case "BIMENSUEL": nextDateObj = addMonths(startDateObj, 2); break;
+        case "TRIMESTRIEL": nextDateObj = addMonths(startDateObj, 3); break;
+        case "SEMESTRIEL": nextDateObj = addMonths(startDateObj, 6); break;
+        case "ANNUEL": nextDateObj = addYears(startDateObj, 1); break;
+        default: nextDateObj = addMonths(startDateObj, 1);
+      }
+      const nextExecutionCalculated = format(nextDateObj, "yyyy-MM-dd")
+
       const recurringPayload = {
-        company_id: companyId,
+        company_id: selectedCompanyId,
         title: recurringTitle || `${beneficiary} - ${categories.find((c) => c.id === categoryId)?.name || "Dépense"}`,
         description: notes,
         amount: totalTTC,
         category: categories.find((c) => c.id === categoryId)?.name || "",
+        category_id: categoryId || null,
         frequency: recurringFrequency,
-        start_date: recurringStartDate,
+        start_date: recurringStartDate, // Date choisie (Aujourd'hui)
         end_date: recurringEndDate || null,
-        next_execution_date: recurringStartDate,
+        next_execution_date: nextExecutionCalculated, // Date calculée (Mois prochain)
         payment_method: paymentMethod,
         beneficiary,
         is_active: true,
+        total_ht: totalHT,
+        total_tva: totalTVA,
+        total_ttc: totalTTC,
+        has_withholding_tax: hasWithholdingTax,
+        withholding_tax_amount: withholdingAmount,
+        currency: "TND"
       }
 
-      const { error } = await supabase.from("recurring_expenses").insert(recurringPayload)
+      // 2. Création de la règle de récurrence
+      const { data: recurringData, error } = await supabase
+        .from("recurring_expenses")
+        .insert(recurringPayload)
+        .select()
+        .single()
+
       if (error) {
-        toast.error(error.message)
+        toast.error("Erreur récurrence: " + error.message)
         setIsSaving(false)
         return
       }
-      toast.success("Dépense récurrente créée.")
+
+      // 3. Création de la dépense IMMÉDIATE (Historique)
+      const firstExpensePayload = {
+        company_id: selectedCompanyId,
+        category_id: categoryId || null,
+        beneficiary,
+        total_ht: totalHT,
+        total_tva: totalTVA,
+        total_ttc: totalTTC,
+        tva_details: isVatApplicable ? tvaDetails : null,
+        has_withholding_tax: hasWithholdingTax,
+        withholding_tax_amount: withholdingAmount,
+        payment_date: recurringStartDate, // Date choisie
+        payment_method: paymentMethod,
+        reference,
+        status: "PAYE",
+        attachment_url,
+        notes: notes + " (Première occurrence)",
+        is_recurring: true,
+        recurring_expense_id: recurringData.id
+      }
+
+      const { error: expenseError } = await supabase.from("expenses").insert(firstExpensePayload)
+      
+      if (expenseError) {
+         console.error("Erreur insertion historique", expenseError)
+         toast.warning("Récurrence activée, mais la dépense d'aujourd'hui n'a pas pu être créée.")
+      } else {
+         toast.success("Dépense enregistrée et récurrence activée.")
+      }
+
       router.push("/dashboard/expenses")
       router.refresh()
       setIsSaving(false)
       return
     }
+    // ----------------------------------
 
+    // --- LOGIQUE DÉPENSE NORMALE ---
     const payload = {
-      company_id: companyId,
+      company_id: selectedCompanyId,
       category_id: categoryId || null,
       beneficiary,
       total_ht: totalHT,
@@ -192,6 +262,7 @@ export function ExpenseForm({ companyId }: { companyId: string }) {
       return
     }
 
+    // Gestion Échéancier
     if (hasPaymentSchedule && expenseData) {
       const scheduleData = schedulePayments
         .filter((p) => p.due_date && Number.parseFloat(p.amount) > 0)
@@ -218,574 +289,209 @@ export function ExpenseForm({ companyId }: { companyId: string }) {
     setIsSaving(false)
   }
 
-  const addSchedulePayment = () => {
-    setSchedulePayments([...schedulePayments, { due_date: "", amount: "", payment_method: "Virement", reference: "" }])
-  }
-
-  const removeSchedulePayment = (index: number) => {
-    setSchedulePayments(schedulePayments.filter((_, i) => i !== index))
-  }
-
+  // --- FONCTIONS UI ---
+  const addSchedulePayment = () => setSchedulePayments([...schedulePayments, { due_date: "", amount: "", payment_method: "Virement", reference: "" }])
+  const removeSchedulePayment = (index: number) => setSchedulePayments(schedulePayments.filter((_, i) => i !== index))
   const updateSchedulePayment = (index: number, field: string, value: string) => {
     const updated = [...schedulePayments]
     updated[index] = { ...updated[index], [field]: value }
     setSchedulePayments(updated)
   }
-
   const generateSchedules = () => {
     const { totalAmount, firstPaymentDate, numberOfPayments, intervalValue, intervalUnit } = scheduleConfig
-
-    if (!totalAmount || !firstPaymentDate || !numberOfPayments) {
-      toast.error("Veuillez remplir tous les champs de configuration")
-      return
-    }
-
+    if (!totalAmount || !firstPaymentDate || !numberOfPayments) { toast.error("Champs manquants"); return }
     const total = Number.parseFloat(totalAmount)
     const numPayments = Number.parseInt(numberOfPayments)
     const interval = Number.parseInt(intervalValue)
-
-    if (isNaN(total) || isNaN(numPayments) || numPayments < 1) {
-      toast.error("Montant ou nombre de paiements invalide")
-      return
-    }
-
     const amountPerPayment = (total / numPayments).toFixed(3)
     const generatedSchedules = []
-
     for (let i = 0; i < numPayments; i++) {
       const paymentDate = new Date(firstPaymentDate)
-
-      if (intervalUnit === "days") {
-        paymentDate.setDate(paymentDate.getDate() + i * interval)
-      } else if (intervalUnit === "weeks") {
-        paymentDate.setDate(paymentDate.getDate() + i * interval * 7)
-      } else if (intervalUnit === "months") {
-        paymentDate.setMonth(paymentDate.getMonth() + i * interval)
-      }
-
+      if (intervalUnit === "days") paymentDate.setDate(paymentDate.getDate() + i * interval)
+      else if (intervalUnit === "weeks") paymentDate.setDate(paymentDate.getDate() + i * interval * 7)
+      else if (intervalUnit === "months") paymentDate.setMonth(paymentDate.getMonth() + i * interval)
       generatedSchedules.push({
         due_date: paymentDate.toISOString().split("T")[0],
-        amount:
-          i === numPayments - 1
-            ? (total - Number.parseFloat(amountPerPayment) * (numPayments - 1)).toFixed(3) // Adjust last payment for rounding
-            : amountPerPayment,
+        amount: i === numPayments - 1 ? (total - Number.parseFloat(amountPerPayment) * (numPayments - 1)).toFixed(3) : amountPerPayment,
         payment_method: "Virement",
         reference: "",
       })
     }
-
     setSchedulePayments(generatedSchedules)
-    toast.success(`${numPayments} échéances générées automatiquement`)
+    toast.success(`${numPayments} échéances générées`)
   }
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>1. Informations Générales</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>1. Informations Générales</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
-            <Label>Catégorie de Dépense</Label>
-            <div className="flex gap-2">
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+            <Label>Société</Label>
+            {companies && companies.length > 1 ? (
+              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                <SelectTrigger><SelectValue placeholder="Choisir une société" /></SelectTrigger>
+                <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
-              <CategoryCreator
-                companyId={companyId}
-                tableName="expense_categories"
-                onCategoryCreated={fetchCategories}
-              />
+            ) : (<Input value={companies.find(c => c.id === selectedCompanyId)?.name || ""} disabled />)}
+          </div>
+          <div className="space-y-2">
+            <Label>Catégorie</Label>
+            <div className="flex gap-2">
+              <Select value={categoryId} onValueChange={setCategoryId} disabled={!selectedCompanyId}>
+                <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
+                <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+              {selectedCompanyId && <CategoryCreator companyId={selectedCompanyId} tableName="expense_categories" onCategoryCreated={fetchCategories} />}
             </div>
           </div>
           <div className="space-y-2">
             <Label>Bénéficiaire</Label>
-            <Input
-              value={beneficiary}
-              onChange={(e) => setBeneficiary(e.target.value)}
-              placeholder="Nom du fournisseur, Trésor Public..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Date de la Dépense</Label>
-            <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+            <Input value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} placeholder="Fournisseur..." />
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Type de Dépense</CardTitle>
-              <CardDescription>Choisissez si c'est une dépense unique, récurrente ou avec échéancier</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
+        <CardHeader><CardTitle>2. Type & Montants</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div>
-              <Label className="font-semibold">Dépense Récurrente</Label>
-              <p className="text-sm text-muted-foreground">Loyer, abonnement, salaires, etc.</p>
-            </div>
-            <Switch
-              checked={isRecurring}
-              onCheckedChange={(checked) => {
-                setIsRecurring(checked)
-                if (checked) setHasPaymentSchedule(false)
-              }}
-            />
+          <div className="flex items-center justify-between border p-4 rounded-lg">
+             <Label className="font-semibold">Dépense Récurrente ?</Label>
+             <Switch checked={isRecurring} onCheckedChange={(c) => { setIsRecurring(c); if(c) setHasPaymentSchedule(false); }} />
           </div>
 
           {isRecurring && (
-            <div className="space-y-4 p-4 border rounded-md bg-muted/50">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Catégorie</Label>
-                  <div className="flex gap-2">
-                    <Select value={categoryId} onValueChange={setCategoryId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choisir..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <CategoryCreator
-                      companyId={companyId}
-                      tableName="expense_categories"
-                      onCategoryCreated={fetchCategories}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Bénéficiaire</Label>
-                  <Input
-                    value={beneficiary}
-                    onChange={(e) => setBeneficiary(e.target.value)}
-                    placeholder="Ex: Propriétaire, Fournisseur..."
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Montant HT</Label>
-                  <Input type="number" value={totalHT} onChange={(e) => setTotalAmount(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Montant TVA</Label>
-                  <Input type="number" value={totalTVA} onChange={(e) => setTotalAmount(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+            <div className="grid grid-cols-2 gap-4 bg-muted/50 p-4 rounded">
+               <div>
                   <Label>Fréquence</Label>
                   <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MENSUEL">Mensuel</SelectItem>
-                      <SelectItem value="BIMENSUEL">Bimensuel</SelectItem>
-                      <SelectItem value="TRIMESTRIEL">Trimestriel</SelectItem>
-                      <SelectItem value="SEMESTRIEL">Semestriel</SelectItem>
-                      <SelectItem value="ANNUEL">Annuel</SelectItem>
-                    </SelectContent>
+                     <SelectTrigger><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="MENSUEL">Mensuel</SelectItem>
+                        <SelectItem value="BIMENSUEL">Bimensuel</SelectItem>
+                        <SelectItem value="TRIMESTRIEL">Trimestriel</SelectItem>
+                        <SelectItem value="SEMESTRIEL">Semestriel</SelectItem>
+                        <SelectItem value="ANNUEL">Annuel</SelectItem>
+                     </SelectContent>
                   </Select>
-                </div>
-                <div>
-                  <Label>Prochaine exécution</Label>
-                  <Input
-                    type="date"
-                    value={recurringStartDate}
-                    onChange={(e) => setRecurringStartDate(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Méthode de paiement</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Virement">Virement</SelectItem>
-                      <SelectItem value="Prélèvement">Prélèvement</SelectItem>
-                      <SelectItem value="Espèces">Espèces</SelectItem>
-                      <SelectItem value="Chèque">Chèque</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Référence</Label>
-                  <Input
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    placeholder="N° compte, référence..."
-                  />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Switch checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
-                  <Label>Retenue à la source</Label>
-                </div>
-                {hasWithholdingTax && (
-                  <div className="ml-6">
-                    <Label>Taux de retenue</Label>
-                    <Select value={withholdingTaxRate} onValueChange={setWithholdingTaxRate}>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {WITHHOLDING_TAX_RATES.map((rate) => (
-                          <SelectItem key={rate.value} value={rate.value}>
-                            {rate.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Montant:{" "}
-                      {((Number.parseFloat(totalHT) || 0) * (Number.parseFloat(withholdingTaxRate) / 100)).toFixed(3)}{" "}
-                      TND
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div>
-                <Label>Notes</Label>
-                <Input
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ex: Loyer local commercial..."
-                />
-              </div>
-              <div>
-                <Label>Date de fin (optionnelle)</Label>
-                <Input type="date" value={recurringEndDate} onChange={(e) => setRecurringEndDate(e.target.value)} />
-                <p className="text-xs text-muted-foreground mt-1">Laissez vide pour une dépense sans fin</p>
-              </div>
+               </div>
+               <div>
+                  <Label>Date du 1er Paiement</Label>
+                  <Input type="date" value={recurringStartDate} onChange={(e) => setRecurringStartDate(e.target.value)} />
+               </div>
             </div>
           )}
 
           {!isRecurring && (
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <Label className="font-semibold">Échéancier de Paiement</Label>
-                <p className="text-sm text-muted-foreground">
-                  Paiement réparti sur plusieurs dates (chèques, traites...)
-                </p>
-              </div>
-              <Switch checked={hasPaymentSchedule} onCheckedChange={setHasPaymentSchedule} />
-            </div>
+             <div className="flex items-center justify-between border p-4 rounded-lg">
+                <Label className="font-semibold">Échéancier ?</Label>
+                <Switch checked={hasPaymentSchedule} onCheckedChange={setHasPaymentSchedule} />
+             </div>
           )}
 
+          {/* Configuration Échéancier (si activé) */}
           {hasPaymentSchedule && !isRecurring && (
-            <div className="space-y-4 p-4 border rounded-md bg-muted/50">
-              <div className="space-y-4 p-4 border rounded-md bg-blue-50 dark:bg-blue-950">
-                <Label className="font-semibold text-blue-900 dark:text-blue-100">Configuration Automatique</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <Label className="text-xs">Montant Total</Label>
-                    <Input
-                      type="number"
-                      value={scheduleConfig.totalAmount}
-                      onChange={(e) => setScheduleConfig({ ...scheduleConfig, totalAmount: e.target.value })}
-                      placeholder="0.000"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Date 1ère Échéance</Label>
-                    <Input
-                      type="date"
-                      value={scheduleConfig.firstPaymentDate}
-                      onChange={(e) => setScheduleConfig({ ...scheduleConfig, firstPaymentDate: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Nombre d'Échéances</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={scheduleConfig.numberOfPayments}
-                      onChange={(e) => setScheduleConfig({ ...scheduleConfig, numberOfPayments: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Intervalle</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="number"
-                        min="1"
-                        value={scheduleConfig.intervalValue}
-                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, intervalValue: e.target.value })}
-                        className="w-20"
-                      />
-                      <Select
-                        value={scheduleConfig.intervalUnit}
-                        onValueChange={(v: any) => setScheduleConfig({ ...scheduleConfig, intervalUnit: v })}
-                      >
-                        <SelectTrigger className="w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="days">Jours</SelectItem>
-                          <SelectItem value="weeks">Semaines</SelectItem>
-                          <SelectItem value="months">Mois</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+             <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded space-y-4">
+                <div className="grid grid-cols-4 gap-2">
+                   <Input type="number" placeholder="Total" value={scheduleConfig.totalAmount} onChange={e => setScheduleConfig({...scheduleConfig, totalAmount: e.target.value})} />
+                   <Input type="date" value={scheduleConfig.firstPaymentDate} onChange={e => setScheduleConfig({...scheduleConfig, firstPaymentDate: e.target.value})} />
+                   <Input type="number" placeholder="Nbr" value={scheduleConfig.numberOfPayments} onChange={e => setScheduleConfig({...scheduleConfig, numberOfPayments: e.target.value})} />
+                   <Button onClick={generateSchedules}>Générer</Button>
                 </div>
-                <Button type="button" variant="default" size="sm" onClick={generateSchedules} className="w-full">
-                  Générer les Échéances Automatiquement
-                </Button>
-              </div>
-
-              {schedulePayments.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="font-semibold">Échéances Générées ({schedulePayments.length})</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addSchedulePayment}>
-                      Ajouter manuellement
-                    </Button>
-                  </div>
-                  {schedulePayments.map((payment, index) => (
-                    <div key={index} className="grid grid-cols-5 gap-2 items-end">
-                      <div>
-                        <Label className="text-xs">Date</Label>
-                        <Input
-                          type="date"
-                          value={payment.due_date}
-                          onChange={(e) => updateSchedulePayment(index, "due_date", e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Montant</Label>
-                        <Input
-                          type="number"
-                          value={payment.amount}
-                          onChange={(e) => updateSchedulePayment(index, "amount", e.target.value)}
-                          placeholder="0.000"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">Moyen</Label>
-                        <Select
-                          value={payment.payment_method}
-                          onValueChange={(v) => updateSchedulePayment(index, "payment_method", v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Virement">Virement</SelectItem>
-                            <SelectItem value="Chèque">Chèque</SelectItem>
-                            <SelectItem value="Traite">Traite</SelectItem>
-                            <SelectItem value="Espèces">Espèces</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Référence</Label>
-                        <Input
-                          value={payment.reference}
-                          onChange={(e) => updateSchedulePayment(index, "reference", e.target.value)}
-                          placeholder="N°"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => removeSchedulePayment(index)}
-                      >
-                        Supprimer
-                      </Button>
-                    </div>
-                  ))}
-                  <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-                    Total échéances:{" "}
-                    {schedulePayments.reduce((sum, p) => sum + (Number.parseFloat(p.amount) || 0), 0).toFixed(3)} TND
-                  </p>
-                </div>
-              )}
-            </div>
+                {schedulePayments.map((p, i) => (
+                   <div key={i} className="flex gap-2">
+                      <Input type="date" value={p.due_date} onChange={e => updateSchedulePayment(i, 'due_date', e.target.value)} />
+                      <Input type="number" value={p.amount} onChange={e => updateSchedulePayment(i, 'amount', e.target.value)} />
+                      <Button size="icon" variant="ghost" onClick={() => removeSchedulePayment(i)}>X</Button>
+                   </div>
+                ))}
+             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>2. Détail des Montants</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label>Catégorie de Dépense</Label>
-            <div className="flex gap-2">
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <CategoryCreator
-                companyId={companyId}
-                tableName="expense_categories"
-                onCategoryCreated={fetchCategories}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Bénéficiaire</Label>
-            <Input
-              value={beneficiary}
-              onChange={(e) => setBeneficiary(e.target.value)}
-              placeholder="Nom du fournisseur, Trésor Public..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Date de la Dépense</Label>
-            <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>3. Options Fiscales & Paiement</CardTitle>
+          
+          {/* MONTANTS */}
+          <div className="space-y-4 pt-4 border-t">
+            {!isVatApplicable && (
+               <div><Label>Montant Total TTC</Label><Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} /></div>
+            )}
+            
             <div className="flex items-center space-x-2">
-              <Label>Dépense soumise à TVA</Label>
-              <Switch checked={isVatApplicable} onCheckedChange={setIsVatApplicable} />
+               <Switch checked={isVatApplicable} onCheckedChange={setIsVatApplicable} />
+               <Label>Appliquer TVA</Label>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!isVatApplicable ? (
-            <div>
-              <Label>Montant Total (TTC)</Label>
-              <Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
-            </div>
-          ) : (
-            <div className="space-y-2 p-4 border rounded-md bg-muted/50">
-              <h4 className="font-medium text-sm">Saisir les bases HT par taux de TVA</h4>
-              {TVA_RATES.map((rate) => (
-                <div key={rate} className="grid grid-cols-3 items-center gap-4">
-                  <Label>Base HT ({rate}%)</Label>
-                  <Input
-                    type="number"
-                    className="col-span-2"
-                    value={tvaBases[rate] || ""}
-                    onChange={(e) => setTvaBases((prev) => ({ ...prev, [rate]: e.target.value }))}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
 
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center space-x-2">
-              <Switch checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
-              <Label>Retenue à la Source</Label>
-            </div>
-            {hasWithholdingTax && (
-              <Select
-                value={withholdingTaxRate.toString()}
-                onValueChange={(val) => setWithholdingTaxRate(Number.parseFloat(val))}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Taux" />
-                </SelectTrigger>
-                <SelectContent>
-                  {WITHHOLDING_TAX_RATES.map((rate) => (
-                    <SelectItem key={rate.value} value={rate.value.toString()}>
-                      {rate.label}
-                    </SelectItem>
+            {isVatApplicable && (
+               <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded">
+                  {TVA_RATES.map(r => (
+                     <div key={r}>
+                        <Label>Base HT {r}%</Label>
+                        <Input type="number" value={tvaBases[r] || ''} onChange={e => setTvaBases({...tvaBases, [r]: e.target.value})} />
+                     </div>
                   ))}
-                </SelectContent>
-              </Select>
+               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>4. Justificatifs & Notes</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Pièce Jointe (Facture, Reçu...)</Label>
-            <Input type="file" onChange={(e) => setAttachmentFile(e.target.files ? e.target.files[0] : null)} />
-          </div>
-          <div>
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </CardContent>
+         <CardHeader><CardTitle>3. Paiement & Retenue</CardTitle></CardHeader>
+         <CardContent className="space-y-4">
+            <div className="flex items-center space-x-2">
+               <Switch checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
+               <Label>Retenue à la source</Label>
+            </div>
+            {hasWithholdingTax && (
+               <Select value={withholdingTaxRate.toString()} onValueChange={v => setWithholdingTaxRate(parseFloat(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{WITHHOLDING_TAX_RATES.map(r => <SelectItem key={r.value} value={r.value.toString()}>{r.label}</SelectItem>)}</SelectContent>
+               </Select>
+            )}
+            
+            <div className="grid grid-cols-2 gap-4 pt-4">
+               <div>
+                  <Label>Méthode</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                     <SelectTrigger><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="Virement">Virement</SelectItem>
+                        <SelectItem value="Chèque">Chèque</SelectItem>
+                        <SelectItem value="Espèces">Espèces</SelectItem>
+                        <SelectItem value="Traite">Traite</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
+               <div>
+                  <Label>Date de Paiement</Label>
+                  {/* Si récurrence, on utilise recurringStartDate, sinon paymentDate */}
+                  <Input type="date" value={isRecurring ? recurringStartDate : paymentDate} onChange={e => isRecurring ? setRecurringStartDate(e.target.value) : setPaymentDate(e.target.value)} />
+               </div>
+               <div className="col-span-2">
+                  <Label>Notes</Label>
+                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} />
+               </div>
+            </div>
+         </CardContent>
       </Card>
 
-      <Card className="sticky bottom-0">
-        <CardHeader>
-          <CardTitle>Récapitulatif</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 font-mono text-sm">
-          <div className="flex justify-between">
-            <span>Total HT</span>
-            <span>{totalHT.toFixed(3)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Total TVA</span>
-            <span>{totalTVA.toFixed(3)}</span>
-          </div>
-          <div className="flex justify-between font-semibold">
-            <span>Total TTC</span>
-            <span>{totalTTC.toFixed(3)}</span>
-          </div>
-          {hasWithholdingTax && (
-            <>
-              <div className="flex justify-between text-red-500">
-                <span>Retenue à la Source</span>
-                <span>- {withholdingAmount.toFixed(3)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg text-emerald-600">
-                <span>NET À PAYER</span>
-                <span>{netToPay.toFixed(3)} TND</span>
-              </div>
-            </>
-          )}
-        </CardContent>
+      <Card className="sticky bottom-0 bg-background border-t-2 border-primary">
+         <CardContent className="pt-6 flex justify-between items-center">
+            <div className="text-sm font-mono space-y-1">
+               <div>HT: {totalHT.toFixed(3)}</div>
+               <div>TVA: {totalTVA.toFixed(3)}</div>
+               {hasWithholdingTax && <div className="text-red-500">RS: -{withholdingAmount.toFixed(3)}</div>}
+            </div>
+            <div className="text-right">
+               <div className="text-sm text-muted-foreground">NET À PAYER</div>
+               <div className="text-2xl font-bold">{netToPay.toFixed(3)} TND</div>
+            </div>
+         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-4 pt-4 border-t">
-        <Button variant="outline" onClick={() => router.back()}>
-          Annuler
-        </Button>
+      <div className="flex justify-end gap-4">
+        <Button variant="outline" onClick={() => router.back()}>Annuler</Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Enregistrer la Dépense
+          Enregistrer
         </Button>
       </div>
     </div>
