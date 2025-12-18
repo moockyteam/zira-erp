@@ -8,11 +8,15 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ERP Pro - Gestion d'Entreprise",
-  description: "Solution ERP complète pour la gestion de votre entreprise",
+  title: "ZIRA - Gestion d'Entreprise",
+  description: "ZIRA - Solution de gestion complète pour votre entreprise",
   generator: "v0.app",
   icons: {
     icon: [
+      {
+        url: "/favicon.png",
+        type: "image/png",
+      },
       {
         url: "/icon-light-32x32.png",
         media: "(prefers-color-scheme: light)",
@@ -21,10 +25,6 @@ export const metadata: Metadata = {
         url: "/icon-dark-32x32.png",
         media: "(prefers-color-scheme: dark)",
       },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
     ],
     apple: "/apple-icon.png",
   },
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#3730a3" },
-    { media: "(prefers-color-scheme: dark)", color: "#6366f1" },
+    { media: "(prefers-color-scheme: light)", color: "#1e40af" },
+    { media: "(prefers-color-scheme: dark)", color: "#3b82f6" },
   ],
 }
 
