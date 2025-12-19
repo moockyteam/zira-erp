@@ -293,8 +293,8 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
                     <Input
                       type="text"
                       className="h-12 text-lg font-semibold"
-                      value={totalHT}
-                      onChange={(e) => {
+                      defaultValue={totalHT}
+                      onBlur={(e) => {
                         const value = e.target.value.replace(",", ".")
                         setTotalHT(value)
                       }}

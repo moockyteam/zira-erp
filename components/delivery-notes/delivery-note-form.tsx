@@ -187,27 +187,7 @@ export function DeliveryNoteForm({
 
     if (isNew) {
       const { data: numberData } = await supabase.rpc("get_next_delivery_note_number", { p_company_id: companyId })
-      const { data: newDn, error } = await supabase
-        .from("delivery_notes")
-        .insert({ ...dnPayload, delivery_note_number: numberData })
-        .select("id")
-        .single()
-      if (error) {
-        toast.error(error.message)
-        setIsLoading(false)
-        return
-      }
-
-      const linesPayload = lines.map((line) => ({ ...line, delivery_note_id: newDn.id }))
-      await supabase.from("delivery_note_lines").insert(linesPayload)
-    } else {
-      // Logique de mise à jour
     }
-
-    toast.success("Bon de livraison sauvegardé.")
-    router.push("/dashboard/delivery-notes")
-    router.refresh()
-    setIsLoading(false)
   }
 
   return (
@@ -335,8 +315,8 @@ export function DeliveryNoteForm({
                     <TableCell className="align-top">
                       <Input
                         type="text"
-                        value={line.quantity}
-                        onChange={(e) => {
+                        defaultValue={line.quantity}
+                        onBlur={(e) => {
                           const value = e.target.value.replace(",", ".")
                           handleLineChange(index, "quantity", Number.parseFloat(value) || 0)
                         }}
@@ -347,8 +327,8 @@ export function DeliveryNoteForm({
                       <TableCell className="align-top">
                         <Input
                           type="text"
-                          value={line.unit_price_ht}
-                          onChange={(e) => {
+                          defaultValue={line.unit_price_ht}
+                          onBlur={(e) => {
                             const value = e.target.value.replace(",", ".")
                             handleLineChange(index, "unit_price_ht", Number.parseFloat(value) || 0)
                           }}
@@ -360,8 +340,8 @@ export function DeliveryNoteForm({
                       <TableCell className="align-top">
                         <Input
                           type="text"
-                          value={line.remise_percentage}
-                          onChange={(e) => {
+                          defaultValue={line.remise_percentage}
+                          onBlur={(e) => {
                             const value = e.target.value.replace(",", ".")
                             handleLineChange(index, "remise_percentage", Number.parseFloat(value) || 0)
                           }}

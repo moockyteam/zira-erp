@@ -166,8 +166,8 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
                 <Label>Montant HT</Label>
                 <Input
                   type="text"
-                  value={totalHT}
-                  onChange={(e) => {
+                  defaultValue={totalHT}
+                  onBlur={(e) => {
                     const value = e.target.value.replace(",", ".")
                     setTotalHT(value)
                   }}
@@ -177,8 +177,8 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
                 <Label>Montant TVA</Label>
                 <Input
                   type="text"
-                  value={totalTVA}
-                  onChange={(e) => {
+                  defaultValue={totalTVA}
+                  onBlur={(e) => {
                     const value = e.target.value.replace(",", ".")
                     setTotalTVA(value)
                   }}

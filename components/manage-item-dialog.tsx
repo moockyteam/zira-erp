@@ -268,8 +268,8 @@ export function ManageItemDialog({
                 <Label>Prix d'achat par défaut (HT)</Label>
                 <Input
                   type="text"
-                  value={formData.default_purchase_price}
-                  onChange={(e) =>
+                  defaultValue={formData.default_purchase_price}
+                  onBlur={(e) =>
                     setFormData((p) => ({ ...p, default_purchase_price: e.target.value.replace(",", ".") }))
                   }
                 />
@@ -278,8 +278,8 @@ export function ManageItemDialog({
                 <Label>Prix de vente (HT)</Label>
                 <Input
                   type="text"
-                  value={formData.sale_price}
-                  onChange={(e) => setFormData((p) => ({ ...p, sale_price: e.target.value.replace(",", ".") }))}
+                  defaultValue={formData.sale_price}
+                  onBlur={(e) => setFormData((p) => ({ ...p, sale_price: e.target.value.replace(",", ".") }))}
                 />
               </div>
               <div>
@@ -294,8 +294,8 @@ export function ManageItemDialog({
                 <Label>Seuil d'alerte stock</Label>
                 <Input
                   type="text"
-                  value={formData.alert_quantity}
-                  onChange={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
+                  defaultValue={formData.alert_quantity}
+                  onBlur={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
                 />
               </div>
             </div>

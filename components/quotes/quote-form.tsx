@@ -1,14 +1,13 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Package, Plus, ChevronsUpDown, Check, Trash2, Receipt } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { NumericInput } from "@/components/ui/numeric-input"
-
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -367,28 +366,37 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                 />
               </div>
               <div className="col-span-1">
-                <NumericInput
+                <Input
+                  type="text"
                   placeholder="1"
-                  value={line.quantity}
-                  onChange={(e) => updateLine(line.local_id, { quantity: Number(e.target.value) })}
-                  decimals={3}
+                  defaultValue={line.quantity}
+                  onBlur={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    updateLine(line.local_id, { quantity: Number.parseFloat(value) || 0 })
+                  }}
                 />
               </div>
               <div className="col-span-2">
-                <NumericInput
+                <Input
+                  type="text"
                   placeholder="0.000"
-                  value={line.unit_price_ht}
-                  onChange={(e) => updateLine(line.local_id, { unit_price_ht: Number(e.target.value) })}
-                  decimals={3}
+                  defaultValue={line.unit_price_ht}
+                  onBlur={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    updateLine(line.local_id, { unit_price_ht: Number.parseFloat(value) || 0 })
+                  }}
                 />
               </div>
               {showRemise && (
                 <div className="col-span-2">
-                  <NumericInput
+                  <Input
+                    type="text"
                     placeholder="0"
-                    value={line.remise_percentage}
-                    onChange={(e) => updateLine(line.local_id, { remise_percentage: Number(e.target.value) })}
-                    decimals={2}
+                    defaultValue={line.remise_percentage}
+                    onBlur={(e) => {
+                      const value = e.target.value.replace(",", ".")
+                      updateLine(line.local_id, { remise_percentage: Number.parseFloat(value) || 0 })
+                    }}
                   />
                 </div>
               )}

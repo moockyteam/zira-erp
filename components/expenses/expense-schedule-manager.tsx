@@ -235,8 +235,8 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
                 <Label>Montant</Label>
                 <Input
                   type="text"
-                  value={amount}
-                  onChange={(e) => {
+                  defaultValue={amount}
+                  onBlur={(e) => {
                     const value = e.target.value.replace(",", ".")
                     setAmount(value)
                   }}
@@ -281,8 +281,8 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
                 <Label>Nombre d'échéances</Label>
                 <Input
                   type="text"
-                  value={genCount}
-                  onChange={(e) => {
+                  defaultValue={genCount}
+                  onBlur={(e) => {
                     const value = e.target.value.replace(",", ".")
                     setGenCount(value)
                   }}
@@ -296,8 +296,8 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
                 <Label>Intervalle (jours)</Label>
                 <Input
                   type="text"
-                  value={genInterval}
-                  onChange={(e) => {
+                  defaultValue={genInterval}
+                  onBlur={(e) => {
                     const value = e.target.value.replace(",", ".")
                     setGenInterval(value)
                   }}
