@@ -500,7 +500,11 @@ export function InvoiceForm({
                       <TableCell className="align-top">
                         <NumericInput
                           value={line.quantity}
-                          onChange={(value) => updateLine(line.local_id, { quantity: value })}
+                          onChange={(e) =>
+                            updateLine(line.local_id, {
+                              quantity: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
+                            })
+                          }
                           className="text-right border-2"
                           decimals={3}
                         />
@@ -508,7 +512,11 @@ export function InvoiceForm({
                       <TableCell className="align-top">
                         <NumericInput
                           value={line.unit_price_ht}
-                          onChange={(value) => updateLine(line.local_id, { unit_price_ht: value })}
+                          onChange={(e) =>
+                            updateLine(line.local_id, {
+                              unit_price_ht: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
+                            })
+                          }
                           className="text-right border-2"
                           decimals={3}
                         />
@@ -518,7 +526,11 @@ export function InvoiceForm({
                         <TableCell className="align-top">
                           <NumericInput
                             value={line.remise_percentage}
-                            onChange={(value) => updateLine(line.local_id, { remise_percentage: value })}
+                            onChange={(e) =>
+                              updateLine(line.local_id, {
+                                remise_percentage: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
+                              })
+                            }
                             className="text-right border-2"
                             decimals={2}
                           />
