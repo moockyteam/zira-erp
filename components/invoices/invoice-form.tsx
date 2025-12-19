@@ -27,21 +27,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-import { NumericInput } from "@/components/ui/numeric-input"
-
-type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
-type Customer = { id: string; name: string }
-type Item = { id: string; name: string; sale_price: number | null; reference: string | null; quantity_on_hand: number }
-type InvoiceLine = {
-  local_id: string
-  item_id: string | null
-  description: string
-  quantity: number
-  unit_price_ht: number
-  remise_percentage: number
-  tva_rate: number
-}
-
 const TVA_RATES = [19, 13, 7, 0]
 const FODEC_RATE = 0.01
 const WITHHOLDING_TAX_RATE = 0.015
@@ -61,9 +46,9 @@ export function InvoiceForm({
 }: {
   initialData: any | null
   quoteInitialData?: any | null
-  companies: Company[]
-  customers: Customer[]
-  items: Item[]
+  companies: any[]
+  customers: any[]
+  items: any[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -76,7 +61,7 @@ export function InvoiceForm({
   const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
   const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
   const [currency, setCurrency] = useState(initialData?.currency || quoteInitialData?.currency || "TND")
-  const [lines, setLines] = useState<InvoiceLine[]>(
+  const [lines, setLines] = useState<any[]>(
     initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
   )
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
@@ -172,7 +157,7 @@ export function InvoiceForm({
       },
     ])
   const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
-  const updateLine = (local_id: string, updatedValues: Partial<InvoiceLine>) => {
+  const updateLine = (local_id: string, updatedValues: any) => {
     setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
   }
 
@@ -498,41 +483,50 @@ export function InvoiceForm({
                         </Command>
                       </TableCell>
                       <TableCell className="align-top">
-                        <NumericInput
-                          value={line.quantity}
-                          onChange={(e) =>
-                            updateLine(line.local_id, {
-                              quantity: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
-                            })
-                          }
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={line.quantity}
+                          onBlur={(e) => {
+                            const value = e.target.value.replace(",", ".")
+                            const numValue = Number.parseFloat(value)
+                            if (!isNaN(numValue)) {
+                              updateLine(line.local_id, { quantity: numValue })
+                            }
+                          }}
                           className="text-right border-2"
-                          decimals={3}
                         />
                       </TableCell>
                       <TableCell className="align-top">
-                        <NumericInput
-                          value={line.unit_price_ht}
-                          onChange={(e) =>
-                            updateLine(line.local_id, {
-                              unit_price_ht: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
-                            })
-                          }
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={line.unit_price_ht}
+                          onBlur={(e) => {
+                            const value = e.target.value.replace(",", ".")
+                            const numValue = Number.parseFloat(value)
+                            if (!isNaN(numValue)) {
+                              updateLine(line.local_id, { unit_price_ht: numValue })
+                            }
+                          }}
                           className="text-right border-2"
-                          decimals={3}
                         />
                       </TableCell>
 
                       {showRemise && (
                         <TableCell className="align-top">
-                          <NumericInput
-                            value={line.remise_percentage}
-                            onChange={(e) =>
-                              updateLine(line.local_id, {
-                                remise_percentage: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
-                              })
-                            }
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            defaultValue={line.remise_percentage}
+                            onBlur={(e) => {
+                              const value = e.target.value.replace(",", ".")
+                              const numValue = Number.parseFloat(value)
+                              if (!isNaN(numValue)) {
+                                updateLine(line.local_id, { remise_percentage: numValue })
+                              }
+                            }}
                             className="text-right border-2"
-                            decimals={2}
                           />
                         </TableCell>
                       )}

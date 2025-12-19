@@ -154,10 +154,9 @@ export function StockEntryDialog({
             </Label>
             <Input
               id="quantity"
-              type="number"
-              step="0.01"
+              type="text"
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              onChange={(e) => setQuantity(e.target.value.replace(",", "."))}
               className="col-span-3"
             />
           </div>

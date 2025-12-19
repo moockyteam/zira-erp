@@ -18,7 +18,6 @@ import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PlusCircle, Trash2, Save, CreditCard } from "lucide-react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { NumericInput } from "@/components/ui/numeric-input"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
 type Customer = {
@@ -334,30 +333,39 @@ export function DeliveryNoteForm({
                       </Command>
                     </TableCell>
                     <TableCell className="align-top">
-                      <NumericInput
+                      <Input
+                        type="text"
                         value={line.quantity}
-                        onChange={(e) => handleLineChange(index, "quantity", Number(e.target.value))}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(",", ".")
+                          handleLineChange(index, "quantity", Number.parseFloat(value) || 0)
+                        }}
                         className="text-right"
-                        decimals={3}
                       />
                     </TableCell>
                     {isValued && (
                       <TableCell className="align-top">
-                        <NumericInput
+                        <Input
+                          type="text"
                           value={line.unit_price_ht}
-                          onChange={(e) => handleLineChange(index, "unit_price_ht", Number(e.target.value))}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(",", ".")
+                            handleLineChange(index, "unit_price_ht", Number.parseFloat(value) || 0)
+                          }}
                           className="text-right"
-                          decimals={3}
                         />
                       </TableCell>
                     )}
                     {isValued && showRemise && (
                       <TableCell className="align-top">
-                        <NumericInput
+                        <Input
+                          type="text"
                           value={line.remise_percentage}
-                          onChange={(e) => handleLineChange(index, "remise_percentage", Number(e.target.value))}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(",", ".")
+                            handleLineChange(index, "remise_percentage", Number.parseFloat(value) || 0)
+                          }}
                           className="text-right"
-                          decimals={2}
                         />
                       </TableCell>
                     )}

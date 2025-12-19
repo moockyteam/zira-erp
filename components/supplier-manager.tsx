@@ -125,7 +125,7 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
 
     const dataToSubmit = {
       ...formData,
-      balance: Number.parseFloat(formData.balance) || 0,
+      balance: Number.parseFloat(formData.balance.replace(",", ".")) || 0,
       company_id: selectedCompanyId,
     }
 
@@ -314,7 +314,7 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
               </div>
               <div>
                 <Label htmlFor="balance">Solde initial (TND)</Label>
-                <Input id="balance" type="number" step="0.001" value={formData.balance} onChange={handleInputChange} />
+                <Input id="balance" type="text" value={formData.balance} onChange={handleInputChange} />
               </div>
               <div>
                 <Label htmlFor="notes">Notes</Label>

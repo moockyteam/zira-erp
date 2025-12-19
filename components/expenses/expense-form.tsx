@@ -510,10 +510,13 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
                   <Label className="text-sm">Montant Total</Label>
                   <Input
                     className="h-11"
-                    type="number"
+                    type="text"
                     placeholder="0.000"
                     value={scheduleConfig.totalAmount}
-                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, totalAmount: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(",", ".")
+                      setScheduleConfig({ ...scheduleConfig, totalAmount: value })
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -529,7 +532,7 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
                   <Label className="text-sm">Nombre d'échéances</Label>
                   <Input
                     className="h-11"
-                    type="number"
+                    type="text"
                     placeholder="2"
                     value={scheduleConfig.numberOfPayments}
                     onChange={(e) => setScheduleConfig({ ...scheduleConfig, numberOfPayments: e.target.value })}
@@ -552,9 +555,12 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
                   />
                   <Input
                     className="h-10"
-                    type="number"
+                    type="text"
                     value={p.amount}
-                    onChange={(e) => updateSchedulePayment(i, "amount", e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(",", ".")
+                      updateSchedulePayment(i, "amount", value)
+                    }}
                   />
                   <Button size="icon" variant="destructive" onClick={() => removeSchedulePayment(i)}>
                     X
@@ -572,9 +578,12 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
                 <Label className="text-sm font-semibold">Montant Total TTC *</Label>
                 <Input
                   className="h-12 text-lg font-semibold"
-                  type="number"
+                  type="text"
                   value={totalAmount}
-                  onChange={(e) => setTotalAmount(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setTotalAmount(value)
+                  }}
                   placeholder="0.000"
                 />
               </div>
@@ -599,9 +608,12 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
                       <Label className="text-sm font-medium">Base HT à {rate}%</Label>
                       <Input
                         className="h-11"
-                        type="number"
+                        type="text"
                         value={tvaBases[rate] || ""}
-                        onChange={(e) => setTvaBases({ ...tvaBases, [rate]: e.target.value })}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(",", ".")
+                          setTvaBases({ ...tvaBases, [rate]: value })
+                        }}
                         placeholder="0.000"
                       />
                     </div>

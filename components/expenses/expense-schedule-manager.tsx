@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlusCircle, Trash2, Wand2, Check } from "lucide-react"
 import { format, addDays } from "date-fns"
-import { NumericInput } from "@/components/ui/numeric-input"
 
 interface ExpenseScheduleManagerProps {
   isOpen: boolean
@@ -234,11 +233,14 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Montant</Label>
-                <NumericInput
+                <Input
+                  type="text"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setAmount(value)
+                  }}
                   placeholder={remaining.toFixed(3)}
-                  decimals={3}
                 />
               </div>
               <div>
@@ -277,7 +279,14 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Nombre d'échéances</Label>
-                <NumericInput value={genCount} onChange={(e) => setGenCount(e.target.value)} decimals={0} />
+                <Input
+                  type="text"
+                  value={genCount}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setGenCount(value)
+                  }}
+                />
               </div>
               <div>
                 <Label>Date 1ère échéance</Label>
@@ -285,7 +294,14 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
               </div>
               <div>
                 <Label>Intervalle (jours)</Label>
-                <NumericInput value={genInterval} onChange={(e) => setGenInterval(e.target.value)} decimals={0} />
+                <Input
+                  type="text"
+                  value={genInterval}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setGenInterval(value)
+                  }}
+                />
               </div>
             </div>
             <div className="bg-white p-3 rounded border text-sm text-indigo-700">

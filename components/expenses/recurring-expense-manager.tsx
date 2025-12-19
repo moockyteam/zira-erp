@@ -15,7 +15,6 @@ import { CategoryCreator } from "@/components/category-creator"
 import { PlusCircle, Pause, Play, Trash2, Calculator } from "lucide-react"
 import { format } from "date-fns"
 import { Textarea } from "@/components/ui/textarea"
-import { NumericInput } from "@/components/ui/numeric-input"
 
 interface RecurringExpenseManagerProps {
   isOpen: boolean
@@ -69,7 +68,7 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
 
   // --- CALCUL AUTOMATIQUE ---
   useEffect(() => {
-    const ht = Number.parseFloat(totalHT) || 0
+    const ht = Number.parseFloat(totalHT.replace(",", ".")) || 0
     const rate = Number.parseFloat(tvaRate) || 0
     const tva = ht * (rate / 100)
     const ttc = ht + tva
@@ -114,7 +113,7 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
 
   const handleSave = async () => {
     const withholdingAmount = hasWithholdingTax
-      ? (Number.parseFloat(totalHT) || 0) * (Number.parseFloat(withholdingTaxRate) / 100)
+      ? (Number.parseFloat(totalHT.replace(",", ".")) || 0) * (Number.parseFloat(withholdingTaxRate) / 100)
       : 0
 
     // Construction du titre automatique si vide
@@ -127,7 +126,7 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
       category: categoryName, // Sécurité
       title: finalTitle,
       beneficiary,
-      total_ht: Number.parseFloat(totalHT) || 0,
+      total_ht: Number.parseFloat(totalHT.replace(",", ".")) || 0,
       total_tva: Number.parseFloat(totalTVA) || 0,
       total_ttc: Number.parseFloat(totalTTC) || 0,
       amount: Number.parseFloat(totalTTC) || 0, // Pour compatibilité
@@ -291,12 +290,15 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Montant HT *</Label>
-                    <NumericInput
+                    <Input
+                      type="text"
                       className="h-12 text-lg font-semibold"
                       value={totalHT}
-                      onChange={(e) => setTotalHT(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(",", ".")
+                        setTotalHT(value)
+                      }}
                       placeholder="0.000"
-                      decimals={currency === "TND" ? 3 : 2}
                     />
                   </div>
                   <div className="space-y-2">
@@ -415,7 +417,8 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
                         <span className="text-lg font-bold text-red-600 dark:text-red-400">
                           -{" "}
                           {formatCurrency(
-                            (Number.parseFloat(totalHT) || 0) * (Number.parseFloat(withholdingTaxRate) / 100),
+                            (Number.parseFloat(totalHT.replace(",", ".")) || 0) *
+                              (Number.parseFloat(withholdingTaxRate) / 100),
                           )}
                         </span>
                       </div>

@@ -224,11 +224,11 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
                           </SelectContent>
                         </Select>
                         <Input
-                          type="number"
+                          type="text"
                           placeholder="Quantité"
                           className="w-32 border-2"
                           value={line.quantity}
-                          onChange={(e) => updateLine(index, "quantity", e.target.value)}
+                          onChange={(e) => updateLine(index, "quantity", e.target.value.replace(",", "."))}
                           step="0.01"
                         />
                         <Button

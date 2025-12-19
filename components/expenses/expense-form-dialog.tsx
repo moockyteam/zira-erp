@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { CategoryCreator } from "@/components/category-creator"
 import { Loader2, Save } from "lucide-react"
-import { NumericInput } from "@/components/ui/numeric-input"
 
 const WITHHOLDING_TAX_RATE = 0.015
 
@@ -47,8 +46,6 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
 
   const fetchDropdownData = async () => {
     if (companyId) {
-      // --- MODIFICATION ICI ---
-      // On utilise .or() pour récupérer les globales (NULL) et celles de l'entreprise
       const [catRes, supRes] = await Promise.all([
         supabase
           .from("expense_categories")
@@ -57,7 +54,6 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
           .order("name"),
         supabase.from("suppliers").select("id, name").eq("company_id", companyId),
       ])
-      // ------------------------
       setCategories(catRes.data || [])
       setSuppliers(supRes.data || [])
     }
@@ -96,7 +92,7 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
       reference,
       status: isDeferredPayment ? "EN_ATTENTE" : "PAYE",
       attachment_url,
-      currency: currency, // Added currency to payload
+      currency: currency,
     }
     const { error } = await supabase.from("expenses").insert(payload)
     if (error) toast.error(error.message)
@@ -168,18 +164,24 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Montant HT</Label>
-                <NumericInput
+                <Input
+                  type="text"
                   value={totalHT}
-                  onChange={(e) => setTotalHT(e.target.value)}
-                  decimals={currency === "TND" ? 3 : 2}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setTotalHT(value)
+                  }}
                 />
               </div>
               <div>
                 <Label>Montant TVA</Label>
-                <NumericInput
+                <Input
+                  type="text"
                   value={totalTVA}
-                  onChange={(e) => setTotalTVA(e.target.value)}
-                  decimals={currency === "TND" ? 3 : 2}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".")
+                    setTotalTVA(value)
+                  }}
                 />
               </div>
               <div>
