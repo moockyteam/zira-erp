@@ -336,7 +336,7 @@ export function DeliveryNoteForm({
                     <TableCell className="align-top">
                       <NumericInput
                         value={line.quantity}
-                        onChange={(value) => handleLineChange(index, "quantity", value)}
+                        onChange={(e) => handleLineChange(index, "quantity", Number(e.target.value))}
                         className="text-right"
                         decimals={3}
                       />
@@ -345,7 +345,7 @@ export function DeliveryNoteForm({
                       <TableCell className="align-top">
                         <NumericInput
                           value={line.unit_price_ht}
-                          onChange={(value) => handleLineChange(index, "unit_price_ht", value)}
+                          onChange={(e) => handleLineChange(index, "unit_price_ht", Number(e.target.value))}
                           className="text-right"
                           decimals={3}
                         />
@@ -355,7 +355,7 @@ export function DeliveryNoteForm({
                       <TableCell className="align-top">
                         <NumericInput
                           value={line.remise_percentage}
-                          onChange={(value) => handleLineChange(index, "remise_percentage", value)}
+                          onChange={(e) => handleLineChange(index, "remise_percentage", Number(e.target.value))}
                           className="text-right"
                           decimals={2}
                         />

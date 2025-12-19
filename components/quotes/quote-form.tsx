@@ -370,7 +370,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                 <NumericInput
                   placeholder="1"
                   value={line.quantity}
-                  onChange={(value) => updateLine(line.local_id, { quantity: value })}
+                  onChange={(e) => updateLine(line.local_id, { quantity: Number(e.target.value) })}
                   decimals={3}
                 />
               </div>
@@ -378,7 +378,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                 <NumericInput
                   placeholder="0.000"
                   value={line.unit_price_ht}
-                  onChange={(value) => updateLine(line.local_id, { unit_price_ht: value })}
+                  onChange={(e) => updateLine(line.local_id, { unit_price_ht: Number(e.target.value) })}
                   decimals={3}
                 />
               </div>
@@ -387,7 +387,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                   <NumericInput
                     placeholder="0"
                     value={line.remise_percentage}
-                    onChange={(value) => updateLine(line.local_id, { remise_percentage: value })}
+                    onChange={(e) => updateLine(line.local_id, { remise_percentage: Number(e.target.value) })}
                     decimals={2}
                   />
                 </div>
