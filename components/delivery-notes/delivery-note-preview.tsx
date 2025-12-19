@@ -8,6 +8,33 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
   const t = TRANSLATIONS[language as Language] || TRANSLATIONS.fr
   const isFodecApplicable = deliveryNote.total_fodec > 0
 
+  const calculatedTotalHT = deliveryNote.delivery_note_lines.reduce(
+    (sum: number, l: any) =>
+      sum + l.quantity * l.unit_price_ht * (1 - (l.remise_percentage || 0) / 100),
+    0,
+  )
+
+  const calculatedTotalTVA = [19, 13, 7, 0].reduce((acc, rate) => {
+    const linesForRate = deliveryNote.delivery_note_lines.filter((l: any) => l.tva_rate === rate)
+    const base = linesForRate.reduce(
+      (s: number, l: any) => s + l.quantity * l.unit_price_ht * (1 - (l.remise_percentage || 0) / 100),
+      0,
+    )
+    const base_fodec =
+      base + (isFodecApplicable ? base * (1 - (deliveryNote.escompte_percentage || 0) / 100) * 0.01 : 0)
+    const amount = base_fodec * (rate / 100)
+    return acc + amount
+  }, 0)
+
+  const stampAmount = deliveryNote.has_stamp ? 1.0 : 0
+  const fodecAmount = isFodecApplicable ? deliveryNote.total_fodec : 0
+  const escompteAmount = deliveryNote.total_escompte || 0
+
+  const displayTotalHT = deliveryNote.total_ht || calculatedTotalHT
+  const displayTotalTVA = deliveryNote.total_tva || calculatedTotalTVA
+  const displayTotalTTC =
+    deliveryNote.total_ttc || displayTotalHT - escompteAmount + fodecAmount + displayTotalTVA + stampAmount
+
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
       <style type="text/css" media="print">
@@ -173,7 +200,7 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
               <div className="p-3 border rounded-md font-mono text-xs">
                 <div className="flex justify-between">
                   <span className="font-sans text-muted-foreground">{t.totalHTNet}</span>
-                  <span>{deliveryNote.total_ht.toFixed(3)}</span>
+                  <span>{displayTotalHT.toFixed(3)}</span>
                 </div>
                 {deliveryNote.total_escompte > 0 && (
                   <div className="flex justify-between">
@@ -189,7 +216,7 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
                 )}
                 <div className="flex justify-between">
                   <span className="font-sans text-muted-foreground">{t.totalVAT}</span>
-                  <span>+ {deliveryNote.total_tva.toFixed(3)}</span>
+                  <span>+ {displayTotalTVA.toFixed(3)}</span>
                 </div>
                 {deliveryNote.has_stamp && (
                   <div className="flex justify-between">
@@ -199,7 +226,7 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
                 )}
                 <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
                   <span className="font-sans">{t.totalTTC}</span>
-                  <span>{deliveryNote.total_ttc.toFixed(3)} TND</span>
+                  <span>{displayTotalTTC.toFixed(3)} TND</span>
                 </div>
               </div>
             </div>
