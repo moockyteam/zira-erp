@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlusCircle, Trash2, Wand2, Check } from "lucide-react"
 import { format, addDays } from "date-fns"
+import { NumericInput } from "@/components/ui/numeric-input"
 
 interface ExpenseScheduleManagerProps {
   isOpen: boolean
@@ -233,11 +234,11 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Montant</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder={remaining.toFixed(3)}
+                  decimals={3}
                 />
               </div>
               <div>
@@ -276,7 +277,7 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Nombre d'échéances</Label>
-                <Input type="number" value={genCount} onChange={(e) => setGenCount(e.target.value)} />
+                <NumericInput value={genCount} onChange={(e) => setGenCount(e.target.value)} decimals={0} />
               </div>
               <div>
                 <Label>Date 1ère échéance</Label>
@@ -284,7 +285,7 @@ export function ExpenseScheduleManager({ isOpen, onOpenChange, expense, onSucces
               </div>
               <div>
                 <Label>Intervalle (jours)</Label>
-                <Input type="number" value={genInterval} onChange={(e) => setGenInterval(e.target.value)} />
+                <NumericInput value={genInterval} onChange={(e) => setGenInterval(e.target.value)} decimals={0} />
               </div>
             </div>
             <div className="bg-white p-3 rounded border text-sm text-indigo-700">

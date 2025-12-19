@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { CategoryCreator } from "@/components/category-creator"
 import { Loader2, Save } from "lucide-react"
+import { NumericInput } from "@/components/ui/numeric-input"
 
 const WITHHOLDING_TAX_RATE = 0.015
 
@@ -167,15 +168,23 @@ export function ExpenseFormDialog({ isOpen, onOpenChange, companyId, onSuccess }
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Montant HT</Label>
-                <Input type="number" value={totalHT} onChange={(e) => setTotalHT(e.target.value)} />
+                <NumericInput
+                  value={totalHT}
+                  onChange={(e) => setTotalHT(e.target.value)}
+                  decimals={currency === "TND" ? 3 : 2}
+                />
               </div>
               <div>
                 <Label>Montant TVA</Label>
-                <Input type="number" value={totalTVA} onChange={(e) => setTotalTVA(e.target.value)} />
+                <NumericInput
+                  value={totalTVA}
+                  onChange={(e) => setTotalTVA(e.target.value)}
+                  decimals={currency === "TND" ? 3 : 2}
+                />
               </div>
               <div>
                 <Label>Montant TTC</Label>
-                <Input type="number" value={formatAmount(totalTTC)} disabled className="font-bold" />
+                <Input type="text" value={formatAmount(totalTTC)} disabled className="font-bold" />
               </div>
             </div>
             <div className="flex items-center space-x-2 mt-4">

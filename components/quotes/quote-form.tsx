@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Package, Plus, ChevronsUpDown, Check, Trash2, Receipt } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { NumericInput } from "@/components/ui/numeric-input"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -366,30 +367,28 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                 />
               </div>
               <div className="col-span-1">
-                <Input
-                  type="number"
+                <NumericInput
                   placeholder="1"
                   value={line.quantity}
-                  onChange={(e) => updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value) || 0 })}
+                  onChange={(value) => updateLine(line.local_id, { quantity: value })}
+                  decimals={3}
                 />
               </div>
               <div className="col-span-2">
-                <Input
-                  type="number"
+                <NumericInput
                   placeholder="0.000"
                   value={line.unit_price_ht}
-                  onChange={(e) => updateLine(line.local_id, { unit_price_ht: Number.parseFloat(e.target.value) || 0 })}
+                  onChange={(value) => updateLine(line.local_id, { unit_price_ht: value })}
+                  decimals={3}
                 />
               </div>
               {showRemise && (
                 <div className="col-span-2">
-                  <Input
-                    type="number"
+                  <NumericInput
                     placeholder="0"
                     value={line.remise_percentage}
-                    onChange={(e) =>
-                      updateLine(line.local_id, { remise_percentage: Number.parseFloat(e.target.value) || 0 })
-                    }
+                    onChange={(value) => updateLine(line.local_id, { remise_percentage: value })}
+                    decimals={2}
                   />
                 </div>
               )}

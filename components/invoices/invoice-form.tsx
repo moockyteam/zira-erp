@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { format, addDays } from "date-fns"
 import { toast } from "sonner"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   PlusCircle,
   Trash2,
-  Loader2,
   ChevronsUpDown,
   Check,
   Building2,
@@ -25,10 +23,11 @@ import {
   Calendar,
   Package,
   Receipt,
-  Save,
   CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+import { NumericInput } from "@/components/ui/numeric-input"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
 type Customer = { id: string; name: string }
@@ -499,37 +498,29 @@ export function InvoiceForm({
                         </Command>
                       </TableCell>
                       <TableCell className="align-top">
-                        <Input
-                          type="number"
+                        <NumericInput
                           value={line.quantity}
-                          onChange={(e) =>
-                            updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value) || 0 })
-                          }
+                          onChange={(value) => updateLine(line.local_id, { quantity: value })}
                           className="text-right border-2"
+                          decimals={3}
                         />
                       </TableCell>
                       <TableCell className="align-top">
-                        <Input
-                          type="number"
+                        <NumericInput
                           value={line.unit_price_ht}
-                          onChange={(e) =>
-                            updateLine(line.local_id, { unit_price_ht: Number.parseFloat(e.target.value) || 0 })
-                          }
+                          onChange={(value) => updateLine(line.local_id, { unit_price_ht: value })}
                           className="text-right border-2"
+                          decimals={3}
                         />
                       </TableCell>
 
                       {showRemise && (
                         <TableCell className="align-top">
-                          <Input
-                            type="number"
+                          <NumericInput
                             value={line.remise_percentage}
-                            onChange={(e) =>
-                              updateLine(line.local_id, {
-                                remise_percentage: Number.parseFloat(e.target.value) || 0,
-                              })
-                            }
+                            onChange={(value) => updateLine(line.local_id, { remise_percentage: value })}
                             className="text-right border-2"
+                            decimals={2}
                           />
                         </TableCell>
                       )}
@@ -701,69 +692,44 @@ export function InvoiceForm({
               <Label htmlFor="bank_name">Nom de la Banque</Label>
               <Input
                 id="bank_name"
+                placeholder="Nom de la Banque"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
-                placeholder="Ex: Banque de Tunisie"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rib">RIB</Label>
-              <Input
-                id="rib"
-                value={rib}
-                onChange={(e) => setRib(e.target.value)}
-                placeholder="Ex: 12345678901234567890"
-                maxLength={24}
+                className="border-2 focus:border-emerald-500"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="iban">IBAN</Label>
               <Input
                 id="iban"
+                placeholder="IBAN"
                 value={iban}
-                onChange={(e) => setIban(e.target.value.toUpperCase())}
-                placeholder="Ex: TN59 1234 5678 9012 3456 7890"
-                maxLength={34}
+                onChange={(e) => setIban(e.target.value)}
+                className="border-2 focus:border-emerald-500"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="bic_swift">Code BIC/SWIFT</Label>
+              <Label htmlFor="bic_swift">BIC/SWIFT</Label>
               <Input
                 id="bic_swift"
+                placeholder="BIC/SWIFT"
                 value={bicSwift}
-                onChange={(e) => setBicSwift(e.target.value.toUpperCase())}
-                placeholder="Ex: BTUBTNTT"
-                maxLength={11}
+                onChange={(e) => setBicSwift(e.target.value)}
+                className="border-2 focus:border-emerald-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rib">RIB</Label>
+              <Input
+                id="rib"
+                placeholder="RIB"
+                value={rib}
+                onChange={(e) => setRib(e.target.value)}
+                className="border-2 focus:border-emerald-500"
               />
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="flex justify-end gap-4 pt-4 border-t">
-        <Link href="/dashboard/invoices">
-          <Button variant="outline" type="button">
-            Annuler
-          </Button>
-        </Link>
-        <Button
-          onClick={handleSave}
-          disabled={isLoading}
-          size="lg"
-          className="shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 transition-all px-8"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Traitement...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-5 w-5" />
-              {isNew ? "Créer la facture" : "Mettre à jour"}
-            </>
-          )}
-        </Button>
       </div>
     </div>
   )

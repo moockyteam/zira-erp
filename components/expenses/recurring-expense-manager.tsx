@@ -15,6 +15,7 @@ import { CategoryCreator } from "@/components/category-creator"
 import { PlusCircle, Pause, Play, Trash2, Calculator } from "lucide-react"
 import { format } from "date-fns"
 import { Textarea } from "@/components/ui/textarea"
+import { NumericInput } from "@/components/ui/numeric-input"
 
 interface RecurringExpenseManagerProps {
   isOpen: boolean
@@ -290,12 +291,12 @@ export function RecurringExpenseManager({ isOpen, onOpenChange, companyId }: Rec
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Montant HT *</Label>
-                    <Input
+                    <NumericInput
                       className="h-12 text-lg font-semibold"
-                      type="number"
                       value={totalHT}
                       onChange={(e) => setTotalHT(e.target.value)}
                       placeholder="0.000"
+                      decimals={currency === "TND" ? 3 : 2}
                     />
                   </div>
                   <div className="space-y-2">
