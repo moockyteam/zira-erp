@@ -8,8 +8,14 @@ export function PurchaseOrderPreview({ po }: { po: any }) {
   if (!po) return null
 
   return (
-    <div className="bg-white p-8">
-      <div className="max-w-4xl mx-auto font-sans text-black text-sm">
+    <div className="bg-white p-8 text-[10pt] print:text-[9pt]">
+      <style type="text/css" media="print">
+        {`
+          @page { size: auto; margin: 0mm; }
+          body { margin: 0px; }
+        `}
+      </style>
+      <div className="max-w-4xl mx-auto font-sans text-black text-sm print:p-8 min-h-[297mm] print:min-h-0 print:w-full" style={{ width: "210mm" }}>
         <header className="grid grid-cols-2 gap-8 mb-10 border-b-2 border-black pb-4">
           <div>
             {po.companies?.logo_url && <Image src={po.companies.logo_url} alt="Logo" width={80} height={80} className="object-contain mb-2" />}

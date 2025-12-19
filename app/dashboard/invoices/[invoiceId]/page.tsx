@@ -89,6 +89,7 @@ export default async function InvoiceEditorPage({
     .from("items")
     .select("id, name, sale_price, reference, quantity_on_hand")
     .eq("company_id", companyIdForData)
+    .eq("is_archived", false)
 
   const { data: confirmedQuotes } = await supabase
     .from("quotes")

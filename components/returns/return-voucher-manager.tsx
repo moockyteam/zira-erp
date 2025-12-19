@@ -8,6 +8,7 @@ import { CompanySelector } from "@/components/company-selector"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { PlusCircle, Package, PackageX, TrendingDown } from "lucide-react"
@@ -49,7 +50,7 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
       `)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
-    
+
     if (error) {
       console.error("Erreur lors du chargement des bons de retour:", error);
       // Gérer l'erreur avec un toast serait une bonne pratique
@@ -146,7 +147,7 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
             </CardHeader>
             <CardContent className="pt-6">
               <div className="mb-4">
-                <Input placeholder="Rechercher par N° ou client..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+                <SearchInput placeholder="Rechercher par N° ou client..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} wrapperClassName="max-w-sm" />
               </div>
               <div className="rounded-lg border-2 border-border overflow-hidden">
                 <Table>
@@ -161,7 +162,7 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full"/></TableCell></TableRow>)
+                      Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
                     ) : filteredReturns.length === 0 ? (
                       <TableRow><TableCell colSpan={5} className="text-center h-24">Aucun bon de retour.</TableCell></TableRow>
                     ) : (

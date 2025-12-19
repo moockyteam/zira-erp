@@ -60,7 +60,7 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
   const fetchCompanyData = async (companyId: string) => {
     setIsLoading(true)
     const [itemsResponse, vouchersResponse] = await Promise.all([
-      supabase.from("items").select("id, name, quantity_on_hand").eq("company_id", companyId).order("name"),
+      supabase.from("items").select("id, name, quantity_on_hand").eq("company_id", companyId).eq("is_archived", false).order("name"),
       supabase
         .from("stock_issue_vouchers")
         .select("*")

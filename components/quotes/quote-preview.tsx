@@ -61,8 +61,14 @@ export function QuotePreview({ quote, language = "fr" }: { quote: QuotePreviewDa
   }
 
   return (
-    <div className="bg-white p-4">
-      <div className="max-w-4xl mx-auto font-sans text-black text-sm">
+    <div className="bg-white p-4 text-[10pt] print:text-[9pt]">
+      <style type="text/css" media="print">
+        {`
+          @page { size: auto; margin: 0mm; }
+          body { margin: 0px; }
+        `}
+      </style>
+      <div className="max-w-4xl mx-auto font-sans text-black text-sm print:p-8 min-h-[297mm] print:min-h-0 print:w-full" style={{ width: "210mm" }}>
         <header className="grid grid-cols-2 gap-8 mb-10 border-b-2 border-black pb-4">
           <div>
             {quote.companies?.logo_url && (

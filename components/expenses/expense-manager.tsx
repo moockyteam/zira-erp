@@ -14,6 +14,7 @@ import { PlusCircle, Download, FileUp, Calendar, RefreshCw, Pause, Play, Trash2 
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ExpenseDashboard } from "./expense-dashboard"
 import { RecurringExpenseManager } from "./recurring-expense-manager"
@@ -67,10 +68,10 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
 
   const fetchRecurringExpenses = async (companyId: string) => {
     const { data } = await supabase
-        .from("recurring_expenses")
-        .select("*")
-        .eq("company_id", companyId)
-        .order("next_execution_date", { ascending: true })
+      .from("recurring_expenses")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("next_execution_date", { ascending: true })
     setRecurringExpenses(data || [])
   }
 
@@ -80,21 +81,21 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
       .select("*")
       .or(`company_id.is.null,company_id.eq.${companyId}`)
       .order("name")
-      
+
     setCategories(data || [])
   }
 
   // Fonctions pour gérer les récurrentes directement depuis la liste
   const toggleRecurringStatus = async (id: string, currentStatus: string) => {
-      const newStatus = currentStatus === "ACTIVE" ? "PAUSED" : "ACTIVE"
-      await supabase.from("recurring_expenses").update({ status: newStatus }).eq("id", id)
-      if(selectedCompanyId) fetchRecurringExpenses(selectedCompanyId)
+    const newStatus = currentStatus === "ACTIVE" ? "PAUSED" : "ACTIVE"
+    await supabase.from("recurring_expenses").update({ status: newStatus }).eq("id", id)
+    if (selectedCompanyId) fetchRecurringExpenses(selectedCompanyId)
   }
 
   const deleteRecurring = async (id: string) => {
-      if(!confirm("Supprimer définitivement ?")) return;
-      await supabase.from("recurring_expenses").delete().eq("id", id)
-      if(selectedCompanyId) fetchRecurringExpenses(selectedCompanyId)
+    if (!confirm("Supprimer définitivement ?")) return;
+    await supabase.from("recurring_expenses").delete().eq("id", id)
+    if (selectedCompanyId) fetchRecurringExpenses(selectedCompanyId)
   }
 
   const filteredExpenses = useMemo(() => {
@@ -134,7 +135,7 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
               <p className="text-muted-foreground">Suivez et gérez toutes vos dépenses</p>
             </div>
             <div className="flex gap-2">
-                {/* Le bouton ouvre toujours le dialogue pour CREER, mais la liste est aussi dispo dans l'onglet */}
+              {/* Le bouton ouvre toujours le dialogue pour CREER, mais la liste est aussi dispo dans l'onglet */}
               <Button onClick={() => setShowRecurringDialog(true)} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Gérer Récurrentes
@@ -183,7 +184,7 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
                         {categories.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
                       </SelectContent>
                     </Select>
-                    <Input placeholder="Rechercher..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="md:col-span-2" />
+                    <SearchInput placeholder="Rechercher..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} wrapperClassName="md:col-span-2" />
                   </div>
 
                   <Table>
@@ -225,53 +226,53 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
 
             {/* CONTENU DU NOUVEL ONGLET RÉCURRENTES */}
             <TabsContent value="recurring">
-                <Card>
-                    <CardHeader><CardTitle>Configurations Récurrentes Actives</CardTitle></CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Titre</TableHead>
-                                    <TableHead>Montant</TableHead>
-                                    <TableHead>Fréquence</TableHead>
-                                    <TableHead>Prochaine Exécution</TableHead>
-                                    <TableHead>Statut</TableHead>
-                                    <TableHead>Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {recurringExpenses.map(r => (
-                                    <TableRow key={r.id}>
-                                        <TableCell>
-                                            <div className="font-medium">{r.title || r.beneficiary}</div>
-                                            <div className="text-xs text-muted-foreground">{r.category}</div>
-                                        </TableCell>
-                                        <TableCell className="font-mono">{Number(r.total_ttc || r.amount).toFixed(3)} TND</TableCell>
-                                        <TableCell>{r.frequency}</TableCell>
-                                        <TableCell>{format(new Date(r.next_execution_date), 'dd/MM/yyyy')}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={r.status === 'ACTIVE' ? 'default' : 'secondary'}>{r.status}</Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-2">
-                                                <Button size="sm" variant="outline" onClick={() => toggleRecurringStatus(r.id, r.status)}>
-                                                    {r.status === 'ACTIVE' ? <Pause className="h-3 w-3 mr-1"/> : <Play className="h-3 w-3 mr-1"/>}
-                                                    {r.status === 'ACTIVE' ? 'Pause' : 'Reprendre'}
-                                                </Button>
-                                                <Button size="sm" variant="destructive" onClick={() => deleteRecurring(r.id)}>
-                                                    <Trash2 className="h-3 w-3"/>
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {recurringExpenses.length === 0 && (
-                                    <TableRow><TableCell colSpan={6} className="text-center py-8">Aucune dépense récurrente.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+              <Card>
+                <CardHeader><CardTitle>Configurations Récurrentes Actives</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Titre</TableHead>
+                        <TableHead>Montant</TableHead>
+                        <TableHead>Fréquence</TableHead>
+                        <TableHead>Prochaine Exécution</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recurringExpenses.map(r => (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <div className="font-medium">{r.title || r.beneficiary}</div>
+                            <div className="text-xs text-muted-foreground">{r.category}</div>
+                          </TableCell>
+                          <TableCell className="font-mono">{Number(r.total_ttc || r.amount).toFixed(3)} TND</TableCell>
+                          <TableCell>{r.frequency}</TableCell>
+                          <TableCell>{format(new Date(r.next_execution_date), 'dd/MM/yyyy')}</TableCell>
+                          <TableCell>
+                            <Badge variant={r.status === 'ACTIVE' ? 'default' : 'secondary'}>{r.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => toggleRecurringStatus(r.id, r.status)}>
+                                {r.status === 'ACTIVE' ? <Pause className="h-3 w-3 mr-1" /> : <Play className="h-3 w-3 mr-1" />}
+                                {r.status === 'ACTIVE' ? 'Pause' : 'Reprendre'}
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => deleteRecurring(r.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {recurringExpenses.length === 0 && (
+                        <TableRow><TableCell colSpan={6} className="text-center py-8">Aucune dépense récurrente.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             </TabsContent>
 
           </Tabs>
@@ -282,8 +283,8 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
       <RecurringExpenseManager
         isOpen={showRecurringDialog}
         onOpenChange={(val) => {
-            setShowRecurringDialog(val);
-            if(!val && selectedCompanyId) fetchRecurringExpenses(selectedCompanyId); // Rafraîchir à la fermeture
+          setShowRecurringDialog(val);
+          if (!val && selectedCompanyId) fetchRecurringExpenses(selectedCompanyId); // Rafraîchir à la fermeture
         }}
         companyId={selectedCompanyId || ""}
       />

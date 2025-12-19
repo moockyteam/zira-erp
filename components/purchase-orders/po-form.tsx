@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trash2, Plus } from "lucide-react"
+import { Trash2, Plus, Check } from "lucide-react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 
 type Company = { id: string; name: string }
 type Supplier = { id: string; name: string }
@@ -21,12 +23,11 @@ type POLine = {
   local_id: string
   item_id: string | null
   description: string
-  quantity: number
-  purchase_price_ht: number
+  quantity: number | string
+  purchase_price_ht: number | string
   tva_rate: number
 }
 
-// CORRECTION 1: Le tableau de TVA était manquant
 const TVA_RATES = [19, 13, 7, 0]
 
 interface POFormProps {
@@ -42,7 +43,6 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
   const supabase = createClient()
   const isNew = !initialData
 
-  // CORRECTION 3: Utilisation de companies[0]?.id
   const [companyId, setCompanyId] = useState(
     initialData?.company_id || searchParams.get("companyId") || companies[0]?.id || "",
   )
@@ -57,8 +57,15 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
   const [isSaving, setIsSaving] = useState(false)
 
   const totals = useMemo(() => {
-    const total_ht = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.purchase_price_ht || 0), 0)
-    const total_tva = lines.reduce(
+    // Conversion sécurisée
+    const safeLines = lines.map(l => ({
+      ...l,
+      quantity: typeof l.quantity === 'string' ? parseFloat(l.quantity.replace(',', '.')) || 0 : l.quantity,
+      purchase_price_ht: typeof l.purchase_price_ht === 'string' ? parseFloat(l.purchase_price_ht.replace(',', '.')) || 0 : l.purchase_price_ht,
+    }))
+
+    const total_ht = safeLines.reduce((sum, line) => sum + (line.quantity || 0) * (line.purchase_price_ht || 0), 0)
+    const total_tva = safeLines.reduce(
       (sum, line) => sum + (line.quantity || 0) * (line.purchase_price_ht || 0) * ((line.tva_rate || 0) / 100),
       0,
     )
@@ -79,11 +86,11 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
       },
     ])
   const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
+
   const updateLine = (local_id: string, updatedValues: Partial<POLine>) => {
     setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
   }
 
-  // CORRECTION 2: Syntaxe de la description
   const handleItemSelect = useCallback(
     (local_id: string, itemId: string) => {
       const selectedItem = items.find((item) => item.id === itemId)
@@ -116,14 +123,19 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
       total_ttc: totals.total_ttc,
     }
 
-    const linesPayload = lines.map((line) => ({
-      item_id: line.item_id,
-      description: line.description,
-      quantity: line.quantity || 0,
-      purchase_price_ht: line.purchase_price_ht || 0,
-      tva_rate: line.tva_rate || 0,
-      line_total_ht: (line.quantity || 0) * (line.purchase_price_ht || 0),
-    }))
+    const linesPayload = lines.map((line) => {
+      const qty = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity;
+      const price = typeof line.purchase_price_ht === 'string' ? parseFloat(line.purchase_price_ht.replace(',', '.')) || 0 : line.purchase_price_ht;
+
+      return {
+        item_id: line.item_id,
+        description: line.description,
+        quantity: qty,
+        purchase_price_ht: price,
+        tva_rate: line.tva_rate || 0,
+        line_total_ht: qty * price,
+      }
+    })
 
     if (isNew) {
       const { data: nextNumber, error: rpcError } = await supabase.rpc("get_next_po_number", {
@@ -229,47 +241,52 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
               <div key={line.local_id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
                 <div className="col-span-4">
                   <Label>Article / Description</Label>
-                  <Command>
-                    <CommandInput
-                      placeholder="Saisir ou rechercher un article..."
-                      value={line.description}
-                      onValueChange={(value) => updateLine(line.local_id, { description: value, item_id: null })}
-                    />
-                    <CommandList>
-                      <CommandEmpty>Aucun article trouvé.</CommandEmpty>
-                      <CommandGroup>
-                        {items
-                          .filter((item) => item.name.toLowerCase().includes(line.description.toLowerCase()))
-                          .slice(0, 5)
-                          .map((item) => (
-                            <CommandItem key={item.id} onSelect={() => handleItemSelect(line.local_id, item.id)}>
-                              {item.name}
-                            </CommandItem>
-                          ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal truncate mt-1">
+                        {line.description || <span className="text-muted-foreground">Sélectionner ou saisir...</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Chercher un article..."
+                          onValueChange={(val) => updateLine(line.local_id, { description: val })}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            <Button variant="ghost" className="w-full justify-start" onClick={() => updateLine(line.local_id, { description: document.querySelector('[cmdk-input]')?.getAttribute('value') || "Nouvelle ligne" })}>
+                              Utiliser comme description libre
+                            </Button>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {items.slice(0, 50).map(item => (
+                              <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
+                                <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
+                                {item.name} {item.reference && <span className="text-xs text-muted-foreground ml-2">({item.reference})</span>}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="col-span-2">
                   <Label>Qté</Label>
                   <Input
+                    className="mt-1"
                     type="text"
                     value={line.quantity}
-                    onChange={(e) =>
-                      updateLine(line.local_id, { quantity: Number.parseFloat(e.target.value.replace(",", ".")) || 0 })
-                    }
+                    onChange={(e) => updateLine(line.local_id, { quantity: e.target.value })}
                   />
                 </div>
                 <div className="col-span-3">
                   <Label>Prix Achat HT</Label>
                   <Input
+                    className="mt-1"
                     type="text"
                     value={line.purchase_price_ht}
-                    onChange={(e) =>
-                      updateLine(line.local_id, {
-                        purchase_price_ht: Number.parseFloat(e.target.value.replace(",", ".")) || 0,
-                      })
-                    }
+                    onChange={(e) => updateLine(line.local_id, { purchase_price_ht: e.target.value })}
                   />
                 </div>
                 <div className="col-span-2">
@@ -278,7 +295,7 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
                     value={String(line.tva_rate)}
                     onValueChange={(v) => updateLine(line.local_id, { tva_rate: Number.parseFloat(v) })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -290,7 +307,7 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-1 flex items-end h-full">
+                <div className="col-span-1 flex items-end h-full mb-1">
                   <Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
@@ -298,7 +315,7 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
               </div>
             ))}
           </div>
-          <Button variant="outline" onClick={addLine} className="w-full mt-4 bg-transparent">
+          <Button variant="outline" onClick={addLine} className="w-full mt-4 bg-transparent border-dashed">
             <Plus className="mr-2 h-4 w-4" />
             Ajouter une ligne
           </Button>

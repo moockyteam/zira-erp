@@ -39,7 +39,13 @@ export function InvoicePreview({ invoice, language = "fr" }: { invoice: any; lan
 
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
-      <div className="max-w-4xl mx-auto p-8 print:p-4" style={{ width: "210mm", minHeight: "297mm" }}>
+      <style type="text/css" media="print">
+        {`
+          @page { size: auto; margin: 0mm; }
+          body { margin: 0px; }
+        `}
+      </style>
+      <div className="max-w-4xl mx-auto p-8 print:p-8 min-h-[297mm] print:min-h-0 print:w-full" style={{ width: "210mm" }}>
         <header className="flex justify-between items-start pb-4 mb-6 border-b-2 border-black">
           <div className="flex items-start gap-4">
             {invoice.companies?.logo_url && (

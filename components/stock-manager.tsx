@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -190,11 +191,12 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
               ) : (
                 <>
                   <div className="flex items-center gap-4 mb-4">
-                    <Input
+                    <SearchInput
                       placeholder="Rechercher par nom/référence..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="max-w-sm"
+                      onClear={() => setSearchTerm("")}
+                      wrapperClassName="max-w-sm"
                     />
                     <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
                       <SelectTrigger className="w-[200px]">

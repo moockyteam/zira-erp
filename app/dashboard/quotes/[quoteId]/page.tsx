@@ -56,6 +56,7 @@ export default async function QuoteEditorPage({ params }: { params: Promise<{ qu
     .from("items")
     .select("id, name, sale_price, reference")
     .eq("company_id", companyIdForData)
+    .eq("is_archived", false)
 
   // ... le reste du fichier reste identique
   let defaultTerms = null

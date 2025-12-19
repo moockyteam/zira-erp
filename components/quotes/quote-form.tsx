@@ -26,9 +26,9 @@ type QuoteLine = {
   id?: string
   item_id: string | null
   description: string
-  quantity: number
-  unit_price_ht: number
-  remise_percentage: number
+  quantity: number | string
+  unit_price_ht: number | string
+  remise_percentage: number | string
   tva_rate: number
 }
 
@@ -76,6 +76,10 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
 
   const [isSaving, setIsSaving] = useState(false)
 
+  // États pour les Popovers (un par ligne serait trop lourd, on triche ou on laisse le composant gérer)
+  // Pour simplifier, on utilise simplement un bouton qui déclenche le popover.
+  // Note: Radix UI Popover gère son état d'ouverture.
+
   const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
   const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
@@ -84,19 +88,33 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
   const currencySymbol = useMemo(() => CURRENCIES.find((c) => c.code === currency)?.symbol || currency, [currency])
 
   const totals = useMemo(() => {
-    const total_ht_brut = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0), 0)
-    const total_remise = lines.reduce(
-      (sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * ((line.remise_percentage || 0) / 100),
-      0,
-    )
+    const total_ht_brut = lines.reduce((sum, line) => {
+      const qty = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity;
+      const price = typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht;
+      return sum + qty * price
+    }, 0)
+
+    const total_remise = lines.reduce((sum, line) => {
+      const qty = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity;
+      const price = typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht;
+      const remise = typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage;
+      return sum + (qty * price * (remise / 100))
+    }, 0)
+
     const total_ht = total_ht_brut - total_remise
     const total_fodec = isFodecApplicable ? total_ht * FODEC_RATE : 0
     const base_tva = total_ht + total_fodec
+
     const total_tva = lines.reduce((sum, line) => {
-      const line_ht = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+      const qty = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity;
+      const price = typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht;
+      const remise = typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage;
+
+      const line_ht = qty * price * (1 - remise / 100)
       const line_fodec = isFodecApplicable ? line_ht * FODEC_RATE : 0
       return sum + (line_ht + line_fodec) * ((line.tva_rate || 0) / 100)
     }, 0)
+
     const timbre = hasStamp ? 1.0 : 0
     const total_ttc = base_tva + total_tva + timbre
     return { total_ht, total_remise, total_fodec, total_tva, total_ttc, timbre }
@@ -116,8 +134,19 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
       },
     ])
   const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
-  const updateLine = (local_id: string, updatedValues: Partial<QuoteLine>) => {
-    setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
+
+  // Update générique pour les champs texte/nombre
+  const updateLine = (local_id: string, field: keyof QuoteLine, value: any) => {
+    setLines(lines.map((l) => (l.local_id === local_id ? { ...l, [field]: value } : l)))
+  }
+
+  const handleItemSelect = (local_id: string, itemId: string) => {
+    const item = items.find(i => i.id === itemId)
+    if (item) {
+      updateLine(local_id, "item_id", itemId)
+      updateLine(local_id, "description", (item.reference ? `[${item.reference}] ` : "") + item.name)
+      updateLine(local_id, "unit_price_ht", item.sale_price || 0)
+    }
   }
 
   const handleSave = async () => {
@@ -149,9 +178,9 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
     }
 
     const linesPayload = lines.map((line) => {
-      const quantity = line.quantity || 0
-      const unit_price_ht = line.unit_price_ht || 0
-      const remise_percentage = line.remise_percentage || 0
+      const quantity = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity;
+      const unit_price_ht = typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht;
+      const remise_percentage = typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage;
 
       const line_total_ht = quantity * unit_price_ht * (1 - remise_percentage / 100)
 
@@ -271,9 +300,9 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
+              <PopoverContent className="w-[300px] p-0">
                 <Command>
-                  <CommandInput />
+                  <CommandInput placeholder="Rechercher client..." />
                   <CommandList>
                     <CommandEmpty>Aucun client.</CommandEmpty>
                     <CommandGroup>
@@ -356,54 +385,66 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
         </div>
 
         <div className="space-y-2 mt-2">
-          {lines.map((line) => (
+          {lines.map((line, index) => (
             <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
               <div className="col-span-4">
-                <Input
-                  placeholder="Description de l'article ou service"
-                  value={line.description}
-                  onChange={(e) => updateLine(line.local_id, { description: e.target.value })}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal truncate">
+                      {line.description || <span className="text-muted-foreground">Sélectionner ou saisir...</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Chercher un article..."
+                        onValueChange={(val) => updateLine(line.local_id, "description", val)}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          <Button variant="ghost" className="w-full justify-start" onClick={() => updateLine(line.local_id, "description", document.querySelector('[cmdk-input]')?.getAttribute('value') || "Nouvel article")}>
+                            Utiliser comme description libre
+                          </Button>
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {items.slice(0, 50).map(item => (
+                            <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
+                              <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
+                              {item.name} {item.reference && <span className="text-xs text-muted-foreground ml-2">({item.reference})</span>}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="col-span-1">
                 <Input
-                  type="text"
-                  placeholder="1"
-                  defaultValue={line.quantity}
-                  onBlur={(e) => {
-                    const value = e.target.value.replace(",", ".")
-                    updateLine(line.local_id, { quantity: Number.parseFloat(value) || 0 })
-                  }}
+                  value={line.quantity}
+                  onChange={(e) => updateLine(line.local_id, "quantity", e.target.value)}
+                  className="text-right"
                 />
               </div>
               <div className="col-span-2">
                 <Input
-                  type="text"
-                  placeholder="0.000"
-                  defaultValue={line.unit_price_ht}
-                  onBlur={(e) => {
-                    const value = e.target.value.replace(",", ".")
-                    updateLine(line.local_id, { unit_price_ht: Number.parseFloat(value) || 0 })
-                  }}
+                  value={line.unit_price_ht}
+                  onChange={(e) => updateLine(line.local_id, "unit_price_ht", e.target.value)}
+                  className="text-right"
                 />
               </div>
               {showRemise && (
                 <div className="col-span-2">
                   <Input
-                    type="text"
-                    placeholder="0"
-                    defaultValue={line.remise_percentage}
-                    onBlur={(e) => {
-                      const value = e.target.value.replace(",", ".")
-                      updateLine(line.local_id, { remise_percentage: Number.parseFloat(value) || 0 })
-                    }}
+                    value={line.remise_percentage}
+                    onChange={(e) => updateLine(line.local_id, "remise_percentage", e.target.value)}
+                    className="text-right"
                   />
                 </div>
               )}
               <div className={cn("col-span-2", !showRemise && "col-span-4")}>
                 <Select
                   value={String(line.tva_rate)}
-                  onValueChange={(v) => updateLine(line.local_id, { tva_rate: Number.parseFloat(v) })}
+                  onValueChange={(v) => updateLine(line.local_id, "tva_rate", Number.parseFloat(v))}
                 >
                   <SelectTrigger>
                     <SelectValue />

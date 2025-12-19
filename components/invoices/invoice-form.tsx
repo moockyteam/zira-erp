@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
 import {
   PlusCircle,
   Trash2,
@@ -24,6 +25,7 @@ import {
   Package,
   Receipt,
   CreditCard,
+  Save,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -61,9 +63,12 @@ export function InvoiceForm({
   const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
   const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
   const [currency, setCurrency] = useState(initialData?.currency || quoteInitialData?.currency || "TND")
+
+  // Refactor: lines use string | number for controlled inputs
   const [lines, setLines] = useState<any[]>(
     initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
   )
+
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
   const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? true)
   const [hasWithholdingTax, setHasWithholdingTax] = useState(initialData?.has_withholding_tax ?? false)
@@ -102,14 +107,22 @@ export function InvoiceForm({
   const currencySymbol = useMemo(() => CURRENCIES.find((c) => c.code === currency)?.symbol || currency, [currency])
 
   const totals = useMemo(() => {
-    const total_ht_net = lines.reduce(
-      (sum, line) => sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
+    // Calcul sécurisé avec conversion
+    const safeLines = lines.map(l => ({
+      ...l,
+      quantity: typeof l.quantity === 'string' ? parseFloat(l.quantity.replace(',', '.')) || 0 : l.quantity || 0,
+      unit_price_ht: typeof l.unit_price_ht === 'string' ? parseFloat(l.unit_price_ht.replace(',', '.')) || 0 : l.unit_price_ht || 0,
+      remise_percentage: typeof l.remise_percentage === 'string' ? parseFloat(l.remise_percentage.replace(',', '.')) || 0 : l.remise_percentage || 0,
+    }))
+
+    const total_ht_net = safeLines.reduce(
+      (sum, line) => sum + line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100),
       0,
     )
     const total_fodec = isFodecApplicable ? total_ht_net * FODEC_RATE : 0
     const base_tva = total_ht_net + total_fodec
-    const total_tva = lines.reduce((sum, line) => {
-      const line_ht = (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+    const total_tva = safeLines.reduce((sum, line) => {
+      const line_ht = line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100)
       const line_fodec = isFodecApplicable ? line_ht * FODEC_RATE : 0
       return sum + (line_ht + line_fodec) * ((line.tva_rate || 0) / 100)
     }, 0)
@@ -119,11 +132,11 @@ export function InvoiceForm({
     const net_to_pay = total_ttc - withholding_tax_amount
 
     const tva_details = TVA_RATES.map((rate) => {
-      const base = lines
+      const base = safeLines
         .filter((line) => line.tva_rate === rate)
         .reduce(
           (sum, line) =>
-            sum + (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100),
+            sum + line.quantity * line.unit_price_ht * (1 - line.remise_percentage / 100),
           0,
         )
       const base_with_fodec_share = base + (isFodecApplicable ? base * FODEC_RATE : 0)
@@ -157,6 +170,7 @@ export function InvoiceForm({
       },
     ])
   const removeLine = (local_id: string) => setLines(lines.filter((l) => l.local_id !== local_id))
+
   const updateLine = (local_id: string, updatedValues: any) => {
     setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
   }
@@ -224,9 +238,9 @@ export function InvoiceForm({
           invoice_id: newInvoice.id,
           item_id: line.item_id,
           description: line.description,
-          quantity: line.quantity,
-          unit_price_ht: line.unit_price_ht,
-          remise_percentage: line.remise_percentage,
+          quantity: typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity,
+          unit_price_ht: typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht,
+          remise_percentage: typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage,
           tva_rate: line.tva_rate,
         }))
 
@@ -249,9 +263,9 @@ export function InvoiceForm({
             invoice_id: initialData.id,
             item_id: line.item_id,
             description: line.description,
-            quantity: line.quantity,
-            unit_price_ht: line.unit_price_ht,
-            remise_percentage: line.remise_percentage,
+            quantity: typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity,
+            unit_price_ht: typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht,
+            remise_percentage: typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage,
             tva_rate: line.tva_rate,
           }))
           const { error: linesInsertError } = await supabase.from("invoice_lines").insert(linesPayload)
@@ -270,7 +284,7 @@ export function InvoiceForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <Card className="border-l-4 border-l-indigo-500 shadow-lg">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
           <div className="flex items-center gap-3">
@@ -442,9 +456,12 @@ export function InvoiceForm({
               </TableHeader>
               <TableBody>
                 {lines.map((line) => {
-                  const unitPriceTTC = (line.unit_price_ht || 0) * (1 + (line.tva_rate || 0) / 100)
-                  const lineTotalHT =
-                    (line.quantity || 0) * (line.unit_price_ht || 0) * (1 - (line.remise_percentage || 0) / 100)
+                  const qty = typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity || 0;
+                  const price = typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht || 0;
+                  const remise = typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage || 0;
+
+                  const unitPriceTTC = price * (1 + (line.tva_rate || 0) / 100)
+                  const lineTotalHT = qty * price * (1 - remise / 100)
 
                   return (
                     <TableRow
@@ -452,63 +469,47 @@ export function InvoiceForm({
                       className="group hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors"
                     >
                       <TableCell className="align-top">
-                        <Command>
-                          <CommandInput
-                            placeholder="Saisir ou rechercher un article..."
-                            value={line.description}
-                            onValueChange={(value) => updateLine(line.local_id, { description: value })}
-                            className="border-2 rounded-md focus:border-emerald-500 transition-colors"
-                          />
-                          <CommandList>
-                            <CommandEmpty>Aucun article trouvé.</CommandEmpty>
-                            <CommandGroup>
-                              {items
-                                .filter(
-                                  (item) =>
-                                    item.name.toLowerCase().includes(line.description.toLowerCase()) ||
-                                    (item.reference &&
-                                      item.reference.toLowerCase().includes(line.description.toLowerCase())),
-                                )
-                                .slice(0, 5)
-                                .map((item) => (
-                                  <CommandItem key={item.id} onSelect={() => handleItemSelect(line.local_id, item.id)}>
-                                    {item.name}{" "}
-                                    <span className="text-xs text-muted-foreground ml-2">
-                                      (Stock: {item.quantity_on_hand})
-                                    </span>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal truncate border-2">
+                              {line.description || <span className="text-muted-foreground">Sélectionner ou saisir...</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Chercher un article..."
+                                onValueChange={(val) => updateLine(line.local_id, { description: val })}
+                              />
+                              <CommandList>
+                                <CommandEmpty>
+                                  <Button variant="ghost" className="w-full justify-start" onClick={() => updateLine(line.local_id, { description: document.querySelector('[cmdk-input]')?.getAttribute('value') || "Nouvel article" })}>
+                                    Utiliser comme description libre
+                                  </Button>
+                                </CommandEmpty>
+                                <CommandGroup>
+                                  {items.slice(0, 50).map(item => (
+                                    <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
+                                      <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
+                                      {item.name} {item.reference && <span className="text-xs text-muted-foreground ml-2">({item.reference})</span>}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </TableCell>
                       <TableCell className="align-top">
                         <Input
-                          type="text"
-                          inputMode="decimal"
-                          defaultValue={line.quantity}
-                          onBlur={(e) => {
-                            const value = e.target.value.replace(",", ".")
-                            const numValue = Number.parseFloat(value)
-                            if (!isNaN(numValue)) {
-                              updateLine(line.local_id, { quantity: numValue })
-                            }
-                          }}
+                          value={line.quantity}
+                          onChange={(e) => updateLine(line.local_id, { quantity: e.target.value })}
                           className="text-right border-2"
                         />
                       </TableCell>
                       <TableCell className="align-top">
                         <Input
-                          type="text"
-                          inputMode="decimal"
-                          defaultValue={line.unit_price_ht}
-                          onBlur={(e) => {
-                            const value = e.target.value.replace(",", ".")
-                            const numValue = Number.parseFloat(value)
-                            if (!isNaN(numValue)) {
-                              updateLine(line.local_id, { unit_price_ht: numValue })
-                            }
-                          }}
+                          value={line.unit_price_ht}
+                          onChange={(e) => updateLine(line.local_id, { unit_price_ht: e.target.value })}
                           className="text-right border-2"
                         />
                       </TableCell>
@@ -516,16 +517,8 @@ export function InvoiceForm({
                       {showRemise && (
                         <TableCell className="align-top">
                           <Input
-                            type="text"
-                            inputMode="decimal"
-                            defaultValue={line.remise_percentage}
-                            onBlur={(e) => {
-                              const value = e.target.value.replace(",", ".")
-                              const numValue = Number.parseFloat(value)
-                              if (!isNaN(numValue)) {
-                                updateLine(line.local_id, { remise_percentage: numValue })
-                              }
-                            }}
+                            value={line.remise_percentage}
+                            onChange={(e) => updateLine(line.local_id, { remise_percentage: e.target.value })}
                             className="text-right border-2"
                           />
                         </TableCell>
@@ -736,6 +729,16 @@ export function InvoiceForm({
             </div>
           </div>
         </div>
+      </div>
+      {/* Actions Footer - Fixed Bottom or placed at end */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-t flex items-center justify-end gap-4 z-50 md:pl-72">
+        <Link href="/dashboard/invoices">
+          <Button variant="outline" size="lg">Annuler</Button>
+        </Link>
+        <Button size="lg" onClick={handleSave} disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
+          <Save className="mr-2 h-4 w-4" />
+          {isLoading ? "Enregistrement..." : "Enregistrer la Facture"}
+        </Button>
       </div>
     </div>
   )

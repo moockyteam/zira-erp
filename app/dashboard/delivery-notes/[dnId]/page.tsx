@@ -63,6 +63,7 @@ export default async function DnEditorPage({
     .from("items")
     .select("id, name, reference, quantity_on_hand, sale_price")
     .eq("company_id", companyIdForData)
+    .eq("is_archived", false)
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">

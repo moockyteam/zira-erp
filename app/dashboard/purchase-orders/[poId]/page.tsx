@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PurchaseOrderForm } from "@/components/purchase-orders/po-form";
 
 // MODIFIÉ: Le type de 'params' est maintenant une Promesse
-export default async function PurchaseOrderEditorPage({ params }: { params: Promise<{ poId:string }> }) {
+export default async function PurchaseOrderEditorPage({ params }: { params: Promise<{ poId: string }> }) {
   // MODIFIÉ: On utilise 'await' pour résoudre la promesse avant de déstructurer
   const { poId } = await params;
-  
+
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -31,7 +31,7 @@ export default async function PurchaseOrderEditorPage({ params }: { params: Prom
   }
 
   const { data: suppliers } = await supabase.from("suppliers").select("id, name").eq("company_id", companyIdForData);
-  const { data: items } = await supabase.from("items").select("id, name, reference").eq("company_id", companyIdForData);
+  const { data: items } = await supabase.from("items").select("id, name, reference").eq("company_id", companyIdForData).eq("is_archived", false);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">

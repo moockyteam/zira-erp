@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { CompanySelector } from "@/components/company-selector"
 import { PurchaseOrderActions } from "./po-actions"
 
@@ -87,7 +88,7 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
           </Link>
         )}
       </div>
-      
+
       <CompanySelector companies={userCompanies} selectedCompanyId={selectedCompanyId} onCompanySelect={setSelectedCompanyId} />
 
       {selectedCompanyId && (
@@ -98,7 +99,7 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
           </CardHeader>
           <CardContent>
             <div className="mb-4">
-              <Input placeholder="Rechercher par N° ou fournisseur..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+              <SearchInput placeholder="Rechercher par N° ou fournisseur..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} wrapperClassName="max-w-sm" />
             </div>
             <Table>
               <TableHeader>
@@ -123,10 +124,10 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
                       <TableCell><Badge variant={getStatusVariant(po.status)}>{po.status}</Badge></TableCell>
                       <TableCell className="text-right font-mono">{po.total_ttc.toFixed(3)} TND</TableCell>
                       <TableCell>
-                        <PurchaseOrderActions 
-                          poId={po.id} 
-                          currentStatus={po.status} 
-                          onStatusChange={handleStatusChange} 
+                        <PurchaseOrderActions
+                          poId={po.id}
+                          currentStatus={po.status}
+                          onStatusChange={handleStatusChange}
                           onActionSuccess={() => fetchPOs(selectedCompanyId!)}
                         />
                       </TableCell>
