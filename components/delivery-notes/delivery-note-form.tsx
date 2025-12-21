@@ -448,7 +448,7 @@ export function DeliveryNoteForm({
                                 </Button>
                               </CommandEmpty>
                               <CommandGroup>
-                                {items.slice(0, 50).map((item: any) => (
+                                {items.map((item: any) => (
                                   <CommandItem
                                     key={item.id}
                                     value={item.name}

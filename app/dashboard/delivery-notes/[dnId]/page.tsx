@@ -70,9 +70,8 @@ export default async function DnEditorPage({
 
   const { data: items } = await supabase
     .from("items")
-    .select("id, name, reference, quantity_on_hand, sale_price, supplier_categories!items_category_id_fkey!inner(name)")
+    .select("id, name, reference, quantity_on_hand, sale_price")
     .eq("company_id", companyIdForData)
-    .eq("supplier_categories.name", "Commerce & Distribution")
     .eq("is_archived", false)
 
   return (
