@@ -45,12 +45,14 @@ export function InvoiceForm({
   companies,
   customers,
   items,
+  confirmedQuotes,
 }: {
   initialData: any | null
   quoteInitialData?: any | null
   companies: any[]
   customers: any[]
   items: any[]
+  confirmedQuotes?: any[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -175,13 +177,50 @@ export function InvoiceForm({
     setLines(lines.map((l) => (l.local_id === local_id ? { ...l, ...updatedValues } : l)))
   }
 
-  const handleItemSelect = (local_id: string, itemId: string) => {
+  const handleItemSelect = async (local_id: string, itemId: string) => {
     const selectedItem = items.find((item) => item.id === itemId)
     if (selectedItem) {
+      let finalPrice = selectedItem.sale_price || 0
+
+      // Check for special price if customer is selected
+      if (customerId) {
+        try {
+          const { data: specialPriceData } = await supabase
+            .from("customer_items")
+            .select("special_price, special_vat_rate")
+            .eq("customer_id", customerId)
+            .or(`item_id.eq.${itemId},service_id.eq.${itemId}`)
+            .maybeSingle()
+
+          if (specialPriceData) {
+            if (specialPriceData.special_price !== null) {
+              finalPrice = specialPriceData.special_price
+              toast.info("Prix spécial appliqué")
+            }
+
+            // Determine applicable VAT: Special override -> Item default -> Fallback 19
+            const applicableVat = (specialPriceData.special_vat_rate !== null && specialPriceData.special_vat_rate !== undefined)
+              ? specialPriceData.special_vat_rate
+              : (selectedItem.vat_rate || selectedItem.tva || 19)
+
+            updateLine(local_id, {
+              item_id: itemId,
+              description: `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`,
+              unit_price_ht: finalPrice,
+              tva_rate: applicableVat
+            })
+            return
+          }
+        } catch (error) {
+          console.error("Error fetching special price:", error)
+        }
+      }
+
       updateLine(local_id, {
         item_id: itemId,
         description: `${selectedItem.reference ? `[${selectedItem.reference}] ` : ""}${selectedItem.name}`,
-        unit_price_ht: selectedItem.sale_price || 0,
+        unit_price_ht: finalPrice,
+        tva_rate: selectedItem.vat_rate || selectedItem.tva || 19
       })
     }
   }
@@ -220,6 +259,8 @@ export function InvoiceForm({
         rib: rib || null,
       }
 
+      let targetInvoiceId = initialData?.id
+
       if (isNew) {
         const { data: numberData, error: numberError } = await supabase.functions.invoke("get-next-invoice-number", {
           body: JSON.stringify({ companyId }),
@@ -234,44 +275,41 @@ export function InvoiceForm({
           .single()
         if (invoiceError) throw new Error(invoiceError.message)
 
-        const linesPayload = lines.map((line) => ({
-          invoice_id: newInvoice.id,
-          item_id: line.item_id,
-          description: line.description,
-          quantity: typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity,
-          unit_price_ht: typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht,
-          remise_percentage: typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage,
-          tva_rate: line.tva_rate,
-        }))
-
-        const { error: linesError } = await supabase.from("invoice_lines").insert(linesPayload)
-        if (linesError) throw new Error(linesError.message)
-
+        targetInvoiceId = newInvoice.id
         toast.success("Facture créée avec succès")
       } else {
         const { error: invoiceUpdateError } = await supabase
           .from("invoices")
           .update(invoicePayload)
-          .eq("id", initialData.id)
+          .eq("id", targetInvoiceId)
         if (invoiceUpdateError) throw new Error(invoiceUpdateError.message)
 
-        const { error: deleteError } = await supabase.from("invoice_lines").delete().eq("invoice_id", initialData.id)
+        // Prepare for lines update
+        const { error: deleteError } = await supabase.from("invoice_lines").delete().eq("invoice_id", targetInvoiceId)
         if (deleteError) throw new Error(deleteError.message)
 
-        if (lines.length > 0) {
-          const linesPayload = lines.map((line) => ({
-            invoice_id: initialData.id,
-            item_id: line.item_id,
+        toast.success("Facture mise à jour avec succès")
+      }
+
+      if (lines.length > 0) {
+        const payloadLines = lines.map((line) => {
+          const itemObj = items.find(i => i.id === line.item_id)
+          const isService = itemObj?.type === 'SERVICE'
+
+          return {
+            invoice_id: targetInvoiceId,
+            item_id: isService ? null : line.item_id,
+            service_id: isService ? line.item_id : null,
             description: line.description,
             quantity: typeof line.quantity === 'string' ? parseFloat(line.quantity.replace(',', '.')) || 0 : line.quantity,
             unit_price_ht: typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht.replace(',', '.')) || 0 : line.unit_price_ht,
             remise_percentage: typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage.replace(',', '.')) || 0 : line.remise_percentage,
             tva_rate: line.tva_rate,
-          }))
-          const { error: linesInsertError } = await supabase.from("invoice_lines").insert(linesPayload)
-          if (linesInsertError) throw new Error(linesInsertError.message)
-        }
-        toast.success("Facture mise à jour avec succès")
+          }
+        })
+
+        const { error: linesInsertError } = await supabase.from("invoice_lines").insert(payloadLines)
+        if (linesInsertError) throw new Error(linesInsertError.message)
       }
 
       router.push("/dashboard/invoices")

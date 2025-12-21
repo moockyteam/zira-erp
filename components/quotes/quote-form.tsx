@@ -141,11 +141,20 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
   }
 
   const handleItemSelect = (local_id: string, itemId: string) => {
-    const item = items.find(i => i.id === itemId)
+    const item = items.find((i) => i.id === itemId)
     if (item) {
-      updateLine(local_id, "item_id", itemId)
-      updateLine(local_id, "description", (item.reference ? `[${item.reference}] ` : "") + item.name)
-      updateLine(local_id, "unit_price_ht", item.sale_price || 0)
+      setLines((prevLines) =>
+        prevLines.map((l) =>
+          l.local_id === local_id
+            ? {
+              ...l,
+              item_id: itemId,
+              description: (item.reference ? `[${item.reference}] ` : "") + item.name,
+              unit_price_ht: item.sale_price || 0,
+            }
+            : l,
+        ),
+      )
     }
   }
 
@@ -184,8 +193,12 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
 
       const line_total_ht = quantity * unit_price_ht * (1 - remise_percentage / 100)
 
+      const itemObj = items.find((i) => i.id === line.item_id)
+      const isService = itemObj && 'type' in itemObj && itemObj.type === "SERVICE"
+
       return {
-        item_id: line.item_id,
+        item_id: isService ? null : line.item_id,
+        service_id: isService ? line.item_id : null,
         description: line.description,
         quantity: quantity,
         unit_price_ht: unit_price_ht,
@@ -390,13 +403,13 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
               <div className="col-span-4">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal truncate">
-                      {line.description || <span className="text-muted-foreground">Sélectionner ou saisir...</span>}
+                    <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal h-auto min-h-[40px] whitespace-normal">
+                      {line.description || <span className="text-muted-foreground">Sélectionner un article ou saisir une description...</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[400px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Chercher un article..."
+                      <CommandInput placeholder="Chercher un article ou saisir..."
                         onValueChange={(val) => updateLine(line.local_id, "description", val)}
                       />
                       <CommandList>

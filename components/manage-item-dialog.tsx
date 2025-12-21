@@ -18,8 +18,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { CategoryCreator } from "@/components/category-creator"
-import { Trash2, Save } from "lucide-react"
+import { AddCategoryDialog } from "./add-category-dialog"
+import { Trash2, Save, Package, DollarSign, Users, Info } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Separator } from "@/components/ui/separator"
 
 // Types
 export type Item = {
@@ -27,6 +29,7 @@ export type Item = {
   name: string
   reference: string | null
   category_id: string | null
+  subcategory_id: string | null
   quantity_on_hand: number
   unit_of_measure: string | null
   default_purchase_price: number | null
@@ -35,7 +38,7 @@ export type Item = {
   alert_quantity: number
   is_archived: boolean
 }
-type Category = { id: string; name: string }
+type Category = { id: string; name: string; parent_id: string | null }
 type Supplier = { id: string; name: string }
 type ItemSupplier = {
   id: string
@@ -58,6 +61,7 @@ const initialFormData = {
   reference: "",
   description: "",
   category_id: null as string | null,
+  subcategory_id: null as string | null,
   unit_of_measure: "",
   default_purchase_price: "",
   sale_price: "",
@@ -97,6 +101,7 @@ export function ManageItemDialog({
         reference: currentItem.reference || "",
         description: currentItem.description || "",
         category_id: currentItem.category_id,
+        subcategory_id: currentItem.subcategory_id || null,
         unit_of_measure: currentItem.unit_of_measure || "",
         default_purchase_price: currentItem.default_purchase_price?.toString() || "",
         sale_price: currentItem.sale_price?.toString() || "",
@@ -113,7 +118,7 @@ export function ManageItemDialog({
     await Promise.all([fetchCategories(), fetchSuppliers()])
   }
   const fetchCategories = async () => {
-    const { data } = await supabase.from("item_categories").select("id, name").eq("company_id", companyId).order("name")
+    const { data } = await supabase.from("supplier_categories").select("id, name, parent_id").order("name")
     if (data) setCategories(data)
   }
   const fetchSuppliers = async () => {
@@ -210,147 +215,229 @@ export function ManageItemDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{isCreateMode ? "Étape 1: Créer l'article" : `Gérer : ${currentItem?.name}`}</DialogTitle>
-          {isCreateMode && (
-            <DialogDescription>Après la sauvegarde, vous pourrez associer les fournisseurs.</DialogDescription>
-          )}
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            {isCreateMode ? "Nouvel Article" : `Gérer : ${currentItem?.name}`}
+          </DialogTitle>
+          <DialogDescription>
+            {isCreateMode
+              ? "Configurez les informations de base de l'article. Les fournisseurs pourront être ajoutés après la création."
+              : "Modifiez les détails de l'article, gérez les stocks et les fournisseurs associés."}
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <Label>Nom *</Label>
-                <Input value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Référence (SKU)</Label>
-                <Input
-                  value={formData.reference}
-                  onChange={(e) => setFormData((p) => ({ ...p, reference: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Catégorie</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.category_id || ""}
-                    onValueChange={(v) => setFormData((p) => ({ ...p, category_id: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <CategoryCreator
-                    companyId={companyId}
-                    onCategoryCreated={fetchCategories}
-                    tableName="item_categories"
+        <div className="flex-1 overflow-y-auto px-1">
+          <Tabs defaultValue="info" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-4">
+              <TabsTrigger value="info">
+                <Info className="h-4 w-4 mr-2" /> Informations
+              </TabsTrigger>
+              <TabsTrigger value="prices">
+                <DollarSign className="h-4 w-4 mr-2" /> Prix & Stock
+              </TabsTrigger>
+              <TabsTrigger value="suppliers" disabled={isCreateMode}>
+                <Users className="h-4 w-4 mr-2" /> Fournisseurs
+                {isCreateMode && <span className="ml-2 text-xs opacity-50">(Sauvegarder d'abord)</span>}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* TAB 1: INFORMATIONS */}
+            <TabsContent value="info" className="space-y-4">
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nom de l'article *</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Ex: Ordinateur Portable"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Référence (SKU)</Label>
+                    <Input
+                      value={formData.reference}
+                      onChange={(e) => setFormData((p) => ({ ...p, reference: e.target.value }))}
+                      placeholder="Ex: REF-001"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Catégorisation</Label>
+                    <AddCategoryDialog
+                      companyId={companyId}
+                      parentCategories={categories.filter(c => !c.parent_id)}
+                      onCategoryAdded={fetchCategories}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground uppercase">Catégorie Principale</Label>
+                      <Select
+                        value={formData.category_id || ""}
+                        onValueChange={(v) => setFormData((p) => ({ ...p, category_id: v, subcategory_id: null }))}
+                      >
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Choisir une catégorie..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.filter(c => !c.parent_id).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground uppercase">Sous-catégorie</Label>
+                      <Select
+                        value={formData.subcategory_id || ""}
+                        onValueChange={(v) => setFormData((p) => ({ ...p, subcategory_id: v }))}
+                        disabled={!formData.category_id}
+                      >
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Choisir une sous-catégorie..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {formData.category_id && categories.filter(c => c.parent_id === formData.category_id).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description || ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
+                    placeholder="Détails techniques, notes..."
+                    rows={4}
                   />
                 </div>
               </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description || ""}
-                  onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <Label>Prix d'achat par défaut (HT)</Label>
-                <Input
-                  type="text"
-                  defaultValue={formData.default_purchase_price}
-                  onBlur={(e) =>
-                    setFormData((p) => ({ ...p, default_purchase_price: e.target.value.replace(",", ".") }))
-                  }
-                />
-              </div>
-              <div>
-                <Label>Prix de vente (HT)</Label>
-                <Input
-                  type="text"
-                  defaultValue={formData.sale_price}
-                  onBlur={(e) => setFormData((p) => ({ ...p, sale_price: e.target.value.replace(",", ".") }))}
-                />
-              </div>
-              <div>
-                <Label>Unité de mesure</Label>
-                <Input
-                  placeholder="pièce, kg, litre..."
-                  value={formData.unit_of_measure}
-                  onChange={(e) => setFormData((p) => ({ ...p, unit_of_measure: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Seuil d'alerte stock</Label>
-                <Input
-                  type="text"
-                  defaultValue={formData.alert_quantity}
-                  onBlur={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
-                />
-              </div>
-            </div>
-          </div>
+            </TabsContent>
 
-          {!isCreateMode && (
-            <div className="pt-4 border-t">
-              <h3 className="font-semibold mb-2">Fournisseurs Associés</h3>
-              <div className="space-y-3">
-                {itemSuppliers.map((is) => (
-                  <div key={is.id} className="grid grid-cols-12 gap-2 items-center p-2 bg-muted rounded-md">
-                    <span className="col-span-4 font-medium">{is.suppliers.name}</span>
-                    <div className="col-span-3">
+            {/* TAB 2: PRIX & STOCK */}
+            <TabsContent value="prices" className="space-y-4">
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Prix d'achat par défaut (HT)</Label>
+                    <div className="relative">
                       <Input
                         type="text"
-                        placeholder="Prix d'achat"
-                        defaultValue={is.last_purchase_price || ""}
-                        onBlur={(e) =>
-                          updateItemSupplier(is.id, e.target.value.replace(",", "."), is.supplier_item_reference || "")
-                        }
+                        defaultValue={formData.default_purchase_price}
+                        onBlur={(e) => setFormData((p) => ({ ...p, default_purchase_price: e.target.value.replace(",", ".") }))}
+                        className="pl-8"
                       />
-                    </div>
-                    <div className="col-span-4">
-                      <Input
-                        placeholder="Réf. fournisseur"
-                        defaultValue={is.supplier_item_reference || ""}
-                        onBlur={(e) =>
-                          updateItemSupplier(is.id, is.last_purchase_price?.toString() || "", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                      <Button variant="ghost" size="icon" onClick={() => removeSupplierLink(is.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+                      <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">$</span>
                     </div>
                   </div>
-                ))}
+                  {categories.find((c) => c.id === formData.category_id)?.name === "Commerce & Distribution" && (
+                    <div className="space-y-2">
+                      <Label>Prix de vente (HT)</Label>
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          defaultValue={formData.sale_price}
+                          onBlur={(e) => setFormData((p) => ({ ...p, sale_price: e.target.value.replace(",", ".") }))}
+                          className="pl-8"
+                        />
+                        <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">$</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Unité de mesure</Label>
+                    <Input
+                      placeholder="ex: pièce, kg, mètre..."
+                      value={formData.unit_of_measure}
+                      onChange={(e) => setFormData((p) => ({ ...p, unit_of_measure: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Seuil d'alerte (Stock faible)</Label>
+                    <Input
+                      type="number"
+                      defaultValue={formData.alert_quantity}
+                      onBlur={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
+                    />
+                    <p className="text-xs text-muted-foreground">Vous serez notifié si le stock descend sous cette valeur.</p>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-2 mt-3">
-                <Select onValueChange={addSupplierLink} value="">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Associer un nouveau fournisseur..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSuppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            </TabsContent>
+
+            {/* TAB 3: SUPPLIERS */}
+            <TabsContent value="suppliers" className="space-y-4">
+              <div className="py-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium">Fournisseurs référencés pour cet article</h4>
+                  <div className="w-[300px]">
+                    <Select onValueChange={addSupplierLink} value="">
+                      <SelectTrigger>
+                        <SelectValue placeholder="+ Associer un fournisseur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableSuppliers.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="border rounded-md divide-y">
+                  {itemSuppliers.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                      Aucun fournisseur associé. Ajoutez-en un pour gérer les prix d'achat spécifiques.
+                    </div>
+                  ) : itemSuppliers.map((is) => (
+                    <div key={is.id} className="grid grid-cols-12 gap-4 p-4 items-center">
+                      <div className="col-span-4 font-medium flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                          {is.suppliers.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        {is.suppliers.name}
+                      </div>
+                      <div className="col-span-3">
+                        <Label className="text-xs text-muted-foreground">Prix Achat</Label>
+                        <Input
+                          className="h-8 mt-1"
+                          placeholder="Prix..."
+                          defaultValue={is.last_purchase_price || ""}
+                          onBlur={(e) => updateItemSupplier(is.id, e.target.value.replace(",", "."), is.supplier_item_reference || "")}
+                        />
+                      </div>
+                      <div className="col-span-4">
+                        <Label className="text-xs text-muted-foreground">Réf. chez fournisseur</Label>
+                        <Input
+                          className="h-8 mt-1"
+                          placeholder="Réf..."
+                          defaultValue={is.supplier_item_reference || ""}
+                          onBlur={(e) => updateItemSupplier(is.id, is.last_purchase_price?.toString() || "", e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <Button variant="ghost" size="icon" onClick={() => removeSupplierLink(is.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            </TabsContent>
+          </Tabs>
         </div>
         <DialogFooter className="justify-between pt-4 border-t">
           {!isCreateMode ? (

@@ -11,12 +11,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+interface Category {
+  id: string
+  name: string
+  parent_id: string | null
+}
+
 interface SupplierImportDialogProps {
   companyId: string;
   onImportSuccess: () => void;
+  categories: Category[];
 }
 
-export function SupplierImportDialog({ companyId, onImportSuccess }: SupplierImportDialogProps) {
+export function SupplierImportDialog({ companyId, onImportSuccess, categories }: SupplierImportDialogProps) {
   const supabase = createClient()
   const [file, setFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
@@ -50,20 +57,42 @@ export function SupplierImportDialog({ companyId, onImportSuccess }: SupplierImp
           return
         }
 
-        const suppliersToInsert = json.map(row => ({
-          company_id: companyId,
-          name: row["Nom"],
-          matricule_fiscal: row["Matricule Fiscal"],
-          contact_person: row["Contact"],
-          email: row["Email"],
-          phone_number: row["Téléphone"],
-          address: row["Adresse"],
-          city: row["Ville"],
-          country: row["Pays"],
-          iban: row["IBAN"],
-          notes: row["Notes"],
-          balance: parseFloat(row["Solde"]) || 0,
-        }))
+        const suppliersToInsert = json.map(row => {
+          // Attempt to match category and sub-category names to IDs
+          const catName = row["Catégorie"]
+          const subCatName = row["Sous-catégorie"]
+
+          let categoryId = null
+          let subCategoryId = null
+
+          if (catName) {
+            const cat = categories.find(c => c.name.toLowerCase() === String(catName).toLowerCase() && !c.parent_id)
+            if (cat) {
+              categoryId = cat.id
+              if (subCatName) {
+                const sub = categories.find(c => c.name.toLowerCase() === String(subCatName).toLowerCase() && c.parent_id === cat.id)
+                if (sub) subCategoryId = sub.id
+              }
+            }
+          }
+
+          return {
+            company_id: companyId,
+            name: row["Nom"],
+            matricule_fiscal: row["Matricule Fiscal"],
+            contact_person: row["Contact"],
+            email: row["Email"],
+            phone_number: row["Téléphone"],
+            address: row["Adresse"],
+            city: row["Ville"],
+            country: row["Pays"],
+            iban: row["IBAN"],
+            notes: row["Notes"],
+            balance: parseFloat(row["Solde"]) || 0,
+            category_id: categoryId,
+            subcategory_id: subCategoryId,
+          }
+        })
 
         const { error } = await supabase.from("suppliers").insert(suppliersToInsert)
 
@@ -92,7 +121,8 @@ export function SupplierImportDialog({ companyId, onImportSuccess }: SupplierImp
         <DialogHeader>
           <DialogTitle>Importer des Fournisseurs</DialogTitle>
           <DialogDescription>
-            Sélectionnez un fichier Excel (.xlsx) avec les colonnes : Nom, Matricule Fiscal, Contact, Email, Téléphone, Adresse, Ville, Pays, IBAN, Notes, Solde.
+            Format attendu : Excel (.xlsx).
+            Colonnes : Nom, Catégorie, Sous-catégorie, Matricule Fiscal...
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">

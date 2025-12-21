@@ -7,7 +7,9 @@ import { useEffect, useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 import Image from "next/image"
-import { toast } from "sonner" // NOUVEAU: Importation pour les notifications
+import { toast } from "sonner"
+import { Store, Wrench, Factory, Pickaxe, Building2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 // NOUVEAU: Importations depuis shadcn/ui pour la modale (Dialog), les skeletons, etc.
 import {
@@ -41,6 +43,7 @@ type Company = {
   delegation_id: number | null
   is_fully_exporting: boolean | null
   is_subject_to_fodec: boolean | null
+  activity: "commercial" | "service" | "industriel" | "extractive" | null
 }
 type Governorate = { id: number; name: string }
 type Delegation = { id: number; name: string; governorate_id: number }
@@ -54,7 +57,15 @@ const initialFormData = {
   address: "",
   is_fully_exporting: false,
   is_subject_to_fodec: false,
+  activity: "",
 }
+
+const ACTIVITIES = [
+  { id: "commercial", label: "Commerciale", icon: Store, description: "Commerce et distribution" },
+  { id: "service", label: "Service", icon: Wrench, description: "Prestations de services" },
+  { id: "industriel", label: "Industrielle", icon: Factory, description: "Production et fabrication" },
+  { id: "extractive", label: "Extractive", icon: Pickaxe, description: "Mines et carrières" },
+] as const
 
 export function CompanyManager() {
   const supabase = createClient()
@@ -67,7 +78,7 @@ export function CompanyManager() {
   const [selectedGov, setSelectedGov] = useState<string>("")
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
-  
+
   // NOUVEAU: États pour gérer l'UX
   const [isFormOpen, setIsFormOpen] = useState(false) // Gère l'ouverture de la modale
   const [isInitialLoading, setIsInitialLoading] = useState(true) // Gère le skeleton loader initial
@@ -162,6 +173,7 @@ export function CompanyManager() {
       address: company.address || "",
       is_fully_exporting: company.is_fully_exporting || false,
       is_subject_to_fodec: company.is_subject_to_fodec || false,
+      activity: company.activity || "",
     })
     if (company.governorate_id) {
       const govIdStr = String(company.governorate_id)
@@ -208,17 +220,18 @@ export function CompanyManager() {
     }
 
     const companyData = {
-        name: formData.name,
-        manager_name: formData.manager_name,
-        matricule_fiscal: formData.matricule_fiscal,
-        email: formData.email,
-        phone_number: formData.phone_number,
-        address: formData.address,
-        governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
-        delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
-        logo_url: logoPublicUrl,
-        is_fully_exporting: formData.is_fully_exporting,
-        is_subject_to_fodec: formData.is_subject_to_fodec,
+      name: formData.name,
+      manager_name: formData.manager_name,
+      matricule_fiscal: formData.matricule_fiscal,
+      email: formData.email,
+      phone_number: formData.phone_number,
+      address: formData.address,
+      governorate_id: selectedGov ? Number.parseInt(selectedGov) : null,
+      delegation_id: selectedDel ? Number.parseInt(selectedDel) : null,
+      logo_url: logoPublicUrl,
+      is_fully_exporting: formData.is_fully_exporting,
+      is_subject_to_fodec: formData.is_subject_to_fodec,
+      activity: formData.activity || null,
     }
 
     if (editingCompany) {
@@ -319,87 +332,209 @@ export function CompanyManager() {
 
       {/* NOUVEAU: Le formulaire est maintenant dans une modale (Dialog) */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingCompany ? `Modifier : ${editingCompany.name}` : "Ajouter une nouvelle entreprise"}</DialogTitle>
-            <DialogDescription>{editingCompany ? "Modifiez les informations ci-dessous." : "Remplissez les informations de votre entreprise."}</DialogDescription>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="px-1">
+            <DialogTitle className="text-2xl font-semibold flex items-center gap-2">
+              {editingCompany ? (
+                <>
+                  <Building2 className="h-6 w-6 text-primary" />
+                  Modifier l'entreprise
+                </>
+              ) : (
+                <>
+                  <Building2 className="h-6 w-6 text-primary" />
+                  Nouvelle entreprise
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-base text-muted-foreground/80">
+              {editingCompany
+                ? "Mettez à jour les informations de votre structure ci-dessous."
+                : "Configurez les détails essentiels de votre nouvelle structure."}
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-            {/* Colonne 1 */}
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nom de l'entreprise *</Label>
-                <Input id="name" value={formData.name} onChange={handleInputChange} required />
-              </div>
-              <div>
-                <Label htmlFor="manager_name">Nom du gérant</Label>
-                <Input id="manager_name" value={formData.manager_name} onChange={handleInputChange} />
-              </div>
-              <div>
-                <Label htmlFor="matricule_fiscal">Matricule Fiscal</Label>
-                <Input id="matricule_fiscal" value={formData.matricule_fiscal} onChange={handleInputChange} />
-              </div>
-              <div>
-                <Label htmlFor="email">Adresse Email</Label>
-                <Input id="email" type="email" value={formData.email} onChange={handleInputChange} />
-              </div>
-            </div>
 
-            {/* Colonne 2 */}
-            <div className="space-y-4">
-               <div>
-                <Label htmlFor="phone_number">Numéro de téléphone</Label>
-                <Input id="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} />
-              </div>
-              <div>
-                <Label htmlFor="address">Adresse</Label>
-                <Input id="address" value={formData.address} onChange={handleInputChange} />
-              </div>
-              <div>
-                <Label>Gouvernorat</Label>
-                <Select value={selectedGov} onValueChange={handleGovChange}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionnez un gouvernorat" /></SelectTrigger>
-                  <SelectContent>
-                    {governorates.map((gov) => (<SelectItem key={gov.id} value={String(gov.id)}>{gov.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Délégation</Label>
-                <Select value={selectedDel} onValueChange={setSelectedDel} disabled={!selectedGov}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionnez une délégation" /></SelectTrigger>
-                  <SelectContent>
-                    {filteredDelegations.map((del) => (<SelectItem key={del.id} value={String(del.id)}>{del.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-8 py-4">
 
-            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-2">
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <Label htmlFor="is_fully_exporting" className="flex flex-col space-y-1"><span>Société totalement exportatrice ?</span></Label>
-                <Switch id="is_fully_exporting" checked={formData.is_fully_exporting} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))} />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <Label htmlFor="is_subject_to_fodec" className="flex flex-col space-y-1"><span>Société soumise au Fodec ?</span></Label>
-                 <Switch id="is_subject_to_fodec" checked={formData.is_subject_to_fodec} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))} />
-              </div>
-               <div className="sm:col-span-2">
-                <Label htmlFor="logo">Logo de l'entreprise</Label>
-                <div className="flex items-center gap-4">
-                  {logoPreview && <Image src={logoPreview} alt="Aperçu" width={60} height={60} className="rounded-md object-contain bg-muted" />}
-                  <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" className="flex-1" />
+            {/* SECTION 1: Informations Générales */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium flex items-center gap-2 border-b pb-2">
+                Informations Générales
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium">Nom de l'entreprise *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="Ex: Ma Société SARL"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manager_name">Nom du gérant</Label>
+                  <Input
+                    id="manager_name"
+                    value={formData.manager_name}
+                    onChange={handleInputChange}
+                    placeholder="Nom complet du gérant"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="matricule_fiscal">Matricule Fiscal</Label>
+                  <Input
+                    id="matricule_fiscal"
+                    value={formData.matricule_fiscal}
+                    onChange={handleInputChange}
+                    placeholder="1234567/A/M/000"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Adresse Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    placeholder="contact@entreprise.com"
+                    className="h-10"
+                  />
                 </div>
               </div>
             </div>
-            {error && <p className="md:col-span-2 text-sm text-destructive">{error}</p>}
-            <DialogFooter className="md:col-span-2 mt-4">
-                <Button type="button" variant="ghost" onClick={resetFormAndClose} disabled={isSubmitting}>
-                  Annuler
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Sauvegarde..." : editingCompany ? "Mettre à jour" : "Ajouter l'entreprise"}
-                </Button>
+
+            {/* SECTION 2: Secteur d'activité */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium flex items-center gap-2 border-b pb-2">
+                Secteur d'Activité
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {ACTIVITIES.map((act) => {
+                  const isSelected = formData.activity === act.id
+                  const Icon = act.icon
+                  return (
+                    <div
+                      key={act.id}
+                      onClick={() => setFormData(prev => ({ ...prev, activity: act.id }))}
+                      className={cn(
+                        "cursor-pointer relative overflow-hidden rounded-xl border-2 p-4 transition-all duration-200 hover:shadow-md",
+                        isSelected
+                          ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
+                          : "border-muted hover:border-primary/50 hover:bg-muted/30"
+                      )}
+                    >
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <div className={cn(
+                          "p-3 rounded-full transition-colors",
+                          isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        )}>
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className={cn("font-semibold leading-none", isSelected ? "text-primary" : "text-foreground")}>
+                            {act.label}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{act.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 3: Coordonnées & Localisation */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium flex items-center gap-2 border-b pb-2">
+                Coordonnées & Localisation
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="phone_number">Numéro de téléphone</Label>
+                  <Input id="phone_number" type="tel" value={formData.phone_number} onChange={handleInputChange} placeholder="+216 00 000 000" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Adresse</Label>
+                  <Input id="address" value={formData.address} onChange={handleInputChange} placeholder="Rue, Ville, Code Postal" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Gouvernorat</Label>
+                  <Select value={selectedGov} onValueChange={handleGovChange}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
+                    <SelectContent>
+                      {governorates.map((gov) => (<SelectItem key={gov.id} value={String(gov.id)}>{gov.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Délégation</Label>
+                  <Select value={selectedDel} onValueChange={setSelectedDel} disabled={!selectedGov}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
+                    <SelectContent>
+                      {filteredDelegations.map((del) => (<SelectItem key={del.id} value={String(del.id)}>{del.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 4: Paramètres & Logo */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium flex items-center gap-2 border-b pb-2">
+                Paramètres & Logo
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/10">
+                    <Label htmlFor="is_fully_exporting" className="flex flex-col space-y-1 cursor-pointer">
+                      <span className="font-medium">Totalement exportatrice</span>
+                      <span className="font-normal text-xs text-muted-foreground">Exonération de TVA pour les achats locaux</span>
+                    </Label>
+                    <Switch id="is_fully_exporting" checked={formData.is_fully_exporting} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fully_exporting: checked }))} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/10">
+                    <Label htmlFor="is_subject_to_fodec" className="flex flex-col space-y-1 cursor-pointer">
+                      <span className="font-medium">Soumise au FODEC</span>
+                      <span className="font-normal text-xs text-muted-foreground">Appliquer la taxe FODEC de 1%</span>
+                    </Label>
+                    <Switch id="is_subject_to_fodec" checked={formData.is_subject_to_fodec} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_subject_to_fodec: checked }))} />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="logo" className="block text-sm font-medium">Logo de l'entreprise</Label>
+                  <div className="flex items-start gap-4">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted flex items-center justify-center">
+                      {logoPreview ? (
+                        <Image src={logoPreview} alt="Aperçu" fill className="object-contain p-1" />
+                      ) : (
+                        <Building2 className="h-10 w-10 text-muted-foreground/30" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <Input id="logo" type="file" onChange={handleLogoChange} accept="image/png, image/jpeg" className="cursor-pointer file:cursor-pointer" />
+                      <p className="text-xs text-muted-foreground">Format: PNG, JPG. Max 5MB.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {error && <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm border border-red-200">{error}</div>}
+
+            <DialogFooter className="pt-4 border-t sticky bottom-0 bg-background pb-0 z-10 gap-2">
+              <Button type="button" variant="outline" onClick={resetFormAndClose} disabled={isSubmitting} className="h-11">
+                Annuler
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="min-w-[150px] h-11">
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2"><div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" /> Sauvegarde...</span>
+                ) : editingCompany ? "Enregistrer les modifications" : "Ajouter l'entreprise"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

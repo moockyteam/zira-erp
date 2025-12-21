@@ -75,6 +75,8 @@ export function DeliveryNoteForm({
   const [iban, setIban] = useState(initialData?.iban || "")
   const [bicSwift, setBicSwift] = useState(initialData?.bic_swift || "")
   const [rib, setRib] = useState(initialData?.rib || "")
+  // Removed managerName state as it comes from company profile now
+  const [showManagerName, setShowManagerName] = useState(initialData?.show_manager_name ?? false)
 
   const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
 
@@ -187,6 +189,8 @@ export function DeliveryNoteForm({
       iban: iban || null,
       bic_swift: bicSwift || null,
       rib: rib || null,
+      // manager_name is now fetched from company profile
+      show_manager_name: showManagerName,
     }
 
     if (isNew) {
@@ -345,6 +349,17 @@ export function DeliveryNoteForm({
           <div className="md:col-span-2">
             <Label>Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <div className="md:col-span-2 mt-4 p-4 border rounded-md bg-muted/20">
+            <div className="flex items-center space-x-3">
+              <Switch id="show-manager" checked={showManagerName} onCheckedChange={setShowManagerName} />
+              <div className="space-y-0.5">
+                <Label htmlFor="show-manager" className="text-base">Afficher le nom du gérant</Label>
+                <p className="text-xs text-muted-foreground">
+                  Si activé, le nom du gérant défini dans les paramètres de l'entreprise sera affiché sur le BL.
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

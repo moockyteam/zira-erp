@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,14 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Avoid hydration mismatch by rendering only on client
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  if (!isMounted) return <Button variant="outline"><UploadCloud className="h-4 w-4 mr-2" /> Importer</Button>
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -44,15 +52,15 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
       setSuccessMessage(null)
     }
   }
-  
+
   // <-- NOUVEAU: Fonction pour générer et télécharger le modèle Excel
   const downloadTemplate = () => {
     const headers = [
-        ['Nom', 'Type (ENTREPRISE/PARTICULIER)', 'Contact', 'Email', 'Telephone', 'Matricule Fiscal', 'Rue', 'Delegation', 'Gouvernorat', 'Pays']
+      ['Nom', 'Type (ENTREPRISE/PARTICULIER)', 'Contact', 'Email', 'Telephone', 'Matricule Fiscal', 'Rue', 'Delegation', 'Gouvernorat', 'Pays']
     ];
     // Exemple de ligne pour guider l'utilisateur
     const exampleRow = [
-        ['Client Exemple SARL', 'ENTREPRISE', 'Mme. Flen', 'contact@exemple.com', '71123456', '1234567/A/B/000', '123 Rue de la Liberté', 'Tunis', 'Tunis', 'Tunisie']
+      ['Client Exemple SARL', 'ENTREPRISE', 'Mme. Flen', 'contact@exemple.com', '71123456', '1234567/A/B/000', '123 Rue de la Liberté', 'Tunis', 'Tunis', 'Tunisie']
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet([...headers, ...exampleRow]);
@@ -104,7 +112,7 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
         }).filter(Boolean); // Filtre les lignes nulles
 
         if (customersToInsert.length === 0) {
-            throw new Error("Aucun client avec un nom valide n'a été trouvé dans le fichier.");
+          throw new Error("Aucun client avec un nom valide n'a été trouvé dans le fichier.");
         }
 
         const { error: insertError } = await supabase.from('customers').insert(customersToInsert)

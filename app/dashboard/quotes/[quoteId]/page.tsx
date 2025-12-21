@@ -54,9 +54,31 @@ export default async function QuoteEditorPage({ params }: { params: Promise<{ qu
 
   const { data: items } = await supabase
     .from("items")
-    .select("id, name, sale_price, reference")
+    .select("id, name, sale_price, reference, supplier_categories!items_category_id_fkey!inner(name)")
     .eq("company_id", companyIdForData)
+    .eq("supplier_categories.name", "Commerce & Distribution")
     .eq("is_archived", false)
+
+  const { data: services } = await supabase
+    .from("services")
+    .select("id, name, price, sku")
+    .eq("company_id", companyIdForData)
+    .eq("status", "active")
+
+  const mappedServices = services?.map(service => ({
+    id: service.id,
+    name: service.name,
+    sale_price: service.price,
+    reference: service.sku,
+    type: 'SERVICE'
+  })) || []
+
+  const mappedItems = items?.map(item => ({
+    ...item,
+    type: 'ITEM'
+  })) || []
+
+  const allItems = [...mappedItems, ...mappedServices]
 
   // ... le reste du fichier reste identique
   let defaultTerms = null
@@ -85,7 +107,7 @@ export default async function QuoteEditorPage({ params }: { params: Promise<{ qu
           initialData={quoteData}
           companies={companies}
           customers={customers || []}
-          items={items || []}
+          items={allItems || []}
           defaultTerms={defaultTerms}
         />
       </div>

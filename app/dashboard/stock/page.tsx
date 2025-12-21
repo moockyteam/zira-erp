@@ -16,7 +16,7 @@ export default async function StockPage() {
   }
 
   // 2. Récupérer les entreprises de l'utilisateur pour le menu déroulant
-  const { data: companies, error } = await supabase.from("companies").select("id, name").eq("user_id", user.id)
+  const { data: companies, error } = await supabase.from("companies").select("id, name, logo_url").eq("user_id", user.id)
 
   if (error) {
     console.error("Erreur lors de la récupération des entreprises:", error)

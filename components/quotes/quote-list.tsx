@@ -49,16 +49,31 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
 
   const fetchQuotes = async (companyId: string) => {
     setIsLoading(true)
-    const { data, error } = await supabase
-      .from("quotes")
-      .select(
-        `id, quote_number, customer_id, prospect_name, customers ( name ), quote_date, total_ttc, status, currency`,
-      )
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
 
-    if (error) console.error("Erreur chargement devis:", error)
-    else setQuotes(data as Quote[])
+    // Fetch quotes and customers in parallel to avoid FK ambiguity issues causing "Failed to fetch"
+    const [quotesRes, customersRes] = await Promise.all([
+      supabase
+        .from("quotes")
+        .select(`id, quote_number, customer_id, prospect_name, quote_date, total_ttc, status, currency`)
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("customers")
+        .select("id, name")
+        .eq("company_id", companyId)
+    ])
+
+    if (quotesRes.error) {
+      console.error("Erreur chargement devis:", quotesRes.error)
+    } else {
+      // Manual join
+      const customerMap = new Map(customersRes.data?.map(c => [c.id, c.name]) || [])
+      const quotesWithCustomers = quotesRes.data.map((q: any) => ({
+        ...q,
+        customers: q.customer_id ? { name: customerMap.get(q.customer_id) || "" } : null
+      }))
+      setQuotes(quotesWithCustomers)
+    }
 
     setIsLoading(false)
   }

@@ -281,6 +281,12 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
           </div>
         </div>
       </div>
+      {deliveryNote.show_manager_name && deliveryNote.companies?.manager_name && (
+        <div className="mt-8 text-left text-xs">
+          <p className="font-semibold">Le Gérant:</p>
+          <p className="mt-1">{deliveryNote.companies.manager_name}</p>
+        </div>
+      )}
     </div>
   )
 }

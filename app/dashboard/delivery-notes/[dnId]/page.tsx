@@ -26,6 +26,15 @@ export default async function DnEditorPage({
 
   const { data: companies } = await supabase.from("companies").select("id, name").eq("user_id", user.id)
   if (!companies || companies.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <h1 className="text-2xl font-bold mb-4">Aucune entreprise trouvée</h1>
+        <p className="mb-6">Vous devez d'abord créer une entreprise.</p>
+        <Link href="/dashboard/companies" className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90">
+          Créer ma première entreprise
+        </Link>
+      </div>
+    )
   }
 
   let companyIdForData = companies[0].id
@@ -61,8 +70,9 @@ export default async function DnEditorPage({
 
   const { data: items } = await supabase
     .from("items")
-    .select("id, name, reference, quantity_on_hand, sale_price")
+    .select("id, name, reference, quantity_on_hand, sale_price, supplier_categories!items_category_id_fkey!inner(name)")
     .eq("company_id", companyIdForData)
+    .eq("supplier_categories.name", "Commerce & Distribution")
     .eq("is_archived", false)
 
   return (

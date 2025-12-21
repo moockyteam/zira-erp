@@ -34,12 +34,19 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
   const [data, setData] = useState<any | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [period, setPeriod] = useState("this_month")
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   useEffect(() => {
     if (userCompanies && userCompanies.length > 0 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id)
     }
   }, [userCompanies, selectedCompanyId])
+
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,7 +79,12 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
         p_end_date: format(endDate, "yyyy-MM-dd"),
       })
 
-      if (error) console.error("Erreur RPC:", error)
+      if (error) {
+        console.error("Dashboard Analytics RPC Error:", error)
+        console.log("Params sent:", { p_company_id: selectedCompanyId, p_start_date: format(startDate, "yyyy-MM-dd"), p_end_date: format(endDate, "yyyy-MM-dd") })
+      } else {
+        console.log("Dashboard Analytics Data Received:", data)
+      }
       setData(data)
       setIsLoading(false)
     }
@@ -84,6 +96,8 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
       ...d,
       month: new Date(d.month + "-02").toLocaleString("fr-FR", { month: "short" }),
     })) || []
+
+  if (!isMounted) return null
 
   return (
     <div className="space-y-8">
@@ -113,7 +127,16 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
 
       {isLoading ? (
         <Skeleton className="h-64 w-full" />
-      ) : (
+      ) : null}
+
+      {!isLoading && !data && (
+        <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg border border-red-200">
+          <p className="font-semibold">Erreur de chargement des données</p>
+          <p className="text-sm">Veuillez vérifier votre connexion ou contacer le support.</p>
+        </div>
+      )}
+
+      {!isLoading && data && (
         <>
           <Card>
             <CardHeader>
@@ -144,21 +167,42 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
                   <span className="font-semibold">{formatCurrency(data.invoices?.total_ht)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Encaissé</span>
-                  <span className="font-semibold">{formatCurrency(data.invoices?.total_paid)}</span>
+                  <span>Facturé (TTC)</span>
+                  <span className="font-semibold">{formatCurrency(data.invoices?.total_ttc)}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span>Encaissé</span>
+                  <span className="font-semibold text-emerald-600">{formatCurrency(data.invoices?.total_paid)}</span>
+                </div>
+
+                {/* Progress Bar Recouvrement */}
+                <div className="space-y-1 pt-1 pb-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Taux de recouvrement</span>
+                    <span>
+                      {data.invoices?.total_ttc > 0
+                        ? Math.round((data.invoices?.total_paid / data.invoices?.total_ttc) * 100)
+                        : 0}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{ width: `${data.invoices?.total_ttc > 0 ? Math.min((data.invoices?.total_paid / data.invoices?.total_ttc) * 100, 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+
                 <div className="pt-2 border-t">
-                  <p className="font-medium">Détail TVA</p>
+                  <p className="font-medium mb-1">Détail TVA</p>
                   {data.invoices?.tax_details?.tva_by_rate?.map((t: any) => (
-                    <div key={t.tva_rate} className="flex justify-between text-xs ml-4">
-                      <span>Base {t.tva_rate}%</span>
-                      <span>
-                        {formatCurrency(t.base)} | TVA: {formatCurrency(t.amount)}
-                      </span>
+                    <div key={t.tva_rate} className="flex justify-between text-xs ml-2 mb-1">
+                      <span>TVA {t.tva_rate}% (sur {formatCurrency(t.base)})</span>
+                      <span className="font-mono">{formatCurrency(t.amount)}</span>
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between pt-1 border-t border-dashed">
                   <span>FODEC</span>
                   <span className="font-semibold">{formatCurrency(data.invoices?.tax_details?.total_fodec)}</span>
                 </div>
@@ -240,7 +284,8 @@ export function DashboardDisplay({ userCompanies }: { userCompanies: any[] }) {
             </Card>
           </div>
         </>
-      )}
-    </div>
+      )
+      }
+    </div >
   )
 }

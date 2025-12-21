@@ -24,10 +24,12 @@ import {
   Edit,
   SlidersHorizontal,
   ArrowDownToLine,
+  History as HistoryIcon,
 } from "lucide-react"
 import { CompanySelector } from "@/components/company-selector"
 import { ManageItemDialog, type Item } from "./manage-item-dialog"
 import { ReorderDialog } from "./reorder-dialog"
+import { StockHistoryDialog } from "./stock-history-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StockImportDialog } from "./stock-import-dialog"
 import { StockEntryDialog } from "./stock-entry-dialog"
@@ -37,7 +39,7 @@ import { StockEmptyState } from "./stock-empty-state"
 type Category = { id: string; name: string }
 type Supplier = { id: string; name: string }
 
-export function StockManager({ userCompanies }: { userCompanies: { id: string; name: string }[] }) {
+export function StockManager({ userCompanies }: { userCompanies: { id: string; name: string; logo_url: string | null }[] }) {
   const supabase = createClient()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -52,6 +54,8 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
   const [itemToEntry, setItemToEntry] = useState<Item | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterCategoryId, setFilterCategoryId] = useState("all")
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [itemToHistory, setItemToHistory] = useState<Item | null>(null)
 
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1) setSelectedCompanyId(userCompanies[0].id)
@@ -72,11 +76,11 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     const [itemsRes, catRes, supRes] = await Promise.all([
       supabase
         .from("items")
-        .select("*, item_categories(name)")
+        .select("*, supplier_categories!items_category_id_fkey(name)")
         .eq("company_id", companyId)
         .eq("is_archived", false)
         .order("name"),
-      supabase.from("item_categories").select("*").eq("company_id", companyId).order("name"),
+      supabase.from("supplier_categories").select("*").order("name"),
       supabase.from("suppliers").select("*").eq("company_id", companyId).order("name"),
     ])
     if (itemsRes.data) setItems(itemsRes.data as any)
@@ -280,6 +284,13 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                                       <SlidersHorizontal className="h-4 w-4 mr-2" />
                                       Ajuster la quantité
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      setItemToHistory(item)
+                                      setIsHistoryOpen(true)
+                                    }}>
+                                      <HistoryIcon className="h-4 w-4 mr-2" />
+                                      Historique
+                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     {!isLowStock && (
                                       <DropdownMenuItem onClick={() => setItemToReorder(item)}>
@@ -337,6 +348,16 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
         onEntrySuccess={() => {
           if (selectedCompanyId) fetchCompanyData(selectedCompanyId)
         }}
+      />
+      <StockHistoryDialog
+        isOpen={isHistoryOpen}
+        onOpenChange={(open) => {
+          setIsHistoryOpen(open)
+          if (!open) setItemToHistory(null)
+        }}
+        itemId={itemToHistory?.id || null}
+        companyId={selectedCompanyId!}
+        itemName={itemToHistory?.name || ""}
       />
     </div>
   )

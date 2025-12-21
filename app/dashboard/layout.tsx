@@ -3,7 +3,8 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { MobileSidebar } from "@/components/mobile-sidebar"
 import { DesktopSidebar } from "@/components/desktop-sidebar"
-import { Toaster } from "@/components/ui/sonner" // <-- 1. IMPORTEZ LE COMPOSANT ICI
+import { Toaster } from "@/components/ui/sonner"
+import { CompanyProvider } from "@/components/providers/company-provider"
 
 export default async function DashboardLayout({
   children,
@@ -19,15 +20,23 @@ export default async function DashboardLayout({
     redirect("/")
   }
 
+  // Fetch companies for the provider
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("id, name, logo_url, activity")
+    .eq("user_id", user.id)
+
   return (
-    <div className="flex min-h-screen">
-      <MobileSidebar userEmail={user.email || ""} />
+    <CompanyProvider initialCompanies={companies || []}>
+      <div className="flex min-h-screen">
+        <MobileSidebar userEmail={user.email || ""} />
 
-      <DesktopSidebar userEmail={user.email || ""} />
+        <DesktopSidebar userEmail={user.email || ""} />
 
-      <main className="flex-1 p-4 md:p-6 w-full pt-20 md:pt-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6 w-full pt-20 md:pt-6">{children}</main>
 
-      <Toaster richColors position="top-right" /> {/* <-- 2. AJOUTEZ CETTE LIGNE JUSTE AVANT LA FIN DE LA DIV PRINCIPALE */}
-    </div>
+        <Toaster richColors position="top-right" />
+      </div>
+    </CompanyProvider>
   )
 }

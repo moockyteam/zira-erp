@@ -87,9 +87,32 @@ export default async function InvoiceEditorPage({
 
   const { data: items } = await supabase
     .from("items")
-    .select("id, name, sale_price, reference, quantity_on_hand")
+    .select("id, name, sale_price, reference, quantity_on_hand, supplier_categories!items_category_id_fkey!inner(name)")
     .eq("company_id", companyIdForData)
+    .eq("supplier_categories.name", "Commerce & Distribution")
     .eq("is_archived", false)
+
+  const { data: services } = await supabase
+    .from("services")
+    .select("id, name, price, sku")
+    .eq("company_id", companyIdForData)
+    .eq("status", "active")
+
+  const mappedServices = services?.map(service => ({
+    id: service.id,
+    name: service.name,
+    sale_price: service.price,
+    reference: service.sku,
+    quantity_on_hand: null,
+    type: 'SERVICE'
+  })) || []
+
+  const mappedItems = items?.map(item => ({
+    ...item,
+    type: 'ITEM'
+  })) || []
+
+  const allItems = [...mappedItems, ...mappedServices]
 
   const { data: confirmedQuotes } = await supabase
     .from("quotes")
@@ -116,7 +139,7 @@ export default async function InvoiceEditorPage({
           quoteInitialData={quoteInitialData}
           companies={companies}
           customers={customers || []}
-          items={items || []}
+          items={allItems || []}
           confirmedQuotes={confirmedQuotes || []}
         />
       </div>
