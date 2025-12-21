@@ -60,6 +60,8 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
               <h2 className="text-xl font-bold">{deliveryNote.companies?.name}</h2>
               <p>Adresse: {deliveryNote.companies?.address}</p>
               <p>Matricule Fiscal: {deliveryNote.companies?.matricule_fiscal}</p>
+              {deliveryNote.companies?.email && <p>Email: {deliveryNote.companies.email}</p>}
+              {deliveryNote.companies?.phone_number && <p>Tél: {deliveryNote.companies.phone_number}</p>}
               {deliveryNote.show_manager_name && deliveryNote.companies?.manager_name && (
                 <p>Gérant: {deliveryNote.companies.manager_name}</p>
               )}

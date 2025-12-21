@@ -80,13 +80,32 @@ export default async function DnEditorPage({
         <h1 className="text-3xl font-bold mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
           {isNew ? "Créer un Bon de Livraison" : `Modifier le BL`}
         </h1>
-        <DeliveryNoteForm
-          initialData={dnData}
-          initialDataSource={initialDataSource}
-          companies={companies}
-          customers={customers || []}
-          items={items || []}
-        />
+        {isNew ? (
+          /* Feature: Auto-fill driver and vehicle from last delivery note */
+          <DeliveryNoteForm
+            initialData={dnData}
+            initialDataSource={initialDataSource}
+            companies={companies}
+            customers={customers || []}
+            items={items || []}
+            lastUsedValues={await supabase
+              .from("delivery_notes")
+              .select("driver_name, vehicle_registration")
+              .eq("company_id", companyIdForData)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .single()
+              .then(({ data }) => data || { driver_name: "", vehicle_registration: "" })}
+          />
+        ) : (
+          <DeliveryNoteForm
+            initialData={dnData}
+            initialDataSource={initialDataSource}
+            companies={companies}
+            customers={customers || []}
+            items={items || []}
+          />
+        )}
       </div>
     </div>
   )

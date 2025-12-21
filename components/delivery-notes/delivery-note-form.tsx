@@ -51,6 +51,7 @@ export function DeliveryNoteForm({
   companies,
   customers: initialCustomers,
   items,
+  lastUsedValues,
 }: any) {
   const router = useRouter()
   const supabase = createClient()
@@ -65,8 +66,8 @@ export function DeliveryNoteForm({
   const [lines, setLines] = useState<DnLine[]>(
     initialData?.delivery_note_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
   )
-  const [driverName, setDriverName] = useState(initialData?.driver_name || "")
-  const [vehicleRegistration, setVehicleRegistration] = useState(initialData?.vehicle_registration || "")
+  const [driverName, setDriverName] = useState(initialData?.driver_name || lastUsedValues?.driver_name || "")
+  const [vehicleRegistration, setVehicleRegistration] = useState(initialData?.vehicle_registration || lastUsedValues?.vehicle_registration || "")
   const [notes, setNotes] = useState(initialData?.notes || "")
   const [isLoading, setIsLoading] = useState(false)
   const [isValued, setIsValued] = useState(initialData?.is_valued ?? false)
