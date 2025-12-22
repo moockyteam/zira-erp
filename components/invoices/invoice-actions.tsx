@@ -51,14 +51,37 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
   const [isUpdating, setIsUpdating] = useState(false)
 
   const updateStatus = async (newStatus: InvoiceStatus) => {
+    // Logic spécial pour l'annulation
+    if (newStatus === "ANNULEE") {
+      if (!window.confirm("Êtes-vous sûr de vouloir annuler cette facture ? Cela remettra automatiquement les articles en stock.")) {
+        return
+      }
+    }
+
     setIsUpdating(true)
-    const { error } = await supabase.from("invoices").update({ status: newStatus }).eq("id", invoice.id)
-    if (error) {
-      toast.error("Erreur lors de la mise à jour: " + error.message)
+
+    // 1. Mettre à jour le statut
+    const { error: statusError } = await supabase.from("invoices").update({ status: newStatus }).eq("id", invoice.id)
+
+    if (statusError) {
+      toast.error("Erreur lors de la mise à jour: " + statusError.message)
+      setIsUpdating(false)
+      return
+    }
+
+    // 2. Si Annulation réussie, restaurer le stock
+    if (newStatus === "ANNULEE") {
+      const { error: stockError } = await supabase.rpc("restore_stock_from_invoice", { p_invoice_id: invoice.id })
+      if (stockError) {
+        toast.error("Statut mis à jour mais erreur lors du retour en stock : " + stockError.message)
+      } else {
+        toast.success("Facture annulée et stock restauré avec succès.")
+      }
     } else {
       toast.success(`Facture marquée comme ${newStatus}.`)
-      onActionSuccess()
     }
+
+    onActionSuccess()
     setIsUpdating(false)
   }
 
@@ -135,13 +158,22 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
 
         <DropdownMenuSeparator />
 
+        {(invoice.status === "BROUILLON" || invoice.status === "ENVOYE") && (
+          <DropdownMenuItem onClick={() => {
+            if (invoice.status === "ENVOYE") {
+              if (window.confirm("Attention : Modifier une facture déjà envoyée peut causer des incohérences comptables si le client l'a déjà enregistrée. Voulez-vous continuer ?")) {
+                window.location.href = `/dashboard/invoices/${invoice.id}`
+              }
+            } else {
+              window.location.href = `/dashboard/invoices/${invoice.id}`
+            }
+          }}>
+            <Edit className="mr-2 h-4 w-4" /> Modifier
+          </DropdownMenuItem>
+        )}
+
         {invoice.status === "BROUILLON" && (
           <>
-            <Link href={`/dashboard/invoices/${invoice.id}`}>
-              <DropdownMenuItem>
-                <Edit className="mr-2 h-4 w-4" /> Modifier
-              </DropdownMenuItem>
-            </Link>
             <DropdownMenuItem onClick={() => updateStatus("ENVOYE")}>
               <Send className="mr-2 h-4 w-4 text-blue-500" /> Marquer comme Envoyée
             </DropdownMenuItem>

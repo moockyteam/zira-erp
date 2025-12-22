@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { SearchInput } from "@/components/ui/search-input"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -25,6 +26,7 @@ import {
   SlidersHorizontal,
   ArrowDownToLine,
   History as HistoryIcon,
+  Trash2,
 } from "lucide-react"
 import { CompanySelector } from "@/components/company-selector"
 import { ManageItemDialog, type Item } from "./manage-item-dialog"
@@ -87,6 +89,27 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     if (catRes.data) setCategories(catRes.data)
     if (supRes.data) setSuppliers(supRes.data)
     setIsLoading(false)
+  }
+
+  const handleDelete = async (item: Item) => {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer DÉFINITIVEMENT cet article ? Cette action est irréversible.")) {
+      const { error } = await supabase
+        .from("items")
+        .delete()
+        .eq("id", item.id)
+
+      if (error) {
+        // Check for foreign key violation (Postgres error code 23503)
+        if (error.code === '23503') {
+          toast.error("Impossible de supprimer cet article car il est utilisé dans des documents (factures, devis, etc.). Veuillez l'archiver à la place.")
+        } else {
+          toast.error("Erreur lors de la suppression : " + error.message)
+        }
+      } else {
+        toast.success("Article supprimé définitivement")
+        if (selectedCompanyId) fetchCompanyData(selectedCompanyId)
+      }
+    }
   }
 
   const handleOpenManageDialog = (item: Item | null) => {
@@ -298,6 +321,11 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                                         Créer une commande
                                       </DropdownMenuItem>
                                     )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive focus:text-destructive">
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Supprimer
+                                    </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>

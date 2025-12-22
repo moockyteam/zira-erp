@@ -32,14 +32,43 @@ export function DnActions({ dn, onActionSuccess }: { dn: any; onActionSuccess: (
 
     setIsUpdating(true)
 
+    console.log("updateStatus called with:", newStatus)
+
     if (newStatus === "LIVRE") {
+      // FIX Double Deduction: The DB trigger 'on_delivery_note_delivered' already handles this via 'handle_delivered_dn_stock_issue'.
+      // We log it but do NOT call the manual RPC anymore.
+      console.log("Skipping manual RPC to avoid double deduction. Relying on DB Trigger.")
+
+      /* 
       const { error: deductError } = await supabase.rpc("deduct_stock_from_delivery_note", { p_dn_id: dn.id })
       if (deductError) {
+        console.error("Error in manual deduction:", deductError)
         toast.error("Erreur lors de la déduction du stock: " + deductError.message)
         setIsUpdating(false)
         return
       }
       toast.success("Stock mis à jour avec succès.")
+      */
+    }
+
+    if (newStatus === "ANNULE" || newStatus === "ANNULEE") { // Handle both just in case
+      if (!window.confirm("Êtes-vous sûr de vouloir annuler ce bon de livraison ? Cela remettra automatiquement les articles en stock.")) {
+        setIsUpdating(false)
+        return
+      }
+
+      // Appeler la fonction de restauration du stock
+      const { error: restoreError } = await supabase.rpc("restore_stock_from_delivery_note", { p_dn_id: dn.id })
+
+      if (restoreError) {
+        console.error("Erreur restauration stock:", restoreError)
+        toast.error("Erreur lors de la remise en stock: " + restoreError.message)
+        // On continue quand même pour changer le statut, ou on bloque ? 
+        // Mieux vaut bloquer pour éviter les incohérences.
+        setIsUpdating(false)
+        return
+      }
+      toast.success("Articles remis en stock avec succès.")
     }
 
     const { error } = await supabase.from("delivery_notes").update({ status: newStatus }).eq("id", dn.id)
@@ -112,9 +141,14 @@ export function DnActions({ dn, onActionSuccess }: { dn: any; onActionSuccess: (
         )}
 
         {dn.status === "LIVRE" && (
-          <DropdownMenuItem disabled>
-            <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Déjà livré
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem disabled>
+              <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Déjà livré
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => updateStatus("ANNULE")} className="text-red-600">
+              <Ban className="mr-2 h-4 w-4" /> Annuler la livraison (Retour Stock)
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

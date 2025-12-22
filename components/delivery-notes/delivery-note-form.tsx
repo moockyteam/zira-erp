@@ -146,7 +146,7 @@ export function DeliveryNoteForm({
         local_id: crypto.randomUUID(),
         item_id: null,
         description: "",
-        quantity: 1,
+        quantity: 0,
         unit_price_ht: 0,
         remise_percentage: 0,
         tva_rate: 19,
@@ -417,7 +417,7 @@ export function DeliveryNoteForm({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[300px]">Article</TableHead>
+                  <TableHead className="w-[40%] min-w-[300px]">Article</TableHead>
                   <TableHead>Qté</TableHead>
                   {isValued && <TableHead>Prix U. HT</TableHead>}
                   {isValued && showRemise && <TableHead>Remise %</TableHead>}
@@ -432,7 +432,7 @@ export function DeliveryNoteForm({
                     <TableCell>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" role="combobox" className="w-[300px] justify-between font-normal">
+                          <Button variant="outline" role="combobox" className="w-full justify-between font-normal whitespace-normal h-auto min-h-[40px]">
                             {line.description || "Sélectionner article..."}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>

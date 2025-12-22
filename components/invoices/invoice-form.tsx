@@ -68,7 +68,7 @@ export function InvoiceForm({
 
   // Refactor: lines use string | number for controlled inputs
   const [lines, setLines] = useState<any[]>(
-    initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
+    initialData?.invoice_lines?.map((l: any) => ({ ...l, local_id: l.id ? String(l.id) : crypto.randomUUID() })) || [],
   )
 
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
@@ -165,7 +165,7 @@ export function InvoiceForm({
         local_id: crypto.randomUUID(),
         item_id: null,
         description: "",
-        quantity: 1,
+        quantity: 0,
         unit_price_ht: 0,
         remise_percentage: 0,
         tva_rate: 19,
@@ -482,7 +482,7 @@ export function InvoiceForm({
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[30%] font-semibold">Description / Article</TableHead>
+                  <TableHead className="w-[45%] min-w-[300px] font-semibold">Description / Article</TableHead>
                   <TableHead className="text-right font-semibold">Qté</TableHead>
                   <TableHead className="text-right font-semibold">Prix U. HT</TableHead>
                   {showRemise && <TableHead className="text-right font-semibold">Remise %</TableHead>}
@@ -509,7 +509,7 @@ export function InvoiceForm({
                       <TableCell className="align-top">
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal truncate border-2">
+                            <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal whitespace-normal h-auto min-h-[40px] border-2">
                               {line.description || <span className="text-muted-foreground">Sélectionner ou saisir...</span>}
                             </Button>
                           </PopoverTrigger>

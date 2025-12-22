@@ -127,7 +127,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
         local_id: crypto.randomUUID(),
         item_id: null,
         description: "",
-        quantity: 1,
+        quantity: 0,
         unit_price_ht: 0,
         remise_percentage: 0,
         tva_rate: defaultVatRate,
@@ -387,11 +387,11 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
         </div>
 
         <div className="grid grid-cols-12 gap-2 items-center px-2 pb-2 border-b">
-          <div className="col-span-4 text-sm font-semibold text-muted-foreground">Description</div>
+          <div className="col-span-6 text-sm font-semibold text-muted-foreground">Description</div>
           <div className="col-span-1 text-sm font-semibold text-muted-foreground">Qté</div>
           <div className="col-span-2 text-sm font-semibold text-muted-foreground">Prix U. HT</div>
-          {showRemise && <div className="col-span-2 text-sm font-semibold text-muted-foreground">Remise %</div>}
-          <div className={cn("col-span-2 text-sm font-semibold text-muted-foreground", !showRemise && "col-span-4")}>
+          {showRemise && <div className="col-span-1 text-sm font-semibold text-muted-foreground">Remise %</div>}
+          <div className={cn("col-span-1 text-sm font-semibold text-muted-foreground", !showRemise && "col-span-2")}>
             TVA %
           </div>
           <div className="col-span-1"></div>
@@ -400,7 +400,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
         <div className="space-y-2 mt-2">
           {lines.map((line, index) => (
             <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
-              <div className="col-span-4">
+              <div className="col-span-6">
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal h-auto min-h-[40px] whitespace-normal">
@@ -446,7 +446,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                 />
               </div>
               {showRemise && (
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <Input
                     value={line.remise_percentage}
                     onChange={(e) => updateLine(line.local_id, "remise_percentage", e.target.value)}
@@ -454,7 +454,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                   />
                 </div>
               )}
-              <div className={cn("col-span-2", !showRemise && "col-span-4")}>
+              <div className={cn("col-span-1", !showRemise && "col-span-2")}>
                 <Select
                   value={String(line.tva_rate)}
                   onValueChange={(v) => updateLine(line.local_id, "tva_rate", Number.parseFloat(v))}
