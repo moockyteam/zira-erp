@@ -259,7 +259,7 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
                             </Button>
                           </CommandEmpty>
                           <CommandGroup>
-                            {items.slice(0, 50).map(item => (
+                            {items.map(item => (
                               <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
                                 <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
                                 {item.name} {item.reference && <span className="text-xs text-muted-foreground ml-2">({item.reference})</span>}
