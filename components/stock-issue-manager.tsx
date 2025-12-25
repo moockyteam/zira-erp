@@ -1,9 +1,7 @@
-// components/stock-issue-manager.tsx
 "use client"
 
 import type React from "react"
-
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,10 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { PlusCircle, Trash2, FileText, Package, Truck } from "lucide-react"
+import { PlusCircle, Trash2, FileText, Package, Truck, ArrowUpDown, ChevronUp, ChevronDown, Search, PackageX } from "lucide-react"
 import { PrintButton } from "./print-button"
 import { VoucherPreviewDialog } from "./voucher-preview-dialog"
-import { CompanySelector } from "@/components/company-selector"
+import { useCompany } from "@/components/providers/company-provider"
+import { SearchInput } from "@/components/ui/search-input"
+import { cn } from "@/lib/utils"
 
 // Définition des types
 type Company = { id: string; name: string }
@@ -28,25 +28,29 @@ type StockIssueVoucher = {
   voucher_date: string
 }
 
+type SortConfig = {
+  key: keyof StockIssueVoucher
+  direction: "asc" | "desc"
+}
+
 export function StockIssueManager({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
+  const { selectedCompany } = useCompany()
+  const selectedCompanyId = selectedCompany?.id
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // <-- J'ai ajusté le type pour autoriser null
   const [items, setItems] = useState<Item[]>([])
   const [vouchers, setVouchers] = useState<StockIssueVoucher[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Form State
   const [voucherReference, setVoucherReference] = useState("")
   const [voucherReason, setVoucherReason] = useState("")
   const [voucherLines, setVoucherLines] = useState<VoucherLine[]>([{ itemId: "", quantity: "" }])
 
-  useEffect(() => {
-    // Sélectionne la première entreprise par défaut s'il n'y en a qu'une
-    if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
-      setSelectedCompanyId(userCompanies[0].id)
-    }
-  }, [userCompanies, selectedCompanyId])
+  // List Filter & Sort State
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "voucher_date", direction: "desc" })
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -121,7 +125,7 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
     if (linesError) {
       setError("Erreur lors de l'ajout des articles au bon de sortie.")
     } else {
-      alert("Bon de sortie créé avec succès ! Le stock a été mis à jour.")
+      // alert("Bon de sortie créé avec succès ! Le stock a été mis à jour.") // Removed alert for better UX
       setVoucherReference("")
       setVoucherReason("")
       setVoucherLines([{ itemId: "", quantity: "" }])
@@ -130,114 +134,158 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
     setIsLoading(false)
   }
 
+  // Filtering & Sorting Logic
+  const filteredVouchers = useMemo(() => {
+    let result = [...vouchers]
+
+    // 1. Search
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter((v) =>
+        (v.reference || "").toLowerCase().includes(lowerTerm) ||
+        (v.reason || "").toLowerCase().includes(lowerTerm)
+      )
+    }
+
+    // 2. Sorting
+    result.sort((a, b) => {
+      let aValue: any = a[sortConfig.key]
+      let bValue: any = b[sortConfig.key]
+
+      // Handle nulls
+      if (aValue === null) aValue = ""
+      if (bValue === null) bValue = ""
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [vouchers, searchTerm, sortConfig])
+
+  const requestSort = (key: keyof StockIssueVoucher) => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
+  }
+
+  const getSortIcon = (key: keyof StockIssueVoucher) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
+    return sortConfig.direction === "asc"
+      ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-2 h-3 w-3 text-primary" />
+  }
+
   return (
     <div className="space-y-8">
-      {/* --- J'AI REMPLACÉ L'ANCIEN SÉLECTEUR PAR LE COMPOSANT RÉUTILISABLE --- */}
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
-
       {!selectedCompanyId && userCompanies.length > 1 && (
-        <Card className="text-center py-12">
+        <Card className="text-center py-12 border-dashed">
           <CardContent>
+            <PackageX className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
             <p className="text-muted-foreground">Veuillez sélectionner une entreprise pour gérer ses bons de sortie.</p>
           </CardContent>
         </Card>
       )}
 
       {selectedCompanyId && (
-        <div className="space-y-8">
-          {/* CARTE 1 : FORMULAIRE DE CRÉATION */}
-          <Card className="border-l-4 border-l-orange-500 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Créer un nouveau Bon de Sortie</CardTitle>
-                  <CardDescription>
-                    Enregistrez une sortie de stock pour usage interne, perte ou autre motif
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="p-4 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20">
-                  <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-300 mb-4 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Informations Générales
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="reference" className="text-sm font-medium">
-                        Référence du Bon *
-                      </Label>
-                      <Input
-                        id="reference"
-                        value={voucherReference}
-                        onChange={(e) => setVoucherReference(e.target.value)}
-                        placeholder="Ex: BS-2025-001"
-                        required
-                        className="border-2 focus:border-orange-500 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="reason" className="text-sm font-medium">
-                        Motif de la sortie
-                      </Label>
-                      <Textarea
-                        id="reason"
-                        value={voucherReason}
-                        onChange={(e) => setVoucherReason(e.target.value)}
-                        placeholder="Ex: Utilisation pour projet X, Casse..."
-                        className="border-2 focus:border-orange-500 transition-colors"
-                      />
-                    </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          {/* COLONNE 1 : FORMULAIRE DE CRÉATION */}
+          <div className="space-y-6">
+            {/* Note: Keeping the Card style for the Form to distinguish it as an input area, but cleaning it up */}
+            <Card className="border-l-4 border-l-orange-500 shadow-md">
+              <CardHeader className="bg-orange-50/30 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <FileText className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl text-orange-950">Nouveau Bon de Sortie</CardTitle>
+                    <CardDescription>
+                      Enregistrez une sortie de stock (perte, usage interne...)
+                    </CardDescription>
                   </div>
                 </div>
-
-                <div className="p-4 rounded-lg border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
-                  <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 mb-4 flex items-center gap-2">
-                    <Package className="h-4 w-4" />
-                    Articles à Sortir
-                  </h3>
-                  <div className="space-y-3">
-                    {voucherLines.map((line, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 p-3 border-2 border-emerald-200 dark:border-emerald-800 rounded-md bg-white dark:bg-gray-950 hover:shadow-md transition-shadow"
-                      >
-                        <Select value={line.itemId} onValueChange={(value) => updateLine(index, "itemId", value)}>
-                          <SelectTrigger className="flex-1 border-2">
-                            <SelectValue placeholder="Choisir un article..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {items.map((item) => (
-                              <SelectItem key={item.id} value={item.id}>
-                                {item.name} (Stock: {item.quantity_on_hand})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* General Info */}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reference" className="text-xs font-semibold uppercase text-muted-foreground">
+                          Référence *
+                        </Label>
                         <Input
-                          type="text"
-                          placeholder="Quantité"
-                          className="w-32 border-2"
-                          value={line.quantity}
-                          onChange={(e) => updateLine(index, "quantity", e.target.value.replace(",", "."))}
-                          step="0.01"
+                          id="reference"
+                          value={voucherReference}
+                          onChange={(e) => setVoucherReference(e.target.value)}
+                          placeholder="Ex: BS-2025-001"
+                          required
+                          className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="reason" className="text-xs font-semibold uppercase text-muted-foreground">
+                          Motif
+                        </Label>
+                        <Input
+                          id="reason"
+                          value={voucherReason}
+                          onChange={(e) => setVoucherReason(e.target.value)}
+                          placeholder="Ex: Utilisation interne"
+                          className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lines */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between pb-2 border-b">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Package className="h-4 w-4 text-orange-500" />
+                        Articles
+                      </h3>
+                    </div>
+
+                    {voucherLines.map((line, index) => (
+                      <div key={index} className="flex items-start gap-2">
+                        <div className="flex-1 space-y-1">
+                          <Select value={line.itemId} onValueChange={(value) => updateLine(index, "itemId", value)}>
+                            <SelectTrigger className={cn("h-10", !line.itemId && "text-muted-foreground")}>
+                              <SelectValue placeholder="Sélectionner un article" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {items.map((item) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                  <span className="font-medium">{item.name}</span>
+                                  <span className="ml-2 text-xs text-muted-foreground">(Stock: {item.quantity_on_hand})</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-24 space-y-1">
+                          <Input
+                            type="number"
+                            placeholder="Qté"
+                            className="h-10 text-right"
+                            value={line.quantity}
+                            onChange={(e) => updateLine(index, "quantity", e.target.value)}
+                            step="0.01"
+                            min="0"
+                          />
+                        </div>
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           onClick={() => removeLine(index)}
                           disabled={voucherLines.length <= 1}
-                          className="hover:bg-red-100 hover:text-red-600"
+                          className="h-10 w-10 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -248,83 +296,139 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
                       variant="outline"
                       size="sm"
                       onClick={addLine}
-                      className="w-full border-2 border-dashed border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50 bg-transparent"
+                      className="w-full mt-2 border-dashed text-muted-foreground hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
                     >
-                      <PlusCircle className="h-4 w-4 mr-2" /> Ajouter une ligne
+                      <PlusCircle className="h-4 w-4 mr-2" /> Ajouter un article
                     </Button>
                   </div>
-                </div>
 
-                <div>
                   {error && (
-                    <p className="text-sm text-destructive mb-4 p-3 bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-800 rounded-md">
+                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-100 flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-600 flex-shrink-0" />
                       {error}
-                    </p>
+                    </div>
                   )}
+
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white shadow-md transition-all h-11"
                   >
-                    {isLoading ? "Création en cours..." : "Valider le Bon de Sortie"}
+                    {isLoading ? "Création en cours..." : "Valider la Sortie de Stock"}
                   </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card className="border-l-4 border-l-blue-500 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
-                  <Truck className="h-5 w-5 text-white" />
+          {/* COLONNE 2 : HISTORIQUE (LISTE) */}
+          <div className="space-y-6">
+            <Card className="border-none shadow-none bg-transparent">
+              <CardHeader className="px-0 pt-0 pb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <CardTitle className="text-xl font-bold text-foreground">Historique</CardTitle>
+                    <CardDescription>Liste des bons de sortie créés</CardDescription>
+                  </div>
+                  <SearchInput
+                    placeholder="Rechercher..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onClear={() => setSearchTerm("")}
+                    className="w-full sm:w-[250px]"
+                  />
                 </div>
-                <CardTitle className="text-xl">Historique des Bons de Sortie</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b-2 border-blue-200 dark:border-blue-800">
-                    <TableHead className="font-semibold text-blue-700 dark:text-blue-300">Référence</TableHead>
-                    <TableHead className="font-semibold text-blue-700 dark:text-blue-300">Date</TableHead>
-                    <TableHead className="font-semibold text-blue-700 dark:text-blue-300">Motif</TableHead>
-                    <TableHead className="font-semibold text-blue-700 dark:text-blue-300">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8">
-                        Chargement...
-                      </TableCell>
-                    </TableRow>
-                  ) : vouchers.length > 0 ? (
-                    vouchers.map((voucher) => (
-                      <TableRow
-                        key={voucher.id}
-                        className="border-b-2 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
-                      >
-                        <TableCell className="font-medium">{voucher.reference}</TableCell>
-                        <TableCell>{new Date(voucher.voucher_date).toLocaleString("fr-FR")}</TableCell>
-                        <TableCell>{voucher.reason}</TableCell>
-                        <TableCell className="flex items-center gap-2">
-                          <VoucherPreviewDialog voucherId={voucher.id} />
-                          <PrintButton voucherId={voucher.id} />
-                        </TableCell>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableHead
+                          className="cursor-pointer hover:text-primary transition-colors h-10"
+                          onClick={() => requestSort("reference")}
+                        >
+                          <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Référence {getSortIcon("reference")}
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer hover:text-primary transition-colors h-10"
+                          onClick={() => requestSort("voucher_date")}
+                        >
+                          <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Date {getSortIcon("voucher_date")}
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer hover:text-primary transition-colors h-10"
+                          onClick={() => requestSort("reason")}
+                        >
+                          <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Motif {getSortIcon("reason")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="h-10 w-[80px]"></TableHead>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        Aucun bon de sortie pour cette entreprise.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center">
+                            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                              Chargement...
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredVouchers.length > 0 ? (
+                        filteredVouchers.map((voucher) => (
+                          <TableRow
+                            key={voucher.id}
+                            className="group hover:bg-muted/30 transition-colors"
+                          >
+                            <TableCell className="font-medium text-foreground">
+                              {voucher.reference || "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(voucher.voucher_date).toLocaleDateString("fr-FR")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground truncate max-w-[150px]" title={voucher.reason || ""}>
+                              {voucher.reason || "-"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <VoucherPreviewDialog voucherId={voucher.id} />
+                                <PrintButton voucherId={voucher.id} />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-[200px] text-center">
+                            <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                              <PackageX className="h-10 w-10 text-muted-foreground/20" />
+                              {searchTerm ? (
+                                <>
+                                  <p className="text-sm text-muted-foreground">Aucun résultat trouvé.</p>
+                                  <Button variant="link" onClick={() => setSearchTerm("")} className="text-primary h-auto p-0">
+                                    Effacer la recherche
+                                  </Button>
+                                </>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">Aucun historique.</p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </div>

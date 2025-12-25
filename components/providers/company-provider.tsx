@@ -8,6 +8,20 @@ export type Company = {
     name: string
     logo_url: string | null
     activity: string | null
+    manager_name: string | null
+    matricule_fiscal: string | null
+    email: string | null
+    phone_number: string | null
+    address: string | null
+    governorate_id: number | null
+    delegation_id: number | null
+    is_fully_exporting: boolean | null
+    is_subject_to_fodec: boolean | null
+    cnss_gen: string | null
+    cnss_ind: string | null
+    cnss_registry_number: string | null
+    activity_code: string | null
+    customs_code: string | null
 }
 
 interface CompanyContextType {
@@ -26,10 +40,14 @@ export function CompanyProvider({
     children: React.ReactNode
     initialCompanies: Company[]
 }) {
-    const [companies] = useState<Company[]>(initialCompanies)
+    const [companies, setCompanies] = useState<Company[]>(initialCompanies)
     const [selectedCompany, setSelectedCompanyState] = useState<Company | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const router = useRouter()
+
+    useEffect(() => {
+        setCompanies(initialCompanies)
+    }, [initialCompanies])
 
     useEffect(() => {
         // 1. Try to load from localStorage
@@ -38,16 +56,19 @@ export function CompanyProvider({
             const found = companies.find((c) => c.id === storedCompanyId)
             if (found) {
                 setSelectedCompanyState(found)
-            } else if (companies.length > 0) {
-                // Fallback to first company if stored one not found
+            } else if (companies.length > 0 && !selectedCompany) {
+                // Only fallback if nothing selected yet
                 setSelectedCompanyState(companies[0])
+            } else if (found && selectedCompany && found.id === selectedCompany.id && JSON.stringify(found) !== JSON.stringify(selectedCompany)) {
+                // Update selected company if data changed
+                setSelectedCompanyState(found)
             }
-        } else if (companies.length > 0) {
+        } else if (companies.length > 0 && !selectedCompany) {
             // Default to first company
             setSelectedCompanyState(companies[0])
         }
         setIsLoading(false)
-    }, [companies])
+    }, [companies, selectedCompany])
 
     const setSelectedCompany = (company: Company) => {
         setSelectedCompanyState(company)

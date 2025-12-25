@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { SearchInput } from "@/components/ui/search-input"
-import { CompanySelector } from "@/components/company-selector"
+import { useCompany } from "@/components/providers/company-provider" // Add import
+// import { CompanySelector } from "@/components/company-selector" // REMOVE
 import { PurchaseOrderActions } from "./po-actions"
 
 type Company = { id: string; name: string }
@@ -27,15 +28,21 @@ type PurchaseOrder = {
 
 export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
+  const { selectedCompany } = useCompany() // Context usage
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  // const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // Remove local state
+  const selectedCompanyId = selectedCompany?.id
+
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
+  // Remove props sync effect
+  /*
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1) setSelectedCompanyId(userCompanies[0].id)
   }, [userCompanies])
+  */
 
   useEffect(() => {
     if (selectedCompanyId) fetchPOs(selectedCompanyId)
@@ -89,7 +96,7 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: Company[] 
         )}
       </div>
 
-      <CompanySelector companies={userCompanies} selectedCompanyId={selectedCompanyId} onCompanySelect={setSelectedCompanyId} />
+      {/* <CompanySelector companies={userCompanies} selectedCompanyId={selectedCompanyId} onCompanySelect={setSelectedCompanyId} /> */}
 
       {selectedCompanyId && (
         <Card>

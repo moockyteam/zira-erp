@@ -4,124 +4,117 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Professional ERP color scheme - Deep indigo primary with emerald accents */
-  --background: oklch(0.99 0.003 260);
-  --foreground: oklch(0.12 0.02 260);
+  /* Premium Minimalist - Steel Blue Palette (from Logo) */
+  --background: oklch(0.99 0.002 240);
+  --foreground: oklch(0.15 0.02 240);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0.02 260);
+  --card-foreground: oklch(0.15 0.02 240);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0.02 260);
+  --popover-foreground: oklch(0.15 0.02 240);
 
-  /* Sophisticated indigo as primary - professional and trustworthy */
-  --primary: oklch(0.45 0.15 265);
-  --primary-foreground: oklch(0.99 0.003 260);
+  /* Primary - Steel Blue (from logo) */
+  --primary: oklch(0.45 0.10 230);
+  --primary-foreground: oklch(0.99 0.002 240);
 
-  /* Subtle warm background for secondary elements */
-  --secondary: oklch(0.97 0.008 260);
-  --secondary-foreground: oklch(0.25 0.02 260);
+  /* Secondary - Light Steel */
+  --secondary: oklch(0.96 0.01 230);
+  --secondary-foreground: oklch(0.25 0.03 230);
 
-  --muted: oklch(0.97 0.008 260);
-  --muted-foreground: oklch(0.48 0.015 260);
+  --muted: oklch(0.96 0.008 230);
+  --muted-foreground: oklch(0.50 0.02 230);
 
-  /* Vibrant emerald accent for positive actions and highlights */
-  --accent: oklch(0.55 0.18 160);
-  --accent-foreground: oklch(0.99 0.003 260);
+  /* Accent - Teal Blue */
+  --accent: oklch(0.94 0.015 220); 
+  --accent-foreground: oklch(0.25 0.03 230);
 
   --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.99 0.003 260);
+  --destructive-foreground: oklch(0.99 0.002 240);
 
-  --border: oklch(0.91 0.008 260);
-  --input: oklch(0.91 0.008 260);
-  --ring: oklch(0.45 0.15 265);
+  --border: oklch(0.91 0.008 230);
+  --input: oklch(0.91 0.008 230);
+  --ring: oklch(0.45 0.10 230);
 
-  /* Chart colors for data visualization - balanced and distinct */
-  --chart-1: oklch(0.45 0.15 265); /* Deep indigo */
-  --chart-2: oklch(0.55 0.18 160); /* Emerald */
-  --chart-3: oklch(0.62 0.2 220); /* Bright blue */
-  --chart-4: oklch(0.65 0.16 340); /* Coral */
-  --chart-5: oklch(0.58 0.18 85); /* Amber */
+  /* Chart colors - Steel Blue harmonized */
+  --chart-1: oklch(0.45 0.10 230);
+  --chart-2: oklch(0.55 0.15 180);
+  --chart-3: oklch(0.60 0.12 260);
+  --chart-4: oklch(0.65 0.14 340);
+  --chart-5: oklch(0.58 0.16 90);
 
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  /* Sidebar with subtle tint */
-  --sidebar: oklch(0.985 0.005 260);
-  --sidebar-foreground: oklch(0.25 0.02 260);
-  --sidebar-primary: oklch(0.45 0.15 265);
-  --sidebar-primary-foreground: oklch(0.99 0.003 260);
-  --sidebar-accent: oklch(0.96 0.01 260);
-  --sidebar-accent-foreground: oklch(0.25 0.02 260);
-  --sidebar-border: oklch(0.88 0.012 260);
-  --sidebar-ring: oklch(0.45 0.15 265);
+  /* Sidebar - Premium Steel */
+  --sidebar: oklch(0.985 0.004 230);
+  --sidebar-foreground: oklch(0.25 0.02 230);
+  --sidebar-primary: oklch(0.45 0.10 230);
+  --sidebar-primary-foreground: oklch(0.99 0.002 240);
+  --sidebar-accent: oklch(0.95 0.01 230);
+  --sidebar-accent-foreground: oklch(0.25 0.02 230);
+  --sidebar-border: oklch(0.90 0.01 230);
+  --sidebar-ring: oklch(0.45 0.10 230);
 
-  /* Semantic colors for status indicators */
-  --success: oklch(0.55 0.18 160);
-  --success-foreground: oklch(0.99 0.003 260);
-
-  --warning: oklch(0.65 0.18 85);
-  --warning-foreground: oklch(0.12 0.02 260);
-
-  --info: oklch(0.58 0.2 220);
-  --info-foreground: oklch(0.99 0.003 260);
+  /* Semantic Status - Clear indicators */
+  --success: oklch(0.55 0.18 155);
+  --success-foreground: oklch(0.99 0.002 240);
+  --warning: oklch(0.70 0.16 80);
+  --warning-foreground: oklch(0.15 0.02 240);
+  --info: oklch(0.55 0.12 230);
+  --info-foreground: oklch(0.99 0.002 240);
 }
 
 .dark {
-  /* Dark mode with rich, deep colors and high contrast */
-  --background: oklch(0.13 0.02 260);
-  --foreground: oklch(0.98 0.003 260);
+  /* Dark Mode - Steel Blue Premium */
+  --background: oklch(0.12 0.02 230);
+  --foreground: oklch(0.97 0.002 240);
 
-  --card: oklch(0.16 0.022 260);
-  --card-foreground: oklch(0.98 0.003 260);
+  --card: oklch(0.16 0.025 230);
+  --card-foreground: oklch(0.97 0.002 240);
 
-  --popover: oklch(0.16 0.022 260);
-  --popover-foreground: oklch(0.98 0.003 260);
+  --popover: oklch(0.16 0.025 230);
+  --popover-foreground: oklch(0.97 0.002 240);
 
-  /* Brighter primary for dark mode visibility */
-  --primary: oklch(0.58 0.18 265);
-  --primary-foreground: oklch(0.99 0.003 260);
+  --primary: oklch(0.55 0.12 230);
+  --primary-foreground: oklch(0.99 0.002 240);
 
-  --secondary: oklch(0.22 0.025 260);
-  --secondary-foreground: oklch(0.98 0.003 260);
+  --secondary: oklch(0.22 0.025 230);
+  --secondary-foreground: oklch(0.97 0.002 240);
 
-  --muted: oklch(0.22 0.025 260);
-  --muted-foreground: oklch(0.62 0.015 260);
+  --muted: oklch(0.22 0.025 230);
+  --muted-foreground: oklch(0.65 0.02 230);
 
-  /* Vibrant emerald for dark mode */
-  --accent: oklch(0.62 0.2 160);
-  --accent-foreground: oklch(0.99 0.003 260);
+  --accent: oklch(0.22 0.025 230);
+  --accent-foreground: oklch(0.97 0.002 240);
 
   --destructive: oklch(0.58 0.24 25);
-  --destructive-foreground: oklch(0.99 0.003 260);
+  --destructive-foreground: oklch(0.99 0.002 240);
 
-  --border: oklch(0.28 0.025 260);
-  --input: oklch(0.28 0.025 260);
-  --ring: oklch(0.58 0.18 265);
+  --border: oklch(0.25 0.025 230);
+  --input: oklch(0.25 0.025 230);
+  --ring: oklch(0.55 0.12 230);
 
-  /* Enhanced chart colors for dark backgrounds */
-  --chart-1: oklch(0.58 0.18 265);
-  --chart-2: oklch(0.62 0.2 160);
-  --chart-3: oklch(0.65 0.22 220);
-  --chart-4: oklch(0.68 0.18 340);
-  --chart-5: oklch(0.62 0.2 85);
+  --chart-1: oklch(0.55 0.12 230);
+  --chart-2: oklch(0.60 0.18 180);
+  --chart-3: oklch(0.62 0.14 260);
+  --chart-4: oklch(0.68 0.16 340);
+  --chart-5: oklch(0.62 0.18 90);
 
-  --sidebar: oklch(0.16 0.022 260);
-  --sidebar-foreground: oklch(0.98 0.003 260);
-  --sidebar-primary: oklch(0.58 0.18 265);
-  --sidebar-primary-foreground: oklch(0.99 0.003 260);
-  --sidebar-accent: oklch(0.22 0.025 260);
-  --sidebar-accent-foreground: oklch(0.98 0.003 260);
-  --sidebar-border: oklch(0.28 0.025 260);
-  --sidebar-ring: oklch(0.58 0.18 265);
+  --sidebar: oklch(0.16 0.025 230);
+  --sidebar-foreground: oklch(0.97 0.002 240);
+  --sidebar-primary: oklch(0.55 0.12 230);
+  --sidebar-primary-foreground: oklch(0.99 0.002 240);
+  --sidebar-accent: oklch(0.22 0.025 230);
+  --sidebar-accent-foreground: oklch(0.97 0.002 240);
+  --sidebar-border: oklch(0.25 0.025 230);
+  --sidebar-ring: oklch(0.55 0.12 230);
 
-  --success: oklch(0.62 0.2 160);
-  --success-foreground: oklch(0.99 0.003 260);
-
-  --warning: oklch(0.68 0.2 85);
-  --warning-foreground: oklch(0.13 0.02 260);
-
-  --info: oklch(0.62 0.22 220);
-  --info-foreground: oklch(0.99 0.003 260);
+  --success: oklch(0.60 0.18 155);
+  --success-foreground: oklch(0.99 0.002 240);
+  --warning: oklch(0.72 0.18 80);
+  --warning-foreground: oklch(0.15 0.02 230);
+  --info: oklch(0.60 0.14 230);
+  --info-foreground: oklch(0.99 0.002 240);
 }
 
 @theme inline {
@@ -203,4 +196,13 @@
   h3 {
     @apply text-xl lg:text-2xl;
   }
+}
+
+/* Utility to hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

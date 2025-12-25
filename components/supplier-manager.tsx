@@ -22,7 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { SupplierImportDialog } from "./supplier-import-dialog"
 import { AddCategoryDialog } from "./add-category-dialog"
-import { CompanySelector } from "@/components/company-selector"
+// import { CompanySelector } from "@/components/company-selector" // REMOVE
+import { useCompany } from "@/components/providers/company-provider" // Add import
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 
@@ -70,8 +71,10 @@ const initialFormData = {
 
 export function SupplierManager({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
+  const { selectedCompany } = useCompany() // Context usage
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  // const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // Remove local state
+  const selectedCompanyId = selectedCompany?.id
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [formData, setFormData] = useState(initialFormData)
@@ -89,11 +92,14 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Remove props sync effect
+  /*
   useEffect(() => {
     if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id)
     }
   }, [userCompanies, selectedCompanyId])
+  */
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -245,16 +251,12 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
 
   return (
     <div className="space-y-8">
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
+      {/* <CompanySelector ... /> */}
 
-      {!selectedCompanyId && userCompanies.length > 1 && (
+      {!selectedCompanyId && (
         <Card className="text-center py-12">
           <CardContent>
-            <p className="text-muted-foreground">Veuillez sélectionner une entreprise pour gérer ses fournisseurs.</p>
+            <p className="text-muted-foreground">Veuillez sélectionner une entreprise dans la barre latérale.</p>
           </CardContent>
         </Card>
       )}

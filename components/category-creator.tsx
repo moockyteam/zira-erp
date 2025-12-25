@@ -14,9 +14,9 @@ import { Label } from "@/components/ui/label"
 interface CategoryCreatorProps {
   companyId: string;
   onCategoryCreated: () => void;
-  tableName: 'supplier_categories' | 'item_categories'; // NOUVEAU: Pour le rendre réutilisable
+  tableName: 'supplier_categories' | 'item_categories' | 'expense_categories'; // NOUVEAU: Pour le rendre réutilisable
 }
-export function CategoryCreator({ companyId, onCategoryCreated }: CategoryCreatorProps) {
+export function CategoryCreator({ companyId, onCategoryCreated, tableName }: CategoryCreatorProps) {
   const supabase = createClient()
   const [isOpen, setIsOpen] = useState(false)
   const [categoryName, setCategoryName] = useState("")

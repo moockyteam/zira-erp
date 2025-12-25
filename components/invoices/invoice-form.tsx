@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Link from "next/link"
 import {
   PlusCircle,
@@ -26,6 +26,8 @@ import {
   Receipt,
   CreditCard,
   Save,
+  FileText,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +40,8 @@ const CURRENCIES = [
   { code: "USD", symbol: "$", label: "Dollar US" },
   { code: "EUR", symbol: "€", label: "Euro" },
 ]
+
+import { useCompany } from "@/components/providers/company-provider" // Add import
 
 export function InvoiceForm({
   initialData,
@@ -56,9 +60,18 @@ export function InvoiceForm({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  const { selectedCompany: globalSelectedCompany } = useCompany() // Rename to avoid conflict
   const isNew = !initialData
 
-  const [companyId, setCompanyId] = useState(initialData?.company_id || companies[0]?.id || "")
+  const [companyId, setCompanyId] = useState(initialData?.company_id || globalSelectedCompany?.id || "")
+
+  // Effect to sync with sidebar if creating new
+  useEffect(() => {
+    if (isNew && globalSelectedCompany && !quoteInitialData) {
+      setCompanyId(globalSelectedCompany.id)
+    }
+  }, [isNew, globalSelectedCompany, quoteInitialData])
+
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
@@ -323,140 +336,119 @@ export function InvoiceForm({
 
   return (
     <div className="space-y-6 pb-24">
-      <Card className="border-l-4 border-l-indigo-500 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500 rounded-lg">
-              <Building2 className="h-5 w-5 text-white" />
+      {/* PREMIUM HEADER CARD */}
+      <Card className="border-l-4 border-l-primary shadow-md overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-primary/5 to-purple-500/5 dark:from-primary/10 dark:to-purple-500/10 border-b">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-primary to-purple-600 rounded-lg shadow-inner">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
+                  {isNew ? "Nouvelle Facture" : `Facture ${initialData?.sequence_id || ""}`}
+                </CardTitle>
+                <CardDescription className="text-base">
+                  {isNew ? "Création d'une nouvelle facture client" : "Modification de la facture"}
+                </CardDescription>
+              </div>
             </div>
-            <CardTitle className="text-xl">Informations Générales</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-            <div className="space-y-2">
-              <Label htmlFor="company" className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-indigo-600" />
-                Entreprise Émettrice
-              </Label>
-              <Select value={companyId} onValueChange={setCompanyId} disabled={!isNew}>
-                <SelectTrigger id="company" className="border-2 focus:border-indigo-500">
-                  <SelectValue placeholder="Sélectionner..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <User className="h-4 w-4 text-emerald-600" />
-                Client
-              </Label>
-              <Popover open={openCustomerPopover} onOpenChange={setOpenCustomerPopover}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openCustomerPopover}
-                    className="w-full justify-between font-normal border-2 hover:border-emerald-500 transition-colors bg-transparent"
-                  >
-                    {customers.find((c) => c.id === customerId)?.name || "Sélectionner un client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Rechercher..." />
-                    <CommandList>
-                      <CommandEmpty>Aucun client trouvé.</CommandEmpty>
-                      <CommandGroup>
-                        {customers.map((customer) => (
-                          <CommandItem
-                            key={customer.id}
-                            value={customer.name}
-                            onSelect={() => {
-                              setCustomerId(customer.id)
-                              setProspectName("")
-                              setOpenCustomerPopover(false)
-                            }}
-                          >
-                            <Check
-                              className={cn("mr-2 h-4 w-4", customerId === customer.id ? "opacity-100" : "opacity-0")}
-                            />
-                            {customer.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
 
-            {!customerId && (
-              <div className="space-y-2">
-                <Label htmlFor="prospectName" className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-gray-500" />
-                  Ou Prospect
-                </Label>
-                <Input
-                  id="prospectName"
-                  placeholder="Nom du prospect"
-                  value={prospectName}
-                  onChange={(e) => setProspectName(e.target.value)}
-                  className="border-2 focus:border-gray-500"
-                />
+        <CardContent className="p-6 grid gap-8">
+          {/* CLIENT & COMPANY SECTION */}
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-dashed">
+              <div className="flex items-center gap-2 text-primary font-semibold mb-2">
+                <Building2 className="h-4 w-4" />
+                <h3>Émetteur</h3>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="invoiceDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-indigo-600" />
-                Date de la facture
-              </Label>
-              <Input
-                id="invoiceDate"
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className="border-2 focus:border-indigo-500"
-              />
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Entreprise</Label>
+                <div className="font-medium text-lg flex items-center gap-2">
+                  {companies.find(c => c.id === companyId)?.name || "Aucune entreprise sélectionnée"}
+                  {!isNew && <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">(Fixé)</span>}
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dueDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-amber-600" />
-                Date d&apos;échéance
-              </Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="border-2 focus:border-amber-500"
-              />
-            </div>
+            <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-dashed">
+              <div className="flex items-center gap-2 text-purple-600 font-semibold mb-2">
+                <Users className="h-4 w-4" />
+                <h3>Client</h3>
+              </div>
 
+              <div className="space-y-2">
+                <Label>Client Destinataire</Label>
+                <Popover open={openCustomerPopover} onOpenChange={setOpenCustomerPopover}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openCustomerPopover}
+                      className="w-full justify-between bg-background"
+                    >
+                      {customers.find((c) => c.id === customerId)?.name || "Sélectionner un client..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Rechercher..." />
+                      <CommandList>
+                        <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+                        <CommandGroup>
+                          {customers.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={() => {
+                                setCustomerId(c.id)
+                                setProspectName("")
+                                setOpenCustomerPopover(false)
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {!customerId && (
+                <div className="space-y-2 pt-2 border-t mt-2">
+                  <Label className="text-xs text-muted-foreground">Ou saisir un prospect</Label>
+                  <Input
+                    placeholder="Nom du prospect..."
+                    value={prospectName}
+                    onChange={(e) => setProspectName(e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="currency" className="flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-purple-600" />
-                Devise
-              </Label>
+              <Label>Date de facturation</Label>
+              <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Date d'échéance</Label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Devise</Label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger id="currency" className="border-2 focus:border-purple-500">
-                  <SelectValue placeholder="Sélectionner..." />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CURRENCIES.map((curr) => (
-                    <SelectItem key={curr.code} value={curr.code}>
-                      {curr.symbol} - {curr.label}
-                    </SelectItem>
-                  ))}
+                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

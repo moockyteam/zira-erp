@@ -93,7 +93,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-shrink-0 border-r bg-gradient-to-b from-sidebar to-sidebar/80 backdrop-blur-sm p-4 flex-col transition-all duration-300 relative print:hidden shadow-sm",
+        "hidden md:flex flex-shrink-0 border-r border-sidebar-border bg-gradient-to-b from-sidebar to-sidebar/95 p-4 flex-col transition-all duration-300 sticky top-0 h-screen z-30 print:hidden",
         collapsed ? "w-20" : "w-64",
       )}
     >
@@ -115,14 +115,17 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
                 variant="outline"
                 role="combobox"
                 aria-expanded={openCombobox}
-                className="w-full justify-between"
+                className="w-full justify-between h-14 px-3 border-sidebar-border bg-sidebar/50 hover:bg-sidebar-accent/50"
               >
                 {selectedCompany ? (
-                  <div className="flex items-center gap-2 truncate">
-                    <div className="h-5 w-5 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                      {selectedCompany.logo_url ? <img src={selectedCompany.logo_url} className="h-full w-full object-cover rounded-md" /> : <Building className="h-3 w-3 text-primary" />}
+                  <div className="flex items-center gap-3 truncate text-left">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
+                      {selectedCompany.logo_url ? <img src={selectedCompany.logo_url} className="h-full w-full object-cover rounded-lg" /> : <Building className="h-5 w-5 text-primary" />}
                     </div>
-                    <span className="truncate">{selectedCompany.name}</span>
+                    <div className="flex flex-col truncate">
+                      <span className="truncate font-semibold text-sm">{selectedCompany.name}</span>
+                      <span className="truncate text-xs text-muted-foreground font-normal">Entreprise active</span>
+                    </div>
                   </div>
                 ) : "Choisir entreprise..."}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -181,7 +184,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
         )}
       </div>
 
-      <nav className="flex flex-col space-y-1 flex-1 overflow-y-auto custom-scrollbar">
+      <nav className="flex flex-col space-y-1 flex-1 overflow-y-auto scrollbar-hide -mx-2 px-2">
         <TooltipProvider delayDuration={0}>
           {navSections.map((section) => (
             <div key={section.title} className={!collapsed ? "space-y-2" : "space-y-1"}>
@@ -199,15 +202,15 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
                         <Button
                           variant={isActive ? "default" : "ghost"}
                           className={cn(
-                            "w-full transition-all",
-                            collapsed ? "justify-center px-2" : "justify-start",
+                            "w-full transition-all mb-1 font-medium",
+                            collapsed ? "justify-center px-2 h-11 w-11 mx-auto rounded-xl" : "justify-start px-4 h-11 rounded-xl",
                             isActive
-                              ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
-                              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/95 scale-105"
+                              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-muted-foreground/80 hover:text-sidebar-foreground",
                           )}
                         >
-                          <link.icon className={cn("h-4 w-4", !collapsed && "mr-3")} />
-                          {!collapsed && link.label}
+                          <link.icon className={cn("h-[18px] w-[18px]", !collapsed && "mr-3")} />
+                          {!collapsed && <span className="text-[14px]">{link.label}</span>}
                         </Button>
                       </Link>
                     </TooltipTrigger>

@@ -309,159 +309,188 @@ export function ServiceDialog({ open, onOpenChange, serviceToEdit, companyId }: 
 
                             {/* PRICING TAB */}
                             <TabsContent value="pricing" className="space-y-6 py-6">
-                                <FormField
-                                    control={form.control}
-                                    name="billing_type"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Modèle de Tarification</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="fixed">Forfait (Prix Fixe)</SelectItem>
-                                                    <SelectItem value="hourly">Taux Horaire</SelectItem>
-                                                    <SelectItem value="daily">Taux Journalier (TJM)</SelectItem>
-                                                    <SelectItem value="subscription_monthly">Abonnement Mensuel</SelectItem>
-                                                    <SelectItem value="subscription_yearly">Abonnement Annuel</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormDescription>
-                                                Définit comment ce service est facturé au client.
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <div className="grid grid-cols-2 gap-6">
+                                {/* Section: Modèle de tarification */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">
+                                        Modèle de Tarification
+                                    </h3>
                                     <FormField
                                         control={form.control}
-                                        name="price"
+                                        name="billing_type"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Prix de Vente (HT)</FormLabel>
-                                                <FormControl>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.001"
-                                                            {...field}
-                                                            value={field.value === undefined ? '' : field.value}
-                                                            className="pl-16 text-right"
-                                                            onChange={(e) => {
-                                                                field.onChange(e)
-                                                                const valueStr = e.target.value
-                                                                if (valueStr === '') {
-                                                                    form.setValue("price_ttc", '')
-                                                                    return
-                                                                }
-                                                                const val = parseFloat(valueStr)
-                                                                if (!isNaN(val)) {
-                                                                    const currentVat = form.getValues("vat_rate")
-                                                                    form.setValue("price_ttc", calculateTTC(val, currentVat))
-                                                                }
-                                                            }}
-                                                        />
-                                                        <div className="absolute left-0 top-0 h-full w-14 border-r bg-muted/20 flex items-center justify-center">
-                                                            <FormField
-                                                                control={form.control}
-                                                                name="currency"
-                                                                render={({ field: currencyField }) => (
-                                                                    <Select
-                                                                        onValueChange={currencyField.onChange}
-                                                                        defaultValue={currencyField.value}
-                                                                        value={currencyField.value}
-                                                                    >
-                                                                        <SelectTrigger className="h-full border-0 bg-transparent focus:ring-0 px-2 w-full gap-0">
-                                                                            <SelectValue />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            <SelectItem value="TND">TND</SelectItem>
-                                                                            <SelectItem value="EUR">€</SelectItem>
-                                                                            <SelectItem value="USD">$</SelectItem>
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                )}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="vat_rate"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Taux TVA (%)</FormLabel>
-                                                <Select
-                                                    onValueChange={(val) => {
-                                                        const numVal = parseFloat(val)
-                                                        field.onChange(numVal)
-                                                        const currentPrice = form.getValues("price")
-                                                        form.setValue("price_ttc", calculateTTC(currentPrice, numVal))
-                                                    }}
-                                                    defaultValue={String(field.value)}
-                                                    value={String(field.value)}
-                                                >
+                                                <FormLabel>Type de facturation</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                     <FormControl>
-                                                        <SelectTrigger>
+                                                        <SelectTrigger className="w-full">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        <SelectItem value="0">0%</SelectItem>
-                                                        <SelectItem value="5">5%</SelectItem>
-                                                        <SelectItem value="13">13%</SelectItem>
-                                                        <SelectItem value="19">19%</SelectItem>
+                                                        <SelectItem value="fixed">Forfait (Prix Fixe)</SelectItem>
+                                                        <SelectItem value="hourly">Taux Horaire</SelectItem>
+                                                        <SelectItem value="daily">Taux Journalier (TJM)</SelectItem>
+                                                        <SelectItem value="subscription_monthly">Abonnement Mensuel</SelectItem>
+                                                        <SelectItem value="subscription_yearly">Abonnement Annuel</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                <FormDescription>
+                                                    Définit comment ce service est facturé au client.
+                                                </FormDescription>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <FormField
-                                        control={form.control}
-                                        name="price_ttc"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Prix de Vente (TTC)</FormLabel>
-                                                <FormControl>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.001"
-                                                            {...field}
-                                                            value={field.value === undefined ? '' : field.value}
-                                                            className="pl-8 text-right"
-                                                            onChange={(e) => {
-                                                                field.onChange(e)
-                                                                const valueStr = e.target.value
-                                                                if (valueStr === '') {
-                                                                    form.setValue("price", '')
-                                                                    return
-                                                                }
-                                                                const val = parseFloat(valueStr)
-                                                                if (!isNaN(val)) {
-                                                                    const currentVat = form.getValues("vat_rate")
-                                                                    form.setValue("price", calculateHT(val, currentVat))
-                                                                }
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </FormControl>
-                                                <FormDescription>Calculé automatiquement</FormDescription>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
+
+                                {/* Section: Prix */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">
+                                        Prix de Vente
+                                    </h3>
+
+                                    {/* Row 1: Currency + TVA */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="currency"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Devise</FormLabel>
+                                                    <Select
+                                                        onValueChange={field.onChange}
+                                                        defaultValue={field.value}
+                                                        value={field.value}
+                                                    >
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full">
+                                                                <SelectValue placeholder="Choisir une devise" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="TND">TND - Dinar Tunisien</SelectItem>
+                                                            <SelectItem value="EUR">EUR - Euro</SelectItem>
+                                                            <SelectItem value="USD">USD - Dollar US</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="vat_rate"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Taux TVA</FormLabel>
+                                                    <Select
+                                                        onValueChange={(val) => {
+                                                            const numVal = parseFloat(val)
+                                                            field.onChange(numVal)
+                                                            const currentPrice = form.getValues("price")
+                                                            form.setValue("price_ttc", calculateTTC(currentPrice, numVal))
+                                                        }}
+                                                        defaultValue={String(field.value)}
+                                                        value={String(field.value)}
+                                                    >
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="0">0%</SelectItem>
+                                                            <SelectItem value="5">5%</SelectItem>
+                                                            <SelectItem value="13">13%</SelectItem>
+                                                            <SelectItem value="19">19%</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    {/* Row 2: Prix HT + Prix TTC */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="price"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Prix HT</FormLabel>
+                                                    <FormControl>
+                                                        <div className="relative">
+                                                            <Input
+                                                                type="number"
+                                                                step="0.001"
+                                                                placeholder="0.000"
+                                                                {...field}
+                                                                value={field.value === undefined ? '' : field.value}
+                                                                className="pr-16 text-right font-medium"
+                                                                onChange={(e) => {
+                                                                    field.onChange(e)
+                                                                    const valueStr = e.target.value
+                                                                    if (valueStr === '') {
+                                                                        form.setValue("price_ttc", '')
+                                                                        return
+                                                                    }
+                                                                    const val = parseFloat(valueStr)
+                                                                    if (!isNaN(val)) {
+                                                                        const currentVat = form.getValues("vat_rate")
+                                                                        form.setValue("price_ttc", calculateTTC(val, currentVat))
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
+                                                                {form.watch("currency")}
+                                                            </span>
+                                                        </div>
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="price_ttc"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Prix TTC</FormLabel>
+                                                    <FormControl>
+                                                        <div className="relative">
+                                                            <Input
+                                                                type="number"
+                                                                step="0.001"
+                                                                placeholder="0.000"
+                                                                {...field}
+                                                                value={field.value === undefined ? '' : field.value}
+                                                                className="pr-16 text-right font-medium bg-muted/30"
+                                                                onChange={(e) => {
+                                                                    field.onChange(e)
+                                                                    const valueStr = e.target.value
+                                                                    if (valueStr === '') {
+                                                                        form.setValue("price", '')
+                                                                        return
+                                                                    }
+                                                                    const val = parseFloat(valueStr)
+                                                                    if (!isNaN(val)) {
+                                                                        const currentVat = form.getValues("vat_rate")
+                                                                        form.setValue("price", calculateHT(val, currentVat))
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
+                                                                {form.watch("currency")}
+                                                            </span>
+                                                        </div>
+                                                    </FormControl>
+                                                    <FormDescription>Calculé automatiquement</FormDescription>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
                                 </div>
                             </TabsContent>
 

@@ -4,7 +4,8 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { CompanySelector } from "@/components/company-selector";
+// import { CompanySelector } from "@/components/company-selector"; // REMOVE
+import { useCompany } from "@/components/providers/company-provider"; // ADD
 import { DashboardClient } from "@/components/dashboard-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,22 +20,28 @@ const dateRanges = [
 
 export function DashboardManager({ userCompanies }: { userCompanies: any[] }) {
   const supabase = createClient();
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const { selectedCompany } = useCompany(); // ADD
+
+  // const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null); // REMOVE
+  const selectedCompanyId = selectedCompany?.id;
   const [dashboardData, setDashboardData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState("this_month");
 
+  // REMOVE Sync effect
+  /*
   useEffect(() => {
     if (userCompanies && userCompanies.length > 0 && !selectedCompanyId) {
       setSelectedCompanyId(userCompanies[0].id);
     }
   }, [userCompanies, selectedCompanyId]);
+  */
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!selectedCompanyId) return;
       setIsLoading(true);
-      
+
       const today = new Date();
       let startDate, endDate;
 
@@ -74,7 +81,7 @@ export function DashboardManager({ userCompanies }: { userCompanies: any[] }) {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">
-          <CompanySelector companies={userCompanies} selectedCompanyId={selectedCompanyId} onCompanySelect={setSelectedCompanyId} />
+          {/* <CompanySelector ... /> */}
         </div>
         <div className="w-full md:w-48">
           <Select value={period} onValueChange={setPeriod}>

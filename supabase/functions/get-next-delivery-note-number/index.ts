@@ -11,7 +11,16 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const { companyId } = await req.json();
     if (!companyId) throw new Error("L'ID de l'entreprise est manquant.");
-    
+
+    // Récupérer le numéro de départ configuré
+    const { data: companyData } = await supabaseAdmin
+      .from('companies')
+      .select('delivery_note_start_number')
+      .eq('id', companyId)
+      .single();
+
+    const startNumber = companyData?.delivery_note_start_number || 1;
+
     const currentYear = new Date().getFullYear();
     const { data, error } = await supabaseAdmin
       .from('delivery_notes') // On cherche dans les BL
@@ -24,12 +33,12 @@ Deno.serve(async (req) => {
 
     if (error && error.code !== 'PGRST116') throw error;
 
-    let nextNumber = 1;
+    let nextNumber = startNumber;
     if (data) {
       const lastNumber = parseInt(data.delivery_note_number.split('-').pop() || '0');
-      nextNumber = lastNumber + 1;
+      nextNumber = Math.max(lastNumber + 1, startNumber);
     }
-    
+
     const newDnNumber = `BL-${currentYear}-${String(nextNumber).padStart(3, '0')}`;
     return new Response(JSON.stringify({ delivery_note_number: newDnNumber }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -1,4 +1,3 @@
-// components/quotes/quote-list.tsx
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
@@ -8,12 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, FileText, Clock, CheckCircle, XCircle } from "lucide-react"
-import { CompanySelector } from "@/components/company-selector"
+import { PlusCircle, FileText, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react"
+import { useCompany } from "@/components/providers/company-provider"
 import { QuoteActions } from "./quote-actions"
+import { SearchInput } from "@/components/ui/search-input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 type CompanyForList = { id: string; name: string; logo_url: string | null }
 type QuoteStatus = "BROUILLON" | "ENVOYE" | "CONFIRME" | "REFUSE"
+
 type Quote = {
   id: string
   quote_number: string
@@ -26,18 +29,23 @@ type Quote = {
   currency: string
 }
 
+type SortConfig = {
+  key: keyof Quote | "customer_name"
+  direction: "asc" | "desc"
+}
+
 export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }) {
   const supabase = createClient()
+  const { selectedCompany } = useCompany()
+  const selectedCompanyId = selectedCompany?.id
 
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    if (userCompanies && userCompanies.length === 1) {
-      setSelectedCompanyId(userCompanies[0].id)
-    }
-  }, [userCompanies])
+  // Filter & Sort states
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "quote_date", direction: "desc" })
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -50,7 +58,6 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
   const fetchQuotes = async (companyId: string) => {
     setIsLoading(true)
 
-    // Fetch quotes and customers in parallel to avoid FK ambiguity issues causing "Failed to fetch"
     const [quotesRes, customersRes] = await Promise.all([
       supabase
         .from("quotes")
@@ -66,7 +73,6 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
     if (quotesRes.error) {
       console.error("Erreur chargement devis:", quotesRes.error)
     } else {
-      // Manual join
       const customerMap = new Map(customersRes.data?.map(c => [c.id, c.name]) || [])
       const quotesWithCustomers = quotesRes.data.map((q: any) => ({
         ...q,
@@ -84,232 +90,325 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
     )
   }
 
+  // Statistics
   const stats = useMemo(() => {
     const totalByCurrency: Record<string, number> = {}
-    const confirmedByCurrency: Record<string, number> = {}
 
     quotes.forEach((q) => {
       const curr = q.currency || "TND"
       totalByCurrency[curr] = (totalByCurrency[curr] || 0) + q.total_ttc
-      if (q.status === "CONFIRME") {
-        confirmedByCurrency[curr] = (confirmedByCurrency[curr] || 0) + q.total_ttc
-      }
     })
 
-    const brouillons = quotes.filter((q) => q.status === "BROUILLON").length
-    const envoyes = quotes.filter((q) => q.status === "ENVOYE").length
-    const confirmes = quotes.filter((q) => q.status === "CONFIRME").length
-    const refuses = quotes.filter((q) => q.status === "REFUSE").length
+    const totalCount = quotes.length
+    const confirmedCount = quotes.filter((q) => q.status === "CONFIRME").length
+    const pendingCount = quotes.filter((q) => q.status === "BROUILLON" || q.status === "ENVOYE").length
+    const refusedCount = quotes.filter((q) => q.status === "REFUSE").length
 
     return {
       totalByCurrency,
-      confirmedByCurrency,
-      brouillons,
-      envoyes,
-      confirmes,
-      refuses,
+      totalCount,
+      confirmedCount,
+      pendingCount,
+      refusedCount,
     }
   }, [quotes])
 
+  // Filtering & Sorting Logic
+  const filteredQuotes = useMemo(() => {
+    let result = [...quotes]
+
+    // 1. Search
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter((q) =>
+        q.quote_number.toLowerCase().includes(lowerTerm) ||
+        (q.customers?.name || "").toLowerCase().includes(lowerTerm) ||
+        (q.prospect_name || "").toLowerCase().includes(lowerTerm)
+      )
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== "all") {
+      result = result.filter((q) => q.status === statusFilter)
+    }
+
+    // 3. Sorting
+    result.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Quote]
+      let bValue: any = b[sortConfig.key as keyof Quote]
+
+      if (sortConfig.key === "customer_name") {
+        aValue = a.customers?.name || a.prospect_name || ""
+        bValue = b.customers?.name || b.prospect_name || ""
+      }
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [quotes, searchTerm, statusFilter, sortConfig])
+
+  const requestSort = (key: keyof Quote | "customer_name") => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
+  }
+
+  const getSortIcon = (key: keyof Quote | "customer_name") => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
+    return sortConfig.direction === "asc"
+      ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-2 h-3 w-3 text-primary" />
+  }
+
   const getStatusVariant = (status: QuoteStatus) => {
     switch (status) {
-      case "BROUILLON":
-        return "secondary"
-      case "ENVOYE":
-        return "default"
-      case "CONFIRME":
-        return "success"
-      case "REFUSE":
-        return "destructive"
-      default:
-        return "outline"
+      case "BROUILLON": return "secondary"
+      case "ENVOYE": return "secondary"
+      case "CONFIRME": return "outline" // Emerald green via className
+      case "REFUSE": return "outline" // Red via className
+      default: return "outline"
+    }
+  }
+
+  const getStatusBadgeStyle = (status: QuoteStatus) => {
+    switch (status) {
+      case "BROUILLON": return "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
+      case "ENVOYE": return "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
+      case "CONFIRME": return "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
+      case "REFUSE": return "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+      default: return ""
     }
   }
 
   return (
-    <div className="space-y-6">
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
-
-      {!selectedCompanyId && userCompanies.length > 1 && (
-        <Card className="text-center py-12 border-2 border-dashed">
+    <div className="space-y-8">
+      {!selectedCompanyId && (
+        <Card className="text-center py-12 border-dashed">
           <CardContent>
-            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Veuillez sélectionner une entreprise pour voir ses devis.</p>
+            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <h3 className="text-lg font-medium text-foreground">Aucune entreprise sélectionnée</h3>
+            <p className="text-muted-foreground">Veuillez sélectionner une entreprise dans la barre latérale.</p>
           </CardContent>
         </Card>
       )}
 
       {selectedCompanyId && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/20 dark:to-background hover:shadow-lg transition-all duration-300">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs font-medium">Total Devis</CardDescription>
-                  <FileText className="h-4 w-4 text-indigo-500" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {Object.entries(stats.totalByCurrency).map(([currency, amount]) => (
-                    <div key={currency} className="text-xl font-bold text-indigo-700 dark:text-indigo-400">
-                      {amount.toFixed(currency === "TND" ? 3 : 2)} {currency}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{quotes.length} devis au total</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-background hover:shadow-lg transition-all duration-300">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs font-medium">En Attente</CardDescription>
-                  <Clock className="h-4 w-4 text-amber-500" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
-                  {quotes.filter((q) => q.status === "BROUILLON" || q.status === "ENVOYE").length}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stats.brouillons} brouillon{stats.brouillons > 1 ? "s" : ""}, {stats.envoyes} envoyé
-                  {stats.envoyes > 1 ? "s" : ""}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-background hover:shadow-lg transition-all duration-300">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs font-medium">Confirmés</CardDescription>
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {Object.entries(stats.confirmedByCurrency).map(([currency, amount]) => (
-                    <div key={currency} className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
-                      {amount.toFixed(currency === "TND" ? 3 : 2)} {currency}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stats.confirmes} devis confirmé{stats.confirmes > 1 ? "s" : ""}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-background hover:shadow-lg transition-all duration-300">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs font-medium">Refusés</CardDescription>
-                  <XCircle className="h-4 w-4 text-red-500" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-700 dark:text-red-400">{stats.refuses}</div>
-                <p className="text-xs text-muted-foreground mt-1">devis refusé{stats.refuses > 1 ? "s" : ""}</p>
-              </CardContent>
-            </Card>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Devis</h1>
+              <p className="text-muted-foreground mt-1">
+                Gérez vos devis clients et suivez leur statut.
+              </p>
+            </div>
+            <Link href={`/dashboard/quotes/new?companyId=${selectedCompanyId}`}>
+              <Button size="lg" className="shadow-sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nouveau Devis
+              </Button>
+            </Link>
           </div>
 
-          <Card className="border-2 hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border-b-2 border-indigo-100 dark:border-indigo-900">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                    Liste des Devis
-                  </CardTitle>
-                  <CardDescription className="mt-1 font-medium">
-                    Historique de tous les devis pour cette entreprise
-                  </CardDescription>
-                </div>
-                <Link href={`/dashboard/quotes/new?companyId=${selectedCompanyId}`} passHref>
-                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Nouveau Devis
-                  </Button>
-                </Link>
+          {/* Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-indigo-600/70 mb-1">Total Devis</p>
+              <div className="space-y-0.5">
+                {Object.entries(stats.totalByCurrency).map(([currency, amount]) => (
+                  <div key={currency} className="text-2xl font-bold text-indigo-700">
+                    {new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(amount)}
+                  </div>
+                ))}
+                {Object.keys(stats.totalByCurrency).length === 0 && (
+                  <div className="text-2xl font-bold text-indigo-700">0,000 TND</div>
+                )}
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="font-bold">Numéro</TableHead>
-                      <TableHead className="font-bold">Client / Prospect</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold">Statut</TableHead>
-                      <TableHead className="font-bold">Devise</TableHead>
-                      <TableHead className="text-right font-bold">Montant TTC</TableHead>
-                      <TableHead className="font-bold">Actions</TableHead>
+            </div>
+            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-emerald-600/70 mb-1">Confirmés</p>
+              <div className="text-2xl font-bold text-emerald-700">{stats.confirmedCount}</div>
+            </div>
+            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-amber-600/70 mb-1">En Attente</p>
+              <div className="text-2xl font-bold text-amber-700">{stats.pendingCount}</div>
+            </div>
+            <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-rose-600/70 mb-1">Refusés</p>
+              <div className="text-2xl font-bold text-rose-700">{stats.refusedCount}</div>
+            </div>
+          </div>
+
+          {/* Filters & Table */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center sm:h-10">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <SearchInput
+                  placeholder="Rechercher par numéro ou client..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onClear={() => setSearchTerm("")}
+                  className="w-full sm:w-[300px]"
+                />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Statut" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les statuts</SelectItem>
+                    <SelectItem value="BROUILLON">Brouillon</SelectItem>
+                    <SelectItem value="ENVOYE">Envoyé</SelectItem>
+                    <SelectItem value="CONFIRME">Confirmé</SelectItem>
+                    <SelectItem value="REFUSE">Refusé</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("quote_number")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Numéro {getSortIcon("quote_number")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("customer_name")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Client / Prospect {getSortIcon("customer_name")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("quote_date")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Date {getSortIcon("quote_date")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("status")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Statut {getSortIcon("status")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="text-right cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("total_ttc")}
+                    >
+                      <div className="flex items-center justify-end text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Montant TTC {getSortIcon("total_ttc")}
+                      </div>
+                    </TableHead>
+                    <TableHead className="h-11 w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center">
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Chargement...
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12">
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-                            <p className="text-muted-foreground">Chargement des devis...</p>
-                          </div>
+                  ) : filteredQuotes.length > 0 ? (
+                    filteredQuotes.map((quote) => (
+                      <TableRow
+                        key={quote.id}
+                        className="group hover:bg-muted/30 transition-colors"
+                      >
+                        <TableCell className="font-medium text-foreground">
+                          {quote.quote_number}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {quote.customers?.name || quote.prospect_name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(quote.quote_date).toLocaleDateString("fr-FR")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn("px-2.5 py-0.5 text-xs font-medium border shadow-sm", getStatusBadgeStyle(quote.status))}
+                          >
+                            {quote.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          {new Intl.NumberFormat("fr-FR", {
+                            style: "currency",
+                            currency: quote.currency || "TND"
+                          }).format(quote.total_ttc)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <QuoteActions
+                            quoteId={quote.id}
+                            currentStatus={quote.status}
+                            onStatusChange={(newStatus) => handleStatusChange(quote.id, newStatus)}
+                          />
                         </TableCell>
                       </TableRow>
-                    ) : quotes.length > 0 ? (
-                      quotes.map((quote) => (
-                        <TableRow
-                          key={quote.id}
-                          className="hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-colors"
-                        >
-                          <TableCell className="font-semibold text-indigo-700 dark:text-indigo-400">
-                            {quote.quote_number}
-                          </TableCell>
-                          <TableCell className="font-medium">{quote.customers?.name || quote.prospect_name}</TableCell>
-                          <TableCell>{new Date(quote.quote_date).toLocaleDateString("fr-FR")}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusVariant(quote.status)} className="font-medium">
-                              {quote.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="font-medium">
-                              {quote.currency || "TND"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-lg">
-                            {quote.total_ttc.toFixed((quote.currency || "TND") === "TND" ? 3 : 2)}{" "}
-                            {quote.currency || "TND"}
-                          </TableCell>
-                          <TableCell>
-                            <QuoteActions
-                              quoteId={quote.id}
-                              currentStatus={quote.status}
-                              onStatusChange={(newStatus) => handleStatusChange(quote.id, newStatus)}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12">
-                          <div className="flex flex-col items-center gap-2">
-                            <FileText className="h-12 w-12 text-muted-foreground/50" />
-                            <p className="text-muted-foreground">Aucun devis pour cette entreprise.</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-[300px] text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <FileText className="h-12 w-12 text-muted-foreground/20" />
+                          {searchTerm || statusFilter !== "all" ? (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun devis trouvé</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Aucun résultat ne correspond à vos critères de recherche. Essayez de modifier vos filtres.
+                              </p>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSearchTerm("")
+                                  setStatusFilter("all")
+                                }}
+                              >
+                                Réinitialiser les filtres
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun devis</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Vous n'avez pas encore créé de devis pour cette entreprise.
+                                Commencez par en créer un nouveau.
+                              </p>
+                              <Link href={`/dashboard/quotes/new?companyId=${selectedCompanyId}`}>
+                                <Button>
+                                  <PlusCircle className="mr-2 h-4 w-4" />
+                                  Créer un devis
+                                </Button>
+                              </Link>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </>
       )}
     </div>

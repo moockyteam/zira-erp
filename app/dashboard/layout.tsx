@@ -23,7 +23,7 @@ export default async function DashboardLayout({
   // Fetch companies for the provider
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, name, logo_url, activity")
+    .select("*")
     .eq("user_id", user.id)
 
   return (

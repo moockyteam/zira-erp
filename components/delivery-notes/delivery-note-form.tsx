@@ -18,6 +18,7 @@ import { PlusCircle, Trash2, Save, CreditCard, Check, ChevronsUpDown, User } fro
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { useCompany } from "@/components/providers/company-provider"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
 type Customer = {
@@ -57,7 +58,14 @@ export function DeliveryNoteForm({
   const supabase = createClient()
   const isNew = !initialData
 
-  const [companyId, setCompanyId] = useState(initialData?.company_id || companies[0]?.id || "")
+  const { selectedCompany } = useCompany()
+  const [companyId, setCompanyId] = useState(initialData?.company_id || selectedCompany?.id || "")
+
+  useEffect(() => {
+    if (!initialData && selectedCompany && !companyId) {
+      setCompanyId(selectedCompany.id)
+    }
+  }, [initialData, selectedCompany, companyId])
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)

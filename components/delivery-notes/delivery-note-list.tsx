@@ -1,16 +1,18 @@
-// Fichier : components/delivery-notes
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, Package, Truck, XCircle } from "lucide-react"
-import { CompanySelector } from "@/components/company-selector"
+import { PlusCircle, Package, Truck, XCircle, ArrowUpDown, ChevronUp, ChevronDown, FileText } from "lucide-react"
+import { useCompany } from "@/components/providers/company-provider"
 import { DnActions } from "./delivery-note-actions"
+import { SearchInput } from "@/components/ui/search-input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 type Dn = {
   id: string
@@ -20,18 +22,30 @@ type Dn = {
   status: "BROUILLON" | "LIVRE" | "ANNULE"
 }
 
+type SortConfig = {
+  key: keyof Dn | "customer_name"
+  direction: "asc" | "desc"
+}
+
 export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
   const supabase = createClient()
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const { selectedCompany } = useCompany()
+  const selectedCompanyId = selectedCompany?.id
+
   const [deliveryNotes, setDeliveryNotes] = useState<Dn[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
+  // Filter & Sort states
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "delivery_date", direction: "desc" })
+
   useEffect(() => {
-    if (userCompanies?.length === 1) setSelectedCompanyId(userCompanies[0].id)
-  }, [userCompanies])
-  useEffect(() => {
-    if (selectedCompanyId) fetchDns(selectedCompanyId)
-    else setDeliveryNotes([])
+    if (selectedCompanyId) {
+      fetchDns(selectedCompanyId)
+    } else {
+      setDeliveryNotes([])
+    }
   }, [selectedCompanyId])
 
   const fetchDns = async (companyId: string) => {
@@ -41,158 +55,293 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
       .select(`id, delivery_note_number, customers(name), delivery_date, status`)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
-    if (error) console.error("Erreur chargement BL:", error)
-    else setDeliveryNotes(data as Dn[])
+
+    if (error) {
+      console.error("Erreur chargement BL:", error)
+    } else {
+      // Map the data to handle Supabase returning arrays for joined relations
+      const formattedData = (data as any[]).map(item => ({
+        ...item,
+        customers: Array.isArray(item.customers) && item.customers.length > 0
+          ? item.customers[0]
+          : item.customers
+      }))
+      setDeliveryNotes(formattedData as Dn[])
+    }
     setIsLoading(false)
   }
 
-  const stats = {
-    draft: deliveryNotes.filter((dn) => dn.status === "BROUILLON").length,
-    delivered: deliveryNotes.filter((dn) => dn.status === "LIVRE").length,
-    cancelled: deliveryNotes.filter((dn) => dn.status === "ANNULE").length,
-    total: deliveryNotes.length,
+  // Statistics
+  const stats = useMemo(() => {
+    const total = deliveryNotes.length
+    const draft = deliveryNotes.filter((dn) => dn.status === "BROUILLON").length
+    const delivered = deliveryNotes.filter((dn) => dn.status === "LIVRE").length
+    const cancelled = deliveryNotes.filter((dn) => dn.status === "ANNULE").length
+
+    return { total, draft, delivered, cancelled }
+  }, [deliveryNotes])
+
+  // Filtering & Sorting Logic
+  const filteredDeliveryNotes = useMemo(() => {
+    let result = [...deliveryNotes]
+
+    // 1. Search
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter((dn) =>
+        dn.delivery_note_number.toLowerCase().includes(lowerTerm) ||
+        (dn.customers?.name || "").toLowerCase().includes(lowerTerm)
+      )
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== "all") {
+      result = result.filter((dn) => dn.status === statusFilter)
+    }
+
+    // 3. Sorting
+    result.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Dn]
+      let bValue: any = b[sortConfig.key as keyof Dn]
+
+      if (sortConfig.key === "customer_name") {
+        aValue = a.customers?.name || ""
+        bValue = b.customers?.name || ""
+      }
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [deliveryNotes, searchTerm, statusFilter, sortConfig])
+
+  const requestSort = (key: keyof Dn | "customer_name") => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
   }
 
-  const getStatusVariant = (status: Dn["status"]): "default" | "destructive" | "success" | "secondary" => {
-    if (status === "LIVRE") return "success"
-    if (status === "ANNULE") return "destructive"
-    return "secondary"
+  const getSortIcon = (key: keyof Dn | "customer_name") => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
+    return sortConfig.direction === "asc"
+      ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-2 h-3 w-3 text-primary" />
+  }
+
+  const getStatusVariant = (status: Dn["status"]): "default" | "destructive" | "success" | "secondary" | "outline" => {
+    // We'll use custom classes primarily, but keeping this for fallback
+    return "outline"
+  }
+
+  const getStatusBadgeStyle = (status: Dn["status"]) => {
+    switch (status) {
+      case "BROUILLON": return "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
+      case "LIVRE": return "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
+      case "ANNULE": return "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+      default: return ""
+    }
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg">
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">Gestion des Bons de Livraison</h1>
-          <p className="text-indigo-100 mt-1">Créez et suivez vos livraisons clients.</p>
-        </div>
-        {selectedCompanyId && (
-          <Link href={`/dashboard/delivery-notes/new?companyId=${selectedCompanyId}`} passHref>
-            <Button className="w-full sm:w-auto bg-white text-indigo-600 hover:bg-indigo-50 font-semibold shadow-md">
-              <PlusCircle className="h-5 w-5 mr-2" /> Nouveau BL
-            </Button>
-          </Link>
-        )}
-      </div>
-
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
+      {!selectedCompanyId && (
+        <Card className="text-center py-12 border-dashed">
+          <CardContent>
+            <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <h3 className="text-lg font-medium text-foreground">Aucune entreprise sélectionnée</h3>
+            <p className="text-muted-foreground">Veuillez sélectionner une entreprise dans la barre latérale.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedCompanyId && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Total BL</p>
-                    <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
-                  </div>
-                  <Package className="h-10 w-10 text-blue-500 opacity-70" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Brouillon</p>
-                    <p className="text-3xl font-bold text-amber-600">{stats.draft}</p>
-                  </div>
-                  <Package className="h-10 w-10 text-amber-500 opacity-70" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Livrés</p>
-                    <p className="text-3xl font-bold text-emerald-600">{stats.delivered}</p>
-                  </div>
-                  <Truck className="h-10 w-10 text-emerald-500 opacity-70" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-red-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Annulés</p>
-                    <p className="text-3xl font-bold text-red-600">{stats.cancelled}</p>
-                  </div>
-                  <XCircle className="h-10 w-10 text-red-500 opacity-70" />
-                </div>
-              </CardContent>
-            </Card>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Bons de Livraison</h1>
+              <p className="text-muted-foreground mt-1">Créez et suivez vos livraisons clients.</p>
+            </div>
+            <Link href={`/dashboard/delivery-notes/new?companyId=${selectedCompanyId}`} passHref>
+              <Button size="lg" className="shadow-sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nouveau BL
+              </Button>
+            </Link>
           </div>
 
-          <Card className="border-2 border-indigo-100 shadow-lg overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-100">
-              <CardTitle className="text-2xl text-indigo-900">Liste des Bons de Livraison</CardTitle>
-              <CardDescription className="text-indigo-700">
-                Historique de tous les BL pour cette entreprise.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b-2 border-indigo-100 hover:bg-indigo-50/50">
-                      <TableHead className="font-bold text-indigo-900">Numéro</TableHead>
-                      <TableHead className="font-bold text-indigo-900">Client</TableHead>
-                      <TableHead className="font-bold text-indigo-900">Date Livraison</TableHead>
-                      <TableHead className="font-bold text-indigo-900">Statut</TableHead>
-                      <TableHead className="font-bold text-indigo-900">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center p-8">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                            <span className="text-muted-foreground">Chargement...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : deliveryNotes.length > 0 ? (
-                      deliveryNotes.map((dn) => (
-                        <TableRow
-                          key={dn.id}
-                          className="hover:bg-indigo-50/50 transition-colors border-b border-indigo-50"
-                        >
-                          <TableCell className="font-medium text-indigo-900">{dn.delivery_note_number}</TableCell>
-                          <TableCell>{dn.customers?.name || "N/A"}</TableCell>
-                          <TableCell>{new Date(dn.delivery_date).toLocaleDateString("fr-FR")}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusVariant(dn.status)} className="font-semibold">
-                              {dn.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center p-8 text-muted-foreground">
-                          Aucun BL pour cette entreprise.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+          {/* Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-blue-600/70 mb-1">Total</p>
+              <div className="text-2xl font-bold text-blue-700">{stats.total}</div>
+            </div>
+
+            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-amber-600/70 mb-1">Brouillons</p>
+              <div className="text-2xl font-bold text-amber-700">{stats.draft}</div>
+            </div>
+
+            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-emerald-600/70 mb-1">Livrés</p>
+              <div className="text-2xl font-bold text-emerald-700">{stats.delivered}</div>
+            </div>
+
+            <div className="bg-red-50/50 p-4 rounded-xl border border-red-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-red-600/70 mb-1">Annulés</p>
+              <div className="text-2xl font-bold text-red-700">{stats.cancelled}</div>
+            </div>
+          </div>
+
+          {/* Filters & Table */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center sm:h-10">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <SearchInput
+                  placeholder="Rechercher par numéro ou client..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onClear={() => setSearchTerm("")}
+                  className="w-full sm:w-[300px]"
+                />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Statut" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les statuts</SelectItem>
+                    <SelectItem value="BROUILLON">Brouillon</SelectItem>
+                    <SelectItem value="LIVRE">Livré</SelectItem>
+                    <SelectItem value="ANNULE">Annulé</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("delivery_note_number")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Numéro {getSortIcon("delivery_note_number")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("customer_name")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Client {getSortIcon("customer_name")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("delivery_date")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Date Livraison {getSortIcon("delivery_date")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("status")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Statut {getSortIcon("status")}
+                      </div>
+                    </TableHead>
+                    <TableHead className="h-11 w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Chargement...
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredDeliveryNotes.length > 0 ? (
+                    filteredDeliveryNotes.map((dn) => (
+                      <TableRow
+                        key={dn.id}
+                        className="group hover:bg-muted/30 transition-colors"
+                      >
+                        <TableCell className="font-medium text-foreground">
+                          {dn.delivery_note_number}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {dn.customers?.name || "N/A"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(dn.delivery_date).toLocaleDateString("fr-FR")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn("px-2.5 py-0.5 text-xs font-medium border shadow-sm", getStatusBadgeStyle(dn.status))}
+                          >
+                            {dn.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-[300px] text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <Package className="h-12 w-12 text-muted-foreground/20" />
+                          {searchTerm || statusFilter !== "all" ? (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun BL trouvé</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Aucun résultat ne correspond à vos critères de recherche. Essayez de modifier vos filtres.
+                              </p>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSearchTerm("")
+                                  setStatusFilter("all")
+                                }}
+                              >
+                                Réinitialiser les filtres
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun Bon de Livraison</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Vous n'avez pas encore créé de bon de livraison pour cette entreprise.
+                              </p>
+                              <Link href={`/dashboard/delivery-notes/new?companyId=${selectedCompanyId}`}>
+                                <Button>
+                                  <PlusCircle className="mr-2 h-4 w-4" />
+                                  Créer un BL
+                                </Button>
+                              </Link>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </>
       )}
     </div>

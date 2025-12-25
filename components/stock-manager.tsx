@@ -1,9 +1,8 @@
 "use client"
+
 import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { SearchInput } from "@/components/ui/search-input"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,11 +14,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   AlertTriangle,
   ShoppingCart,
-  ChevronsUpDown,
   FileDown,
   MoreVertical,
   Edit,
@@ -27,45 +24,63 @@ import {
   ArrowDownToLine,
   History as HistoryIcon,
   Trash2,
+  Package,
+  Layers,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+  PlusCircle
 } from "lucide-react"
-import { CompanySelector } from "@/components/company-selector"
+import { useCompany } from "@/components/providers/company-provider"
 import { ManageItemDialog, type Item } from "./manage-item-dialog"
 import { ReorderDialog } from "./reorder-dialog"
 import { StockHistoryDialog } from "./stock-history-dialog"
-import { Skeleton } from "@/components/ui/skeleton"
 import { StockImportDialog } from "./stock-import-dialog"
 import { StockEntryDialog } from "./stock-entry-dialog"
 import { QuickAdjustDialog } from "./quick-adjust-dialog"
 import { StockEmptyState } from "./stock-empty-state"
+import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/ui/page-header"
+import { KpiCard } from "@/components/ui/kpi-card"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 type Category = { id: string; name: string }
 type Supplier = { id: string; name: string }
 
+type SortConfig = {
+  key: keyof Item | "category_name"
+  direction: "asc" | "desc"
+}
+
 export function StockManager({ userCompanies }: { userCompanies: { id: string; name: string; logo_url: string | null }[] }) {
   const supabase = createClient()
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const { selectedCompany } = useCompany()
+  const selectedCompanyId = selectedCompany?.id
+
   const [items, setItems] = useState<Item[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Dialog States
   const [itemToManage, setItemToManage] = useState<Item | null>(null)
   const [isManageOpen, setIsManageOpen] = useState(false)
   const [itemToReorder, setItemToReorder] = useState<Item | null>(null)
   const [itemToAdjust, setItemToAdjust] = useState<Item | null>(null)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   const [itemToEntry, setItemToEntry] = useState<Item | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterCategoryId, setFilterCategoryId] = useState("all")
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [itemToHistory, setItemToHistory] = useState<Item | null>(null)
 
-  useEffect(() => {
-    if (userCompanies && userCompanies.length === 1) setSelectedCompanyId(userCompanies[0].id)
-  }, [userCompanies])
+  // Filters & Sort
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterCategoryId, setFilterCategoryId] = useState("all")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" })
 
   useEffect(() => {
-    if (selectedCompanyId) fetchCompanyData(selectedCompanyId)
-    else {
+    if (selectedCompanyId) {
+      fetchCompanyData(selectedCompanyId)
+    } else {
       setItems([])
       setCategories([])
       setSuppliers([])
@@ -85,6 +100,11 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
       supabase.from("supplier_categories").select("*").order("name"),
       supabase.from("suppliers").select("*").eq("company_id", companyId).order("name"),
     ])
+
+    if (itemsRes.error) {
+      toast.error("Erreur chargement stock: " + itemsRes.error.message)
+    }
+
     if (itemsRes.data) setItems(itemsRes.data as any)
     if (catRes.data) setCategories(catRes.data)
     if (supRes.data) setSuppliers(supRes.data)
@@ -99,9 +119,8 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
         .eq("id", item.id)
 
       if (error) {
-        // Check for foreign key violation (Postgres error code 23503)
         if (error.code === '23503') {
-          toast.error("Impossible de supprimer cet article car il est utilisé dans des documents (factures, devis, etc.). Veuillez l'archiver à la place.")
+          toast.error("Impossible de supprimer cet article car il est utilisé dans des documents. Veuillez l'archiver.")
         } else {
           toast.error("Erreur lors de la suppression : " + error.message)
         }
@@ -117,230 +136,315 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     setIsManageOpen(true)
   }
 
+  // Filtering & Sorting
   const filteredItems = useMemo(() => {
-    return items
-      .filter(
+    let result = [...items]
+
+    // 1. Filter
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter(
         (i) =>
-          i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          i.reference?.toLowerCase().includes(searchTerm.toLowerCase()),
+          i.name.toLowerCase().includes(lowerTerm) ||
+          i.reference?.toLowerCase().includes(lowerTerm)
       )
-      .filter((i) => filterCategoryId === "all" || i.category_id === filterCategoryId)
-  }, [items, searchTerm, filterCategoryId])
+    }
+    if (filterCategoryId !== "all") {
+      result = result.filter((i) => i.category_id === filterCategoryId)
+    }
+
+    // 2. Sort
+    result.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Item]
+      let bValue: any = b[sortConfig.key as keyof Item]
+
+      if (sortConfig.key === "category_name") {
+        // @ts-ignore - Supabase join data
+        aValue = a.supplier_categories?.name || ""
+        // @ts-ignore
+        bValue = b.supplier_categories?.name || ""
+      }
+
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase()
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase()
+
+      if (aValue === null) aValue = ""
+      if (bValue === null) bValue = ""
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [items, searchTerm, filterCategoryId, sortConfig])
+
+  const requestSort = (key: keyof Item | "category_name") => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
+  }
+
+  const getSortIcon = (key: keyof Item | "category_name") => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
+    return sortConfig.direction === "asc"
+      ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-2 h-3 w-3 text-primary" />
+  }
 
   const stats = useMemo(() => {
     const stockValue = items.reduce((sum, i) => sum + i.quantity_on_hand * (i.default_purchase_price || 0), 0)
-    const lowStockItems = items.filter((i) => i.quantity_on_hand <= i.alert_quantity).length
-    return { stockValue, lowStockItems }
+    const lowStockItems = items.filter((i) => i.quantity_on_hand <= i.alert_quantity && i.alert_quantity > 0).length
+    return { stockValue, lowStockItems, totalItems: items.length }
   }, [items])
 
   return (
-    <div className="space-y-8">
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
+    <div className="space-y-6">
+      {!selectedCompanyId && (
+        <Card className="text-center py-12 border-dashed">
+          <CardContent>
+            <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <h3 className="text-lg font-medium">Aucune entreprise sélectionnée</h3>
+            <p className="text-muted-foreground">Veuillez sélectionner une entreprise.</p>
+          </CardContent>
+        </Card>
+      )}
+
       {selectedCompanyId && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Valeur du Stock</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{stats.stockValue.toFixed(2)} TND</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Articles Uniques</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{items.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Alertes Stock Faible</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-destructive">{stats.lowStockItems}</p>
-              </CardContent>
-            </Card>
-          </div>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Inventaire Actuel</CardTitle>
-                <CardDescription>Liste de tous les articles en stock.</CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setItemToEntry(null)
-                    setIsEntryOpen(true)
-                  }}
-                >
-                  <ArrowDownToLine className="h-4 w-4 mr-2" /> Entrée de Stock
+          <PageHeader
+            title="Gestion de l'Inventaire"
+            description="Suivez vos articles, valorisation de stock et mouvements en temps réel."
+            icon={Package}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="default">
+                  <MoreVertical className="h-4 w-4 mr-2" />
+                  Options
                 </Button>
-                <Button onClick={() => handleOpenManageDialog(null)}>Ajouter un article</Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <ChevronsUpDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem asChild>
-                      <StockImportDialog
-                        companyId={selectedCompanyId}
-                        onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
-                      />
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <FileDown className="h-4 w-4 mr-2" />
-                      Exporter vers Excel
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : items.length === 0 ? (
-                <StockEmptyState onAddItemClick={() => handleOpenManageDialog(null)} />
-              ) : (
-                <>
-                  <div className="flex items-center gap-4 mb-4">
-                    <SearchInput
-                      placeholder="Rechercher par nom/référence..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      onClear={() => setSearchTerm("")}
-                      wrapperClassName="max-w-sm"
-                    />
-                    <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Toutes les catégories</SelectItem>
-                        {categories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nom</TableHead>
-                        <TableHead>Référence</TableHead>
-                        <TableHead className="text-right">Quantité</TableHead>
-                        <TableHead className="text-right">Prix Vente</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredItems.map((item) => {
-                        const isLowStock = item.quantity_on_hand <= item.alert_quantity && item.alert_quantity > 0
-                        return (
-                          <TableRow key={item.id} className={isLowStock ? "bg-red-50 dark:bg-red-950/20" : ""}>
-                            <TableCell className="font-medium flex items-center gap-2">
-                              <TooltipProvider delayDuration={0}>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    {isLowStock && <AlertTriangle className="h-4 w-4 text-destructive" />}
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Stock faible</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              {item.name}
-                            </TableCell>
-                            <TableCell>{item.reference}</TableCell>
-                            <TableCell className="text-right font-mono">
-                              {item.quantity_on_hand} {item.unit_of_measure}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {item.sale_price ? `${item.sale_price.toFixed(2)} TND` : "-"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {isLowStock ? (
-                                  <Button variant="destructive" size="sm" onClick={() => setItemToReorder(item)}>
-                                    Commander
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setItemToEntry(item)
-                                      setIsEntryOpen(true)
-                                    }}
-                                  >
-                                    <ArrowDownToLine className="h-4 w-4 mr-2" /> Entrée
-                                  </Button>
-                                )}
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => handleOpenManageDialog(item)}>
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Gérer / Modifier
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setItemToAdjust(item)}>
-                                      <SlidersHorizontal className="h-4 w-4 mr-2" />
-                                      Ajuster la quantité
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                      setItemToHistory(item)
-                                      setIsHistoryOpen(true)
-                                    }}>
-                                      <HistoryIcon className="h-4 w-4 mr-2" />
-                                      Historique
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    {!isLowStock && (
-                                      <DropdownMenuItem onClick={() => setItemToReorder(item)}>
-                                        <ShoppingCart className="h-4 w-4 mr-2" />
-                                        Créer une commande
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive focus:text-destructive">
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Supprimer
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => document.getElementById("stock-import-trigger")?.click()}>
+                  <StockImportDialog
+                    companyId={selectedCompanyId}
+                    onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
+                  />
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Exporter vers Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setItemToEntry(null)
+                setIsEntryOpen(true)
+              }}
+            >
+              <ArrowDownToLine className="h-4 w-4 mr-2" />
+              Entrée Stock
+            </Button>
+
+            <Button onClick={() => handleOpenManageDialog(null)}>
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Nouvel Article
+            </Button>
+          </PageHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KpiCard
+              title="Valeur du Stock"
+              value={`${stats.stockValue.toFixed(2)} TND`}
+              subtitle="Prix d'achat"
+              icon={ShoppingCart}
+              variant="success"
+            />
+            <KpiCard
+              title="Références"
+              value={stats.totalItems}
+              subtitle="Articles actifs"
+              icon={Layers}
+              variant="info"
+            />
+            <KpiCard
+              title="Alertes Stock"
+              value={stats.lowStockItems}
+              subtitle="Articles à réapprovisionner"
+              icon={AlertTriangle}
+              variant={stats.lowStockItems > 0 ? "danger" : "default"}
+            />
+          </div>
+
+          <FilterToolbar
+            searchValue={searchTerm}
+            searchPlaceholder="Rechercher un article (nom, réf)..."
+            onSearchChange={setSearchTerm}
+            resultCount={filteredItems.length}
+            showReset={searchTerm !== "" || filterCategoryId !== "all"}
+            onReset={() => { setSearchTerm(""); setFilterCategoryId("all"); }}
+          >
+            <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
+              <SelectTrigger className="w-[180px] h-9 bg-background">
+                <SelectValue placeholder="Toutes les catégories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les catégories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterToolbar>
+
+          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead
+                    className="cursor-pointer hover:text-primary transition-colors h-11"
+                    onClick={() => requestSort("name")}
+                  >
+                    <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Nom {getSortIcon("name")}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer hover:text-primary transition-colors h-11"
+                    onClick={() => requestSort("reference")}
+                  >
+                    <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Référence {getSortIcon("reference")}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer hover:text-primary transition-colors h-11 text-right"
+                    onClick={() => requestSort("quantity_on_hand")}
+                  >
+                    <div className="flex items-center justify-end text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Quantité {getSortIcon("quantity_on_hand")}
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer hover:text-primary transition-colors h-11 text-right"
+                    onClick={() => requestSort("sale_price")}
+                  >
+                    <div className="flex items-center justify-end text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Prix Vente {getSortIcon("sale_price")}
+                    </div>
+                  </TableHead>
+                  <TableHead className="h-11 w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        Chargement...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredItems.length > 0 ? (
+                  filteredItems.map((item) => {
+                    const isLowStock = item.quantity_on_hand <= item.alert_quantity && item.alert_quantity > 0
+                    return (
+                      <TableRow key={item.id} className={cn("group hover:bg-muted/30 transition-colors", isLowStock && "bg-red-50 hover:bg-red-100/50 dark:bg-red-950/10 dark:hover:bg-red-950/20")}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {isLowStock && (
+                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-600" title="Stock faible">
+                                <AlertTriangle className="h-3 w-3" />
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                            )}
+                            {item.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono text-xs">
+                          {item.reference || "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          <span className={cn(isLowStock ? "text-red-600 font-bold" : "")}>
+                            {item.quantity_on_hand}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-1">{item.unit_of_measure}</span>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.sale_price ? `${item.sale_price.toFixed(3)} TND` : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="group-hover:opacity-100 opacity-0 transition-opacity">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleOpenManageDialog(item)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setItemToAdjust(item)}>
+                                <SlidersHorizontal className="h-4 w-4 mr-2" />
+                                Ajuster
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setItemToHistory(item)
+                                setIsHistoryOpen(true)
+                              }}>
+                                <HistoryIcon className="h-4 w-4 mr-2" />
+                                Historique
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {!isLowStock && (
+                                <DropdownMenuItem onClick={() => setItemToReorder(item)}>
+                                  <ShoppingCart className="h-4 w-4 mr-2" />
+                                  Commander
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-[300px] text-center">
+                      {searchTerm || filterCategoryId !== "all" ? (
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Package className="h-10 w-10 text-muted-foreground/20" />
+                          <p className="text-muted-foreground text-sm">Aucun article trouvé pour cette recherche.</p>
+                          <Button variant="link" onClick={() => { setSearchTerm(""); setFilterCategoryId("all") }}>Réinitialiser</Button>
+                        </div>
+                      ) : (
+                        <StockEmptyState onAddItemClick={() => handleOpenManageDialog(null)} />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </>
       )}
+
+      {/* Dialogs */}
+
+      {/* Dialogs */}
       <ManageItemDialog
         item={itemToManage}
         isOpen={isManageOpen}
@@ -387,6 +491,6 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
         companyId={selectedCompanyId!}
         itemName={itemToHistory?.name || ""}
       />
-    </div>
+    </div >
   )
 }

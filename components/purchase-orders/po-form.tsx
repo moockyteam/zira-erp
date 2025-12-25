@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -15,6 +15,8 @@ import { Trash2, Plus, Check } from "lucide-react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+// import { useCompany } from "@/components/providers/company-provider" // Ensure this is available, I will add it to imports
+import { useCompany } from "@/components/providers/company-provider"
 
 type Company = { id: string; name: string }
 type Supplier = { id: string; name: string }
@@ -43,9 +45,16 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
   const supabase = createClient()
   const isNew = !initialData
 
+  const { selectedCompany } = useCompany()
   const [companyId, setCompanyId] = useState(
-    initialData?.company_id || searchParams.get("companyId") || companies[0]?.id || "",
+    initialData?.company_id || selectedCompany?.id || "",
   )
+
+  useEffect(() => {
+    if (isNew && selectedCompany) {
+      setCompanyId(selectedCompany.id)
+    }
+  }, [isNew, selectedCompany])
   const [supplierId, setSupplierId] = useState(initialData?.supplier_id || "")
   const [orderDate, setOrderDate] = useState(initialData?.order_date || format(new Date(), "yyyy-MM-dd"))
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(initialData?.expected_delivery_date || "")
@@ -185,18 +194,9 @@ export function PurchaseOrderForm({ initialData, companies, suppliers, items }: 
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <Label>Société</Label>
-            <Select value={companyId} onValueChange={setCompanyId} disabled={!isNew}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {companies.map((c: Company) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="p-2 border rounded-md bg-muted text-muted-foreground">
+              {companies.find(c => c.id === companyId)?.name || selectedCompany?.name || "Société sélectionnée"}
+            </div>
           </div>
           <div>
             <Label>Fournisseur</Label>

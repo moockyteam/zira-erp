@@ -1,37 +1,51 @@
-//components/returns/return-voucher-manager.tsx
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { CompanySelector } from "@/components/company-selector"
+import { useCompany } from "@/components/providers/company-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { SearchInput } from "@/components/ui/search-input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, Package, PackageX, TrendingDown } from "lucide-react"
+import { PlusCircle, Package, ArrowUpDown, ChevronUp, ChevronDown, PackageX, TrendingDown, FileText } from "lucide-react"
 import { ReturnVoucherActions } from "./return-voucher-actions"
 import { ReturnVoucherForm } from "./return-voucher-form"
-import { Skeleton } from "@/components/ui/skeleton"
+import { SearchInput } from "@/components/ui/search-input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+
+type ReturnVoucher = {
+  id: string
+  return_voucher_number: string
+  customers: { name: string } | null
+  return_date: string
+  status: "BROUILLON" | "RETOURNE" | "ANNULE"
+}
+
+type SortConfig = {
+  key: keyof ReturnVoucher | "customer_name"
+  direction: "asc" | "desc"
+}
 
 export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }) {
   const supabase = createClient()
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
-  const [returns, setReturns] = useState<any[]>([])
+  const { selectedCompany } = useCompany()
+  const selectedCompanyId = selectedCompany?.id
+
+  const [returns, setReturns] = useState<ReturnVoucher[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingReturn, setEditingReturn] = useState<any | null>(null)
+
+  // Filter & Sort states
   const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "return_date", direction: "desc" })
 
   useEffect(() => {
-    if (userCompanies?.length === 1) setSelectedCompanyId(userCompanies[0].id)
-  }, [userCompanies])
-
-  useEffect(() => {
-    if (selectedCompanyId) fetchReturns(selectedCompanyId)
-    else {
+    if (selectedCompanyId) {
+      fetchReturns(selectedCompanyId)
+    } else {
       setReturns([])
       setIsLoading(false)
     }
@@ -39,8 +53,6 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
 
   const fetchReturns = async (companyId: string) => {
     setIsLoading(true)
-    // --- LA CORRECTION EST ICI ---
-    // On demande explicitement de récupérer aussi les lignes associées
     const { data, error } = await supabase
       .from("return_vouchers")
       .select(`
@@ -53,11 +65,16 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
 
     if (error) {
       console.error("Erreur lors du chargement des bons de retour:", error);
-      // Gérer l'erreur avec un toast serait une bonne pratique
     } else {
-      setReturns(data || [])
+      // Map the data to handle Supabase returning arrays for joined relations
+      const formattedData = (data as any[]).map(item => ({
+        ...item,
+        customers: Array.isArray(item.customers) && item.customers.length > 0
+          ? item.customers[0]
+          : item.customers
+      }))
+      setReturns(formattedData as ReturnVoucher[])
     }
-    // --- FIN DE LA CORRECTION ---
     setIsLoading(false)
   }
 
@@ -66,128 +83,273 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
     setIsFormOpen(true)
   }
 
-  const filteredReturns = useMemo(() => {
-    if (!returns) return []
-    return returns.filter(r =>
-      r.return_voucher_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.customers?.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [returns, searchTerm])
+  // Statistics
+  const stats = useMemo(() => {
+    const totalReturns = returns.length
+    const thisMonthReturns = returns.filter((r) => {
+      const returnDate = new Date(r.return_date)
+      const now = new Date()
+      return returnDate.getMonth() === now.getMonth() && returnDate.getFullYear() === now.getFullYear()
+    }).length
+    // Note: Assuming 'return_voucher_lines' is available on the raw object for stats calculation, 
+    // though strict typing might complain if not added to ReturnVoucher type. 
+    // Casting to any for safety in reducing lines count.
+    const totalItems = returns.reduce((sum, r: any) => sum + (r.return_voucher_lines?.length || 0), 0)
 
-  const totalReturns = returns.length
-  const thisMonthReturns = returns.filter((r) => {
-    const returnDate = new Date(r.return_date)
-    const now = new Date()
-    return returnDate.getMonth() === now.getMonth() && returnDate.getFullYear() === now.getFullYear()
-  }).length
-  const totalItems = returns.reduce((sum, r) => sum + (r.return_voucher_lines?.length || 0), 0)
+    return { totalReturns, thisMonthReturns, totalItems }
+  }, [returns])
+
+  // Filtering & Sorting Logic
+  const filteredReturns = useMemo(() => {
+    let result = [...returns]
+
+    // 1. Search
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter((r) =>
+        r.return_voucher_number.toLowerCase().includes(lowerTerm) ||
+        (r.customers?.name || "").toLowerCase().includes(lowerTerm)
+      )
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== "all") {
+      result = result.filter((r) => r.status === statusFilter)
+    }
+
+    // 3. Sorting
+    result.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof ReturnVoucher]
+      let bValue: any = b[sortConfig.key as keyof ReturnVoucher]
+
+      if (sortConfig.key === "customer_name") {
+        aValue = a.customers?.name || ""
+        bValue = b.customers?.name || ""
+      }
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
+      return 0
+    })
+
+    return result
+  }, [returns, searchTerm, statusFilter, sortConfig])
+
+  const requestSort = (key: keyof ReturnVoucher | "customer_name") => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
+  }
+
+  const getSortIcon = (key: keyof ReturnVoucher | "customer_name") => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
+    return sortConfig.direction === "asc"
+      ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-2 h-3 w-3 text-primary" />
+  }
+
+  const getStatusBadgeStyle = (status: ReturnVoucher["status"]) => {
+    switch (status) {
+      case "BROUILLON": return "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
+      case "RETOURNE": return "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
+      case "ANNULE": return "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+      default: return ""
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      <CompanySelector
-        companies={userCompanies}
-        selectedCompanyId={selectedCompanyId}
-        onCompanySelect={setSelectedCompanyId}
-      />
+    <div className="space-y-8">
+      {!selectedCompanyId && (
+        <Card className="text-center py-12 border-dashed">
+          <CardContent>
+            <PackageX className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <h3 className="text-lg font-medium text-foreground">Aucune entreprise sélectionnée</h3>
+            <p className="text-muted-foreground">Veuillez sélectionner une entreprise dans la barre latérale.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedCompanyId && (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-l-4 border-l-indigo-500 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Retours</CardTitle>
-                <Package className="h-5 w-5 text-indigo-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {totalReturns}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Tous les bons de retour</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ce Mois</CardTitle>
-                <TrendingDown className="h-5 w-5 text-orange-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-orange-600">{thisMonthReturns}</div>
-                <p className="text-xs text-muted-foreground mt-1">Retours du mois en cours</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-purple-500 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Articles Retournés</CardTitle>
-                <PackageX className="h-5 w-5 text-purple-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-purple-600">{totalItems}</div>
-                <p className="text-xs text-muted-foreground mt-1">Total d'articles retournés</p>
-              </CardContent>
-            </Card>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Bons de Retour</h1>
+              <p className="text-muted-foreground mt-1">Gérez les retours de marchandises clients.</p>
+            </div>
+            <Button size="lg" className="shadow-sm" onClick={() => handleOpenForm(null)}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Nouveau Bon de Retour
+            </Button>
           </div>
 
-          <Card className="border-2 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border-b-2 border-indigo-200/50">
-              <div className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                    Historique des Bons de Retour
-                  </CardTitle>
-                  <CardDescription className="mt-1.5">
-                    Liste de toutes les marchandises retournées par vos clients
-                  </CardDescription>
-                </div>
-                <Button onClick={() => handleOpenForm(null)} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all">
-                  <PlusCircle className="h-4 w-4 mr-2" /> Nouveau Bon de Retour
-                </Button>
+          {/* Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-indigo-600/70 mb-1">Total Retours</p>
+              <div className="text-2xl font-bold text-indigo-700">{stats.totalReturns}</div>
+            </div>
+
+            <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-orange-600/70 mb-1">Ce Mois</p>
+              <div className="text-2xl font-bold text-orange-700">{stats.thisMonthReturns}</div>
+            </div>
+
+            <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100/50">
+              <p className="text-xs font-medium uppercase tracking-wider text-purple-600/70 mb-1">Articles Retournés</p>
+              <div className="text-2xl font-bold text-purple-700">{stats.totalItems}</div>
+            </div>
+          </div>
+
+          {/* Filters & Table */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center sm:h-10">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <SearchInput
+                  placeholder="Rechercher par numéro ou client..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onClear={() => setSearchTerm("")}
+                  className="w-full sm:w-[300px]"
+                />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Statut" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les statuts</SelectItem>
+                    <SelectItem value="BROUILLON">Brouillon</SelectItem>
+                    <SelectItem value="RETOURNE">Retourné</SelectItem>
+                    <SelectItem value="ANNULE">Annulé</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="mb-4">
-                <SearchInput placeholder="Rechercher par N° ou client..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} wrapperClassName="max-w-sm" />
-              </div>
-              <div className="rounded-lg border-2 border-border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 hover:from-indigo-100 hover:to-purple-100 dark:hover:from-indigo-950/30 dark:hover:to-purple-950/30">
-                      <TableHead className="font-semibold border-r-2">Numéro</TableHead>
-                      <TableHead className="font-semibold border-r-2">Client</TableHead>
-                      <TableHead className="font-semibold border-r-2">Date</TableHead>
-                      <TableHead className="font-semibold border-r-2">Statut</TableHead>
-                      <TableHead className="font-semibold">Actions</TableHead>
+            </div>
+
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("return_voucher_number")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Numéro {getSortIcon("return_voucher_number")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("customer_name")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Client {getSortIcon("customer_name")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("return_date")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Date {getSortIcon("return_date")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11"
+                      onClick={() => requestSort("status")}
+                    >
+                      <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Statut {getSortIcon("status")}
+                      </div>
+                    </TableHead>
+                    <TableHead className="h-11 w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Chargement...
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
-                    ) : filteredReturns.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center h-24">Aucun bon de retour.</TableCell></TableRow>
-                    ) : (
-                      filteredReturns.map((r) => (
-                        <TableRow
-                          key={r.id}
-                          className="hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-colors border-b-2"
-                        >
-                          <TableCell className="font-medium border-r-2">{r.return_voucher_number}</TableCell>
-                          <TableCell className="border-r-2">{r.customers?.name}</TableCell>
-                          <TableCell className="border-r-2">
-                            {new Date(r.return_date).toLocaleDateString("fr-FR")}
-                          </TableCell>
-                          <TableCell className="border-r-2"><Badge variant={r.status === 'RETOURNE' ? 'success' : 'secondary'}>{r.status}</Badge></TableCell>
-                          <TableCell>
-                            <ReturnVoucherActions returnVoucher={r} onEdit={() => handleOpenForm(r)} onActionSuccess={() => fetchReturns(selectedCompanyId!)} />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                  ) : filteredReturns.length > 0 ? (
+                    filteredReturns.map((r) => (
+                      <TableRow
+                        key={r.id}
+                        className="group hover:bg-muted/30 transition-colors"
+                      >
+                        <TableCell className="font-medium text-foreground">
+                          {r.return_voucher_number}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {r.customers?.name || "N/A"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(r.return_date).toLocaleDateString("fr-FR")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn("px-2.5 py-0.5 text-xs font-medium border shadow-sm", getStatusBadgeStyle(r.status))}
+                          >
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ReturnVoucherActions
+                            returnVoucher={r}
+                            onEdit={() => handleOpenForm(r)}
+                            onActionSuccess={() => fetchReturns(selectedCompanyId!)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-[300px] text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <PackageX className="h-12 w-12 text-muted-foreground/20" />
+                          {searchTerm || statusFilter !== "all" ? (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun bon de retour trouvé</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Aucun résultat ne correspond à vos critères de recherche. Essayez de modifier vos filtres.
+                              </p>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSearchTerm("")
+                                  setStatusFilter("all")
+                                }}
+                              >
+                                Réinitialiser les filtres
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-semibold">Aucun Bon de Retour</h3>
+                              <p className="text-sm text-muted-foreground text-center mb-4">
+                                Vous n'avez pas encore créé de bon de retour pour cette entreprise.
+                              </p>
+                              <Button onClick={() => handleOpenForm(null)}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Créer un bon de retour
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </>
       )}
 

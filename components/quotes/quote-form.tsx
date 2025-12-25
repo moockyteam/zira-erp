@@ -1,21 +1,22 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Package, Plus, ChevronsUpDown, Check, Trash2, Receipt } from "lucide-react"
+import { Package, Plus, ChevronsUpDown, Check, Trash2, Receipt, Building2, Users, FileText } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
 type Company = { id: string; name: string; is_subject_to_fodec: boolean | null }
@@ -49,12 +50,29 @@ interface QuoteFormProps {
   defaultTerms: string | null
 }
 
+import { useCompany } from "@/components/providers/company-provider" // Add import
+
 export function QuoteForm({ initialData, companies, customers, items, defaultTerms }: QuoteFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const { selectedCompany: globalSelectedCompany } = useCompany() // Rename to avoid conflict
   const isNew = !initialData
 
-  const [companyId, setCompanyId] = useState(initialData?.company_id || companies[0]?.id || "")
+  // Init companyId with initialData if exists (edit mode), otherwise use global context
+  // But if it's new, we want it to be responsive to context changes?
+  // Actually, if we are in "New Quote" mode, we usually want to use the currently selected company.
+  // And if the user switches company in sidebar, the form should probably update IF it hasn't been saved yet.
+
+  const [companyId, setCompanyId] = useState(initialData?.company_id || globalSelectedCompany?.id || "")
+
+  // Effect to sync with sidebar selection ONLY if creating new
+  useEffect(() => {
+    if (isNew && globalSelectedCompany) {
+      setCompanyId(globalSelectedCompany.id)
+    }
+  }, [isNew, globalSelectedCompany])
+
+
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [quoteDate, setQuoteDate] = useState(initialData?.quote_date || new Date().toISOString().split("T")[0])
   const [currency, setCurrency] = useState(initialData?.currency || "TND")
@@ -255,174 +273,93 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
   }
 
   return (
-    <div className="space-y-8">
-      <div className="border-2 p-6 rounded-lg space-y-6">
-        <h2 className="text-2xl font-bold">Informations générales</h2>
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <Label>Société émettrice</Label>
-            <Select onValueChange={setCompanyId} defaultValue={companyId} disabled={!isNew}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Date du devis</Label>
-            <Input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="currency" className="flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-purple-600" />
-              Devise
-            </Label>
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger id="currency">
-                <SelectValue placeholder="Sélectionner..." />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((curr) => (
-                  <SelectItem key={curr.code} value={curr.code}>
-                    {curr.symbol} - {curr.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="border p-4 rounded-md space-y-4">
-          <h3 className="font-semibold">Destinataire</h3>
-          <div>
-            <Label>Client existant</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  disabled={!!prospectName}
-                  className="w-full justify-between font-normal bg-transparent"
-                >
-                  {selectedCustomer ? selectedCustomer.name : "Rechercher..."}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[300px] p-0">
-                <Command>
-                  <CommandInput placeholder="Rechercher client..." />
-                  <CommandList>
-                    <CommandEmpty>Aucun client.</CommandEmpty>
-                    <CommandGroup>
-                      {customers.map((c) => (
-                        <CommandItem key={c.id} value={c.name} onSelect={() => setCustomerId(c.id)}>
-                          <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
-                          {c.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="text-center text-sm text-muted-foreground">OU</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label>Nom du Prospect</Label>
-              <Input
-                placeholder="Nom..."
-                value={prospectName}
-                onChange={(e) => setProspectName(e.target.value)}
-                disabled={!!customerId}
-              />
+    <div className="space-y-6 pb-24">
+      {/* PREMIUM HEADER CARD */}
+      <Card className="border-l-4 border-l-primary shadow-md overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-primary/5 to-purple-500/5 dark:from-primary/10 dark:to-purple-500/10 border-b">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-primary to-purple-600 rounded-lg shadow-inner">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
+                  {isNew ? "Nouveau Devis" : `Devis ${initialData?.quote_number || ""}`}
+                </CardTitle>
+                <CardDescription className="text-base">
+                  {isNew ? "Création d'une nouvelle proposition commerciale" : "Modification du devis existant"}
+                </CardDescription>
+              </div>
             </div>
-            <div>
-              <Label>Adresse</Label>
-              <Input
-                placeholder="Adresse..."
-                value={prospectAddress}
-                onChange={(e) => setProspectAddress(e.target.value)}
-                disabled={!!customerId}
-              />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="Email..."
-                value={prospectEmail}
-                onChange={(e) => setProspectEmail(e.target.value)}
-                disabled={!!customerId}
-              />
-            </div>
-            <div>
-              <Label>Téléphone</Label>
-              <Input
-                type="tel"
-                placeholder="Téléphone..."
-                value={prospectPhone}
-                onChange={(e) => setProspectPhone(e.target.value)}
-                disabled={!!customerId}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div className="border-2 p-6 rounded-lg">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Package /> Articles et Services
-          </h2>
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="show-remise">Afficher Remise</Label>
-            <Switch id="show-remise" checked={showRemise} onCheckedChange={setShowRemise} />
+            <div className="flex items-center gap-2">
+              <div className={cn("px-3 py-1 rounded-full text-sm font-medium border",
+                initialData?.status === "VALIDÉ" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                  initialData?.status === "EN_ATTENTE" ? "bg-amber-100 text-amber-700 border-amber-200" :
+                    "bg-slate-100 text-slate-700 border-slate-200"
+              )}>
+                {initialData?.status || "NOUVEAU"}
+              </div>
+            </div>
           </div>
-        </div>
+        </CardHeader>
 
-        <div className="grid grid-cols-12 gap-2 items-center px-2 pb-2 border-b">
-          <div className="col-span-6 text-sm font-semibold text-muted-foreground">Description</div>
-          <div className="col-span-1 text-sm font-semibold text-muted-foreground">Qté</div>
-          <div className="col-span-2 text-sm font-semibold text-muted-foreground">Prix U. HT</div>
-          {showRemise && <div className="col-span-1 text-sm font-semibold text-muted-foreground">Remise %</div>}
-          <div className={cn("col-span-1 text-sm font-semibold text-muted-foreground", !showRemise && "col-span-2")}>
-            TVA %
-          </div>
-          <div className="col-span-1"></div>
-        </div>
+        <CardContent className="p-6 grid gap-8">
+          {/* CLIENT & COMPANY SECTION */}
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-dashed">
+              <div className="flex items-center gap-2 text-primary font-semibold mb-2">
+                <Building2 className="h-4 w-4" />
+                <h3>Émetteur</h3>
+              </div>
 
-        <div className="space-y-2 mt-2">
-          {lines.map((line, index) => (
-            <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
-              <div className="col-span-6">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Entreprise</Label>
+                <div className="font-medium text-lg flex items-center gap-2">
+                  {companies.find(c => c.id === companyId)?.name || "Aucune entreprise sélectionnée"}
+                  {!isNew && <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">(Fixé)</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-dashed">
+              <div className="flex items-center gap-2 text-purple-600 font-semibold mb-2">
+                <Users className="h-4 w-4" />
+                <h3>Client</h3>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Client Destinataire</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-start text-left font-normal h-auto min-h-[40px] whitespace-normal">
-                      {line.description || <span className="text-muted-foreground">Sélectionner un article ou saisir une description...</span>}
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between bg-background"
+                      disabled={!isNew && !!initialData?.customer_id}
+                    >
+                      {customers.find((c) => c.id === customerId)?.name || "Sélectionner un client..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
+                  <PopoverContent className="w-[300px] p-0">
                     <Command>
-                      <CommandInput placeholder="Chercher un article ou saisir..."
-                        onValueChange={(val) => updateLine(line.local_id, "description", val)}
-                      />
+                      <CommandInput placeholder="Rechercher..." />
                       <CommandList>
-                        <CommandEmpty>
-                          <Button variant="ghost" className="w-full justify-start" onClick={() => updateLine(line.local_id, "description", document.querySelector('[cmdk-input]')?.getAttribute('value') || "Nouvel article")}>
-                            Utiliser comme description libre
-                          </Button>
-                        </CommandEmpty>
+                        <CommandEmpty>Aucun client trouvé.</CommandEmpty>
                         <CommandGroup>
-                          {items.map(item => (
-                            <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
-                              <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
-                              {item.name} {item.reference && <span className="text-xs text-muted-foreground ml-2">({item.reference})</span>}
+                          {customers.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={() => {
+                                setCustomerId(c.id)
+                                setProspectName("")
+                                // setOpenCustomerPopover(false) // Component state managed cleanly
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
+                              {c.name}
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -431,149 +368,224 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="col-span-1">
-                <Input
-                  value={line.quantity}
-                  onChange={(e) => updateLine(line.local_id, "quantity", e.target.value)}
-                  className="text-right"
-                />
-              </div>
-              <div className="col-span-2">
-                <Input
-                  value={line.unit_price_ht}
-                  onChange={(e) => updateLine(line.local_id, "unit_price_ht", e.target.value)}
-                  className="text-right"
-                />
-              </div>
-              {showRemise && (
-                <div className="col-span-1">
-                  <Input
-                    value={line.remise_percentage}
-                    onChange={(e) => updateLine(line.local_id, "remise_percentage", e.target.value)}
-                    className="text-right"
-                  />
+              {!customerId && (
+                <div className="space-y-2 pt-2 border-t mt-2">
+                  <Label className="text-xs text-muted-foreground">Ou saisir un prospect</Label>
+                  <div className="grid gap-2">
+                    <Input
+                      placeholder="Nom du prospect..."
+                      value={prospectName}
+                      onChange={(e) => setProspectName(e.target.value)}
+                      className="bg-background"
+                    />
+                    {prospectName && (
+                      <>
+                        <Input placeholder="Adresse..." value={prospectAddress} onChange={(e) => setProspectAddress(e.target.value)} />
+                        <Input placeholder="Email..." value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} />
+                        <Input placeholder="Téléphone..." value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} />
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
-              <div className={cn("col-span-1", !showRemise && "col-span-2")}>
-                <Select
-                  value={String(line.tva_rate)}
-                  onValueChange={(v) => updateLine(line.local_id, "tva_rate", Number.parseFloat(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TVA_RATES.map((r) => (
-                      <SelectItem key={r} value={String(r)}>
-                        {r}%
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-1 flex justify-center">
-                <Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <Button type="button" onClick={addLine} variant="outline" className="w-full mt-4 border-dashed bg-transparent">
-          <Plus className="mr-2 h-4 w-4" />
-          Ajouter une ligne
-        </Button>
-      </div>
-
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="item-1">
-          <AccordionTrigger className="text-lg font-semibold">Termes et Notes (Optionnel)</AccordionTrigger>
-          <AccordionContent>
-            <div className="grid gap-6 pt-4">
-              <div>
-                <Label htmlFor="terms">Termes et conditions</Label>
-                <Textarea
-                  id="terms"
-                  placeholder="Ex: Validité du devis, conditions de paiement..."
-                  value={termsAndConditions}
-                  onChange={(e) => setTermsAndConditions(e.target.value)}
-                  rows={5}
-                />
-              </div>
-              <div>
-                <Label htmlFor="notes">Notes internes (non visibles sur le PDF)</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Notes pour référence future..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 p-6 rounded-lg bg-gray-900 text-white">
-          <h3 className="text-xl font-bold mb-4">Récapitulatif</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Total HT</span>
-              <span>
-                {totals.total_ht.toFixed(3)} {currencySymbol}
-              </span>
-            </div>
-            {isFodecApplicable && (
-              <div className="flex justify-between">
-                <span>FODEC</span>
-                <span>
-                  {totals.total_fodec.toFixed(3)} {currencySymbol}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span>Total TVA</span>
-              <span>
-                {totals.total_tva.toFixed(3)} {currencySymbol}
-              </span>
-            </div>
-            {hasStamp && (
-              <div className="flex justify-between">
-                <span>Timbre Fiscal</span>
-                <span>
-                  {totals.timbre.toFixed(3)} {currencySymbol}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between text-2xl font-bold border-t pt-2 mt-2">
-              <span>Total TTC</span>
-              <span>
-                {totals.total_ttc.toFixed(3)} {currencySymbol}
-              </span>
             </div>
           </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <Label>Date du devis</Label>
+              <Input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Devise</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ITEMS SECTION */}
+      <Card className="border-l-4 border-l-emerald-500 shadow-md">
+        <CardHeader className="bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/10 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-emerald-600" />
+            <CardTitle>Articles et Services</CardTitle>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Remises</Label>
+              <Switch checked={showRemise} onCheckedChange={setShowRemise} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Timbre Fiscal</Label>
+              <Switch checked={hasStamp} onCheckedChange={setHasStamp} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="w-[300px]">Article / Description</TableHead>
+                  <TableHead className="w-[100px] text-right">Qté</TableHead>
+                  <TableHead className="w-[120px] text-right">P.U. HT</TableHead>
+                  {showRemise && <TableHead className="w-[100px] text-right">Remise %</TableHead>}
+                  <TableHead className="w-[100px] text-right">TVA %</TableHead>
+                  <TableHead className="w-[120px] text-right">Total HT</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line) => {
+                  const lineTotal = (typeof line.quantity === 'string' ? parseFloat(line.quantity) || 0 : line.quantity) *
+                    (typeof line.unit_price_ht === 'string' ? parseFloat(line.unit_price_ht) || 0 : line.unit_price_ht) *
+                    (1 - (typeof line.remise_percentage === 'string' ? parseFloat(line.remise_percentage) || 0 : line.remise_percentage) / 100);
+                  return (
+                    <TableRow key={line.local_id} className="group hover:bg-muted/30">
+                      <TableCell>
+                        <div className="flex flex-col gap-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" role="combobox" className="justify-between w-full font-normal">
+                                {line.item_id ? items.find(i => i.id === line.item_id)?.name : "Sélectionner un article..."}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[400px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Rechercher un article..." />
+                                <CommandList>
+                                  <CommandEmpty>Aucun article trouvé.</CommandEmpty>
+                                  <CommandGroup>
+                                    {items.map((item) => (
+                                      <CommandItem key={item.id} value={item.name} onSelect={() => handleItemSelect(line.local_id, item.id)}>
+                                        <Check className={cn("mr-2 h-4 w-4", line.item_id === item.id ? "opacity-100" : "opacity-0")} />
+                                        {item.name}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                          <Textarea
+                            placeholder="Description..."
+                            value={line.description}
+                            onChange={(e) => updateLine(line.local_id, "description", e.target.value)}
+                            rows={1}
+                            className="min-h-[40px] resize-y text-xs text-muted-foreground"
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell><Input type="number" step="0.01" value={line.quantity} onChange={(e) => updateLine(line.local_id, "quantity", e.target.value)} className="text-right" /></TableCell>
+                      <TableCell><Input type="number" step="0.01" value={line.unit_price_ht} onChange={(e) => updateLine(line.local_id, "unit_price_ht", e.target.value)} className="text-right" /></TableCell>
+                      {showRemise && (
+                        <TableCell><Input type="number" step="0.01" value={line.remise_percentage} onChange={(e) => updateLine(line.local_id, "remise_percentage", e.target.value)} className="text-right" /></TableCell>
+                      )}
+                      <TableCell>
+                        <Select
+                          value={String(line.tva_rate)}
+                          onValueChange={(val) => updateLine(line.local_id, "tva_rate", parseFloat(val))}
+                        >
+                          <SelectTrigger className="text-right"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {TVA_RATES.map(rate => <SelectItem key={rate} value={String(rate)}>{rate}%</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{lineTotal.toFixed(3)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" className="text-destructive opacity-0 group-hover:opacity-100" onClick={() => removeLine(line.local_id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="p-4 bg-muted/20 border-t flex justify-center">
+            <Button variant="outline" onClick={addLine} className="w-full md:w-auto border-dashed">
+              <Plus className="mr-2 h-4 w-4" /> Ajouter une ligne
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* TOTALS & ACTIONS */}
+      <div className="grid md:grid-cols-3 gap-8">
+        <div className="md:col-span-2 space-y-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Notes & Conditions</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Notes internes / Publiques</Label>
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes visibles sur le devis..." />
+              </div>
+              <div className="space-y-2">
+                <Label>Conditions de paiement</Label>
+                <Textarea value={termsAndConditions} onChange={(e) => setTermsAndConditions(e.target.value)} placeholder="Conditions particulières..." />
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <div className="lg:col-span-1 p-6 rounded-lg border-2">
-          <h3 className="text-lg font-bold mb-4">Options du Document</h3>
-          <div className="flex items-center justify-between">
-            <Label>Timbre Fiscal (1.000 {currencySymbol})</Label>
-            <Switch checked={hasStamp} onCheckedChange={setHasStamp} />
+
+        <div className="space-y-6">
+          <Card className="bg-muted/30">
+            <CardContent className="p-6 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>Total HT Brut</span>
+                <span>{totals.total_ht.toFixed(3)} {currencySymbol}</span>
+              </div>
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Total Remise</span>
+                <span>- {totals.total_remise.toFixed(3)} {currencySymbol}</span>
+              </div>
+              <div className="flex justify-between text-sm font-medium border-t pt-2">
+                <span>Total HT Net</span>
+                <span>{totals.total_ht.toFixed(3)} {currencySymbol}</span>
+              </div>
+              {isFodecApplicable && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>FODEC (1%)</span>
+                  <span>{totals.total_fodec.toFixed(3)} {currencySymbol}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Total TVA</span>
+                <span>{totals.total_tva.toFixed(3)} {currencySymbol}</span>
+              </div>
+              {hasStamp && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Timbre Fiscal</span>
+                  <span>{totals.timbre.toFixed(3)} {currencySymbol}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xl font-bold border-t pt-3 text-primary">
+                <span>Net à Payer</span>
+                <span>{totals.total_ttc.toFixed(3)} {currencySymbol}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-3">
+            <Button size="lg" className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 shadow-lg" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Enregistrement..." : (isNew ? "Créer le Devis" : "Mettre à jour")}
+            </Button>
+            <Link href="/dashboard/quotes" className="w-full">
+              <Button variant="outline" size="lg" className="w-full">Annuler</Button>
+            </Link>
           </div>
         </div>
-      </div>
-
-      <div className="flex gap-4 pt-4 border-t">
-        <Button onClick={handleSave} disabled={isSaving} size="lg" className="bg-indigo-600 hover:bg-indigo-700">
-          {isSaving ? "Enregistrement..." : "Sauvegarder le devis"}
-        </Button>
-        <Link href="/dashboard/quotes">
-          <Button type="button" variant="outline" size="lg">
-            Annuler
-          </Button>
-        </Link>
       </div>
     </div>
   )
 }
+

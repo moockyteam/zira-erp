@@ -147,16 +147,20 @@ export function ManageItemDialog({
 
     if (currentItem?.id) {
       const { error } = await supabase.from("items").update(dataToSave).eq("id", currentItem.id)
-      if (error) toast.error(error.message)
-      else {
+      if (error) {
+        toast.error(error.message)
+      } else {
         toast.success("Article mis à jour.")
         onSuccess()
         onOpenChange(false)
       }
     } else {
-      const { data: newItem, error } = await supabase.from("items").insert(dataToSave).select().single()
-      if (error) toast.error(error.message)
-      else {
+      // FIX: Explicitly set is_archived to false to ensure new items are visible
+      const payload = { ...dataToSave, is_archived: false }
+      const { data: newItem, error } = await supabase.from("items").insert(payload).select().single()
+      if (error) {
+        toast.error(error.message)
+      } else {
         toast.success("Article créé. Vous pouvez maintenant associer des fournisseurs.")
         setCurrentItem(newItem as Item)
         onSuccess()

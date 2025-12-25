@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { CategoryCreator } from "@/components/category-creator"
 import { Loader2 } from "lucide-react"
+import { useCompany } from "@/components/providers/company-provider"
 
 const TVA_RATES = [19, 13, 7, 0]
 const WITHHOLDING_TAX_RATES = [
@@ -30,12 +31,18 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
   const searchParams = useSearchParams()
   const supabase = createClient()
 
+  const { selectedCompany: globalSelectedCompany } = useCompany()
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(() => {
-    const paramId = searchParams.get("companyId")
-    if (paramId) return paramId
-    if (companies && companies.length === 1) return companies[0].id
-    return ""
+    if (searchParams.get("companyId")) return searchParams.get("companyId")!
+    // if (companies && companies.length === 1) return companies[0].id // Old logic
+    return globalSelectedCompany?.id || ""
   })
+
+  useEffect(() => {
+    if (globalSelectedCompany && !searchParams.get("companyId")) {
+      setSelectedCompanyId(globalSelectedCompany.id)
+    }
+  }, [globalSelectedCompany, searchParams])
 
   const [categories, setCategories] = useState<any[]>([])
   const [categoryId, setCategoryId] = useState("")
@@ -364,26 +371,10 @@ export function ExpenseForm({ companies = [] }: { companies: any[] }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Société *</Label>
-              {companies && companies.length > 1 ? (
-                <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Choisir une société" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companies.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  className="h-11"
-                  value={companies.find((c) => c.id === selectedCompanyId)?.name || ""}
-                  disabled
-                />
-              )}
+              {/* Company Static Display */}
+              <div className="p-3 border rounded-md bg-muted/50 text-sm font-medium">
+                {companies.find((c) => c.id === selectedCompanyId)?.name || globalSelectedCompany?.name || "Aucune société sélectionnée"}
+              </div>
             </div>
 
             <div className="space-y-2">
