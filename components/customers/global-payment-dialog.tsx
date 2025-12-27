@@ -61,8 +61,8 @@ export function GlobalPaymentDialog({
         setResult(null)
 
         try {
-            // Call the RPC function
-            const { data, error } = await supabase.rpc('register_global_payment', {
+            // Call the RPC function (v2)
+            const { data, error } = await supabase.rpc('record_global_payment', {
                 p_customer_id: customerId,
                 p_amount: amount,
                 p_payment_method: method,
