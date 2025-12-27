@@ -116,16 +116,28 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                 if (!linesError && lines) blLines = lines
             }
 
-            // 3. Fetch Payments
+            // 3. Fetch Payments (INVOICES)
             let payments: any[] = []
             if (invoices && invoices.length > 0) {
                 const invIds = invoices.map(i => i.id)
                 const { data: payData, error: payError } = await supabase
-                    .from('payments')
+                    .from('invoice_payments')
                     .select('*, invoice:invoices(invoice_number)')
                     .in('invoice_id', invIds)
 
                 if (!payError && payData) payments = payData
+            }
+
+            // 3.1 Fetch Payments (DELIVERY NOTES)
+            let blPayments: any[] = []
+            if (bls && bls.length > 0) {
+                const blIds = bls.map(b => b.id)
+                const { data: blPayData, error: blPayError } = await supabase
+                    .from('delivery_note_payments')
+                    .select('*, delivery_note:delivery_notes(delivery_note_number)')
+                    .in('delivery_note_id', blIds)
+
+                if (!blPayError && blPayData) blPayments = blPayData
             }
 
             // 4. Combine and Normalize
@@ -162,11 +174,24 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     id: pay.id,
                     date: pay.payment_date,
                     type: 'PAYMENT',
-                    reference: `PAY-${pay.id.substring(0, 8)}`,
+                    reference: `PAY-INV-${pay.invoice?.invoice_number || 'N/A'}`,
                     amount: pay.amount,
                     payment_method: pay.payment_method,
                     status: 'COMPLETED',
                     details: [{ description: `Paiement pour facture ${pay.invoice?.invoice_number || 'N/A'}`, note: pay.notes }]
+                })
+            })
+
+            blPayments.forEach((pay: any) => {
+                historyItems.push({
+                    id: pay.id,
+                    date: pay.payment_date,
+                    type: 'PAYMENT',
+                    reference: `PAY-BL-${pay.delivery_note?.delivery_note_number || 'N/A'}`,
+                    amount: pay.amount,
+                    payment_method: pay.payment_method,
+                    status: 'COMPLETED',
+                    details: [{ description: `Paiement pour BL ${pay.delivery_note?.delivery_note_number || 'N/A'}`, note: pay.notes }]
                 })
             })
 
@@ -199,8 +224,12 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
     // Calculations for KPI
     const totalInvoiced = history.filter(h => h.type === 'INVOICE' && h.status !== 'BROUILLON' && h.status !== 'ANNULEE').reduce((sum, h) => sum + h.amount, 0)
+    // Add Valued BLs to "Total Due" calculation logic if needed, or keep strictly Invoiced.
+    // Let's add Valued BLs (LIVRE) to the total obligation context
+    const totalBlValued = history.filter(h => h.type === 'DELIVERY_NOTE' && h.status === 'LIVRE').reduce((sum, h) => sum + h.amount, 0)
+
     const totalPaid = history.filter(h => h.type === 'PAYMENT').reduce((sum, h) => sum + h.amount, 0)
-    const totalDue = totalInvoiced - totalPaid // Rough estimate
+    const totalDue = (totalInvoiced + totalBlValued) - totalPaid // Updated formula
 
     console.log("DEBUG TOTALS:", { totalInvoiced, totalPaid, totalDue })
 
