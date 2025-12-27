@@ -2,10 +2,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { ArrowLeft, Loader2, Plus, Trash2, MapPin, Check } from "lucide-react"
+import { ArrowLeft, Loader2, Plus, Trash2, MapPin, Check, CreditCard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { CustomerImportDialog } from "@/components/customer-import-dialog"
 import { CustomerPricingManager } from "@/components/customer-pricing-manager"
 import { CustomerHistory } from "./customer-history"
+import { GlobalPaymentDialog } from "./global-payment-dialog"
 
 type Address = {
     id?: string
@@ -44,6 +45,7 @@ type Customer = {
     phone_number: string
     website?: string
     balance: number
+    initial_balance: number
     is_subject_to_vat: boolean
     addresses: Address[]
 }
@@ -59,6 +61,11 @@ const initialAddress: Address = {
     is_default: false
 }
 
+interface CustomerFormProps {
+    companyId: string
+    customerId?: string
+}
+
 const initialCustomer: Customer = {
     company_id: "",
     name: "",
@@ -69,6 +76,7 @@ const initialCustomer: Customer = {
     phone_number: "",
     website: "",
     balance: 0,
+    initial_balance: 0,
     is_subject_to_vat: true,
     addresses: []
 }
@@ -80,11 +88,21 @@ interface CustomerFormProps {
 
 export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
+
+    // Get initial tab from URL or default to infogenerale
+    const initialTab = searchParams.get('tab') || "infogenerale"
+
+    // Sanitize initial tab
+    const safeInitialTab = ["infogenerale", "tarifs", "history"].includes(initialTab)
+        ? initialTab
+        : "infogenerale";
 
     const [isLoading, setIsLoading] = useState(!!customerId)
     const [isSaving, setIsSaving] = useState(false)
-    const [activeTab, setActiveTab] = useState("infogenerale")
+    const [activeTab, setActiveTab] = useState(safeInitialTab)
+    const [isGlobalPaymentOpen, setIsGlobalPaymentOpen] = useState(false)
 
     const [formData, setFormData] = useState<Customer>({
         ...initialCustomer,
@@ -136,6 +154,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 phone_number: cust.phone_number || "",
                 website: cust.website || "",
                 balance: cust.balance || 0,
+                initial_balance: cust.initial_balance || 0,
                 is_subject_to_vat: cust.is_subject_to_vat ?? true,
                 addresses: (addrs || []).map((a: any) => ({
                     ...a,
@@ -211,7 +230,9 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 contact_person: formData.contact_person,
                 email: formData.email,
                 phone_number: formData.phone_number,
-                balance: formData.balance,
+                initial_balance: formData.initial_balance,
+                // balance: formData.balance, // Balance is calculated, we don't set it manually anymore, logic is in trigger
+
                 is_subject_to_vat: formData.is_subject_to_vat,
                 // Legacy fields sync (only map fields that exist in 'customers' table)
                 street: formData.addresses.find(a => a.is_default)?.address_line1 || null,
@@ -299,6 +320,17 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                     <p className="text-muted-foreground">Gérez les informations, adresses et tarifs du client.</p>
                 </div>
                 <div className="ml-auto flex gap-2">
+                    {customerId && (
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={() => setIsGlobalPaymentOpen(true)}
+                            className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-200"
+                        >
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Recevoir Paiement Global
+                        </Button>
+                    )}
                     <Button variant="outline" type="button" onClick={() => router.back()}>Annuler</Button>
                     <Button type="submit" disabled={isSaving}>
                         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -415,16 +447,29 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                         </div>
                         <Card>
                             <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label>Solde Initial (TND)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.001"
-                                        value={formData.balance}
-                                        onChange={(e) => handleInputChange("balance", parseFloat(e.target.value) || 0)}
-                                        className="font-mono"
-                                    />
-                                    <p className="text-xs text-muted-foreground">Montant positif = Le client vous doit de l'argent (Créance).</p>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>Solde Initial (TND)</Label>
+                                        <Input
+                                            type="number"
+                                            step="0.001"
+                                            value={formData.initial_balance}
+                                            onChange={(e) => handleInputChange("initial_balance", parseFloat(e.target.value) || 0)}
+                                            className="font-mono bg-yellow-50/50 border-yellow-200"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Solde de départ (Reprise de données, ancien système...).</p>
+                                    </div>
+
+                                    {customerId && (
+                                        <div className="space-y-2">
+                                            <Label>Solde Actuel (Calculé)</Label>
+                                            <div className={`text-xl font-bold font-mono px-3 py-2 rounded border ${formData.balance > 0 ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                }`}>
+                                                {formData.balance?.toFixed(3)} TND
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Solde Initial + Factures/BLs - Paiements</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
                                     <div className="space-y-0.5">
@@ -543,9 +588,18 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 </TabsContent>
 
                 <TabsContent value="history" className="mt-6">
-                    <CustomerHistory customerId={customerId} />
+                    <CustomerHistory customerId={customerId || ""} />
                 </TabsContent>
             </Tabs>
+            <GlobalPaymentDialog
+                open={isGlobalPaymentOpen}
+                onOpenChange={setIsGlobalPaymentOpen}
+                customerId={customerId || ""}
+                customerName={formData.name}
+                onPaymentComplete={() => {
+                    router.refresh()
+                }}
+            />
         </form>
     )
 }

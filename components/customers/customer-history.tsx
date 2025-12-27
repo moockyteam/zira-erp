@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, Fragment } from "react"
@@ -46,8 +45,8 @@ type HistoryItem = {
     reference: string
     amount: number
     status?: string
-    details?: any[] // Lines or notes
-    payment_method?: string
+    details?: any[] // Lines
+    linkedPayments?: any[] // Associated payments
 }
 
 export function CustomerHistory({ customerId }: { customerId: string }) {
@@ -145,6 +144,8 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
             invoices?.forEach((inv: any) => {
                 const myLines = invoiceLines.filter(l => l.invoice_id === inv.id)
+                const myPayments = payments.filter(p => p.invoice_id === inv.id)
+
                 historyItems.push({
                     id: inv.id,
                     date: inv.invoice_date,
@@ -152,46 +153,24 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     reference: inv.invoice_number,
                     amount: inv.total_ttc,
                     status: inv.status,
-                    details: myLines
+                    details: myLines,
+                    linkedPayments: myPayments
                 })
             })
 
             bls?.forEach((bl: any) => {
                 const myLines = blLines.filter(l => l.delivery_note_id === bl.id)
+                const myPayments = blPayments.filter(p => p.delivery_note_id === bl.id)
+
                 historyItems.push({
                     id: bl.id,
                     date: bl.delivery_date || bl.created_at,
                     type: 'DELIVERY_NOTE',
-                    reference: bl.delivery_note_number, // Correct column name from schema
+                    reference: bl.delivery_note_number,
                     amount: bl.total_ttc || 0,
                     status: bl.status,
-                    details: myLines
-                })
-            })
-
-            payments.forEach((pay: any) => {
-                historyItems.push({
-                    id: pay.id,
-                    date: pay.payment_date,
-                    type: 'PAYMENT',
-                    reference: `PAY-INV-${pay.invoice?.invoice_number || 'N/A'}`,
-                    amount: pay.amount,
-                    payment_method: pay.payment_method,
-                    status: 'COMPLETED',
-                    details: [{ description: `Paiement pour facture ${pay.invoice?.invoice_number || 'N/A'}`, note: pay.notes }]
-                })
-            })
-
-            blPayments.forEach((pay: any) => {
-                historyItems.push({
-                    id: pay.id,
-                    date: pay.payment_date,
-                    type: 'PAYMENT',
-                    reference: `PAY-BL-${pay.delivery_note?.delivery_note_number || 'N/A'}`,
-                    amount: pay.amount,
-                    payment_method: pay.payment_method,
-                    status: 'COMPLETED',
-                    details: [{ description: `Paiement pour BL ${pay.delivery_note?.delivery_note_number || 'N/A'}`, note: pay.notes }]
+                    details: myLines,
+                    linkedPayments: myPayments
                 })
             })
 
@@ -295,7 +274,6 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                             <SelectItem value="ALL">Tout l'historique</SelectItem>
                             <SelectItem value="INVOICE">Factures</SelectItem>
                             <SelectItem value="DELIVERY_NOTE">Bons de Livraison</SelectItem>
-                            <SelectItem value="PAYMENT">Paiements</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -343,21 +321,13 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                             <TableCell>
                                                 {item.type === 'INVOICE' && <Badge variant="outline" className="border-indigo-500 text-indigo-500"><FileText className="mr-1 h-3 w-3" /> Facture</Badge>}
                                                 {item.type === 'DELIVERY_NOTE' && <Badge variant="outline" className="border-blue-500 text-blue-500"><Truck className="mr-1 h-3 w-3" /> BL</Badge>}
-                                                {item.type === 'PAYMENT' && <Badge variant="outline" className="border-emerald-500 text-emerald-500"><CreditCard className="mr-1 h-3 w-3" /> Paiement</Badge>}
                                             </TableCell>
                                             <TableCell className="font-medium">{item.reference}</TableCell>
                                             <TableCell className="text-right font-mono">
-                                                {item.type === 'PAYMENT' ? (
-                                                    <span className="text-emerald-600 font-bold flex items-center justify-end gap-1">
-                                                        <ArrowDownLeft className="h-3 w-3" />
-                                                        {item.amount.toFixed(3)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center justify-end gap-1">
-                                                        <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
-                                                        {item.amount.toFixed(3)}
-                                                    </span>
-                                                )}
+                                                <span className="flex items-center justify-end gap-1">
+                                                    <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
+                                                    {item.amount.toFixed(3)}
+                                                </span>
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant="secondary">{item.status}</Badge>
@@ -366,19 +336,17 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                         {expandedRows.has(item.id) && (
                                             <TableRow className="bg-muted/30">
                                                 <TableCell colSpan={6} className="p-4">
-                                                    <div className="pl-8 text-sm">
-                                                        <h4 className="font-semibold mb-2">Détails :</h4>
-                                                        {item.type === 'PAYMENT' ? (
-                                                            <div className="grid grid-cols-2 gap-4 max-w-lg">
-                                                                <div><span className="text-muted-foreground">Méthode:</span> {item.payment_method || '-'}</div>
-                                                                <div className="col-span-2"><span className="text-muted-foreground">Notes:</span> {item.details?.[0]?.note || '-'}</div>
-                                                                <div className="col-span-2 text-muted-foreground italic">{item.details?.[0]?.description}</div>
-                                                            </div>
-                                                        ) : (
+                                                    <div className="pl-8 text-sm space-y-6">
+                                                        {/* Articles Section */}
+                                                        <div>
+                                                            <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                                                Détails des Articles
+                                                            </h4>
                                                             <div className="border rounded-md overflow-hidden bg-background">
                                                                 <Table>
                                                                     <TableHeader>
-                                                                        <TableRow className="h-8">
+                                                                        <TableRow className="h-8 bg-muted/50">
                                                                             <TableHead className="py-1">Article / Description</TableHead>
                                                                             <TableHead className="py-1 text-right">Qté</TableHead>
                                                                             <TableHead className="py-1 text-right">Prix U.</TableHead>
@@ -397,7 +365,67 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                                                     </TableBody>
                                                                 </Table>
                                                             </div>
-                                                        )}
+                                                        </div>
+
+                                                        {/* Payments Section */}
+                                                        <div>
+                                                            <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                                <CreditCard className="h-4 w-4 text-emerald-600" />
+                                                                Historique des Paiements
+                                                            </h4>
+                                                            {item.linkedPayments && item.linkedPayments.length > 0 ? (
+                                                                <div className="border rounded-md overflow-hidden bg-emerald-50/30 border-emerald-100">
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow className="h-8 bg-emerald-100/50">
+                                                                                <TableHead className="py-1 text-xs">Date</TableHead>
+                                                                                <TableHead className="py-1 text-xs">Méthode</TableHead>
+                                                                                <TableHead className="py-1 text-xs">Notes/Ref</TableHead>
+                                                                                <TableHead className="py-1 text-right text-xs">Montant</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {item.linkedPayments.map((pay: any) => (
+                                                                                <TableRow key={pay.id} className="h-8 hover:bg-transparent">
+                                                                                    <TableCell className="py-1 text-xs">{format(new Date(pay.payment_date), "dd/MM/yyyy")}</TableCell>
+                                                                                    <TableCell className="py-1 text-xs">{pay.payment_method}</TableCell>
+                                                                                    <TableCell className="py-1 text-xs max-w-[200px] truncate" title={pay.notes}>
+                                                                                        {pay.notes || "-"}
+                                                                                    </TableCell>
+                                                                                    <TableCell className="py-1 text-right text-xs font-mono font-bold text-emerald-700">
+                                                                                        {pay.amount.toFixed(3)} TND
+                                                                                    </TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                            {/* Total Row */}
+                                                                            <TableRow className="h-9 bg-emerald-100/30 font-medium">
+                                                                                <TableCell colSpan={3} className="py-1 text-xs text-right text-emerald-900">Total Payé :</TableCell>
+                                                                                <TableCell className="py-1 text-right text-xs font-mono text-emerald-700">
+                                                                                    {item.linkedPayments.reduce((acc: number, p: any) => acc + p.amount, 0).toFixed(3)} TND
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-sm text-muted-foreground italic pl-2 border-l-2 border-muted">
+                                                                    Aucun paiement enregistré pour ce document.
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Summary Footer */}
+                                                        <div className="flex justify-end pt-2 border-t">
+                                                            <div className="text-right">
+                                                                <div className="text-xs text-muted-foreground">Reste à payer sur ce document</div>
+                                                                <div className={`text-lg font-bold font-mono ${(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0)) > 0.001
+                                                                    ? "text-orange-600"
+                                                                    : "text-emerald-600"
+                                                                    }`}>
+                                                                    {(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0)).toFixed(3)} TND
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

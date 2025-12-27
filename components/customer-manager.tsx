@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Trash2, Info, Check, X, MapPin, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react"
+import { Trash2, Info, Check, X, MapPin, ArrowUpDown, ChevronUp, ChevronDown, CreditCard, History, Edit } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import { useCompany } from "@/components/providers/company-provider"
 import { CustomerImportDialog } from "@/components/customer-import-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { FilterToolbar } from "@/components/ui/filter-toolbar"
+import { GlobalPaymentDialog } from "./customers/global-payment-dialog"
 
 type Customer = {
   id: string
@@ -46,6 +47,10 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
   // -- FILTER & SORT STATE --
   const [searchTerm, setSearchTerm] = useState("")
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' })
+
+  // -- PAYMENT STATE --
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [paymentCustomer, setPaymentCustomer] = useState<{ id: string, name: string } | null>(null)
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -132,6 +137,17 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
 
   const handleAddNewClick = () => {
     router.push("/dashboard/customers/new")
+  }
+
+  const handleHistoryClick = (e: React.MouseEvent, customerId: string) => {
+    e.stopPropagation()
+    router.push(`/dashboard/customers/${customerId}?tab=history`)
+  }
+
+  const handlePaymentClick = (e: React.MouseEvent, customer: Customer) => {
+    e.stopPropagation()
+    setPaymentCustomer({ id: customer.id, name: customer.name })
+    setPaymentOpen(true)
   }
 
   const handleDelete = async (e: React.MouseEvent, customerId: string) => {
@@ -268,9 +284,33 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" onClick={(e) => handleDelete(e, customer.id)} className="text-muted-foreground hover:text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={(e) => handlePaymentClick(e, customer)} className="text-muted-foreground hover:text-emerald-600">
+                                    <CreditCard className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Paiement Global</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={(e) => handleHistoryClick(e, customer.id)} className="text-muted-foreground hover:text-blue-600">
+                                    <History className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Historique</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
+                            <Button variant="ghost" size="icon" onClick={(e) => handleDelete(e, customer.id)} className="text-muted-foreground hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -281,7 +321,20 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
           </Card>
         </>
       )}
-    </div>
+
+
+      {/* Global Payment Dialog */}
+      <GlobalPaymentDialog
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        customerId={paymentCustomer?.id || ""}
+        customerName={paymentCustomer?.name || ""}
+        onPaymentComplete={() => {
+          // Refresh list
+          if (selectedCompanyId) fetchCustomers(selectedCompanyId)
+        }}
+      />
+    </div >
   )
 }
 
