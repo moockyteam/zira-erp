@@ -60,14 +60,15 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
 
   const fetchCustomers = async (companyId: string) => {
     setIsInitialLoading(true)
-    const { data, error } = await supabase.from("customers_with_balance").select("*").eq("company_id", companyId).order('name')
+    const { data, error } = await supabase.from("customers").select("*").eq("company_id", companyId).order('name')
     if (error) {
       toast.error("Impossible de charger les clients.")
       console.error("fetchCustomers Error:", JSON.stringify(error, null, 2))
     } else {
       const mappedData = data.map((c: any) => ({
         ...c,
-        balance: (c.calculated_balance || 0) + (c.balance || 0)
+        // Balance is now a real column updated by triggers
+        balance: c.balance || 0
       }))
       setCustomers(mappedData as Customer[])
     }

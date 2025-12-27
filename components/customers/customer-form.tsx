@@ -48,6 +48,7 @@ type Customer = {
     initial_balance: number
     is_subject_to_vat: boolean
     addresses: Address[]
+    balance_start_date?: string | null
 }
 
 const initialAddress: Address = {
@@ -78,6 +79,9 @@ const initialCustomer: Customer = {
     balance: 0,
     initial_balance: 0,
     is_subject_to_vat: true,
+    initial_balance: 0,
+    balance: 0,
+    balance_start_date: null,
     addresses: []
 }
 
@@ -155,6 +159,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 website: cust.website || "",
                 balance: cust.balance || 0,
                 initial_balance: cust.initial_balance || 0,
+                balance_start_date: cust.balance_start_date || null,
                 is_subject_to_vat: cust.is_subject_to_vat ?? true,
                 addresses: (addrs || []).map((a: any) => ({
                     ...a,
@@ -231,6 +236,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 email: formData.email,
                 phone_number: formData.phone_number,
                 initial_balance: formData.initial_balance,
+                balance_start_date: formData.balance_start_date,
                 // balance: formData.balance, // Balance is calculated, we don't set it manually anymore, logic is in trigger
 
                 is_subject_to_vat: formData.is_subject_to_vat,
@@ -471,15 +477,29 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
-                                    <div className="space-y-0.5">
-                                        <Label className="text-base font-medium">Assujetti à la TVA</Label>
-                                        <p className="text-sm text-muted-foreground">Appliquer la TVA sur les factures de ce client.</p>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>Date de début du calcul</Label>
+                                        <Input
+                                            type="date"
+                                            value={formData.balance_start_date ? formData.balance_start_date.split('T')[0] : ""}
+                                            onChange={(e) => handleInputChange("balance_start_date", e.target.value || null)}
+                                            className="bg-background"
+                                        />
+                                        <p className="text-[0.8rem] text-muted-foreground">
+                                            Ignore les documents avant cette date. <br />Si vide = tout l'historique.
+                                        </p>
                                     </div>
-                                    <Switch
-                                        checked={formData.is_subject_to_vat}
-                                        onCheckedChange={(v) => handleInputChange("is_subject_to_vat", v)}
-                                    />
+                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                                        <div className="space-y-0.5">
+                                            <Label className="text-base font-medium">Assujetti à la TVA</Label>
+                                            <p className="text-sm text-muted-foreground">Appliquer la TVA sur les factures de ce client.</p>
+                                        </div>
+                                        <Switch
+                                            checked={formData.is_subject_to_vat}
+                                            onCheckedChange={(v) => handleInputChange("is_subject_to_vat", v)}
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
