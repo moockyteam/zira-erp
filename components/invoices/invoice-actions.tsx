@@ -158,19 +158,17 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
 
         <DropdownMenuSeparator />
 
-        {(invoice.status === "BROUILLON" || invoice.status === "ENVOYE") && (
-          <DropdownMenuItem onClick={() => {
-            if (invoice.status === "ENVOYE") {
-              if (window.confirm("Attention : Modifier une facture déjà envoyée peut causer des incohérences comptables si le client l'a déjà enregistrée. Voulez-vous continuer ?")) {
-                window.location.href = `/dashboard/invoices/${invoice.id}`
-              }
-            } else {
+        <DropdownMenuItem onClick={() => {
+          if (invoice.status === "ENVOYE" || invoice.status === "PAYEE" || invoice.status === "PARTIELLEMENT_PAYEE") {
+            if (window.confirm("Attention : Modifier une facture finalisée peut causer des incohérences comptables. Voulez-vous continuer ?")) {
               window.location.href = `/dashboard/invoices/${invoice.id}`
             }
-          }}>
-            <Edit className="mr-2 h-4 w-4" /> Modifier
-          </DropdownMenuItem>
-        )}
+          } else {
+            window.location.href = `/dashboard/invoices/${invoice.id}`
+          }
+        }}>
+          <Edit className="mr-2 h-4 w-4" /> Modifier
+        </DropdownMenuItem>
 
         {invoice.status === "BROUILLON" && (
           <>

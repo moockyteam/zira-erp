@@ -124,13 +124,13 @@ export function DnActions({ dn, onActionSuccess }: { dn: any; onActionSuccess: (
 
         <DropdownMenuSeparator />
 
+        <Link href={`/dashboard/delivery-notes/${dn.id}`} passHref>
+          <DropdownMenuItem>
+            <Edit className="mr-2 h-4 w-4" /> Modifier
+          </DropdownMenuItem>
+        </Link>
         {dn.status === "BROUILLON" && (
           <>
-            <Link href={`/dashboard/delivery-notes/${dn.id}`} passHref>
-              <DropdownMenuItem>
-                <Edit className="mr-2 h-4 w-4" /> Modifier
-              </DropdownMenuItem>
-            </Link>
             <DropdownMenuItem onClick={() => updateStatus("LIVRE")}>
               <Truck className="mr-2 h-4 w-4 text-green-500" /> Marquer comme Livré & Sortir du Stock
             </DropdownMenuItem>
@@ -151,6 +151,6 @@ export function DnActions({ dn, onActionSuccess }: { dn: any; onActionSuccess: (
           </>
         )}
       </DropdownMenuContent>
-    </DropdownMenu>
+    </DropdownMenu >
   )
 }

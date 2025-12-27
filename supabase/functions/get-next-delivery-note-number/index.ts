@@ -34,9 +34,14 @@ Deno.serve(async (req) => {
     if (error && error.code !== 'PGRST116') throw error;
 
     let nextNumber = startNumber;
-    if (data) {
-      const lastNumber = parseInt(data.delivery_note_number.split('-').pop() || '0');
-      nextNumber = Math.max(lastNumber + 1, startNumber);
+    if (data && data.delivery_note_number) {
+      const lastNumberStr = data.delivery_note_number.split('-').pop();
+      if (lastNumberStr) {
+        const lastNumber = parseInt(lastNumberStr, 10);
+        if (!isNaN(lastNumber)) {
+          nextNumber = Math.max(lastNumber + 1, startNumber);
+        }
+      }
     }
 
     const newDnNumber = `BL-${currentYear}-${String(nextNumber).padStart(3, '0')}`;

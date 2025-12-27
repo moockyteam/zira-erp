@@ -63,7 +63,7 @@ export function InvoiceForm({
   const { selectedCompany: globalSelectedCompany } = useCompany() // Rename to avoid conflict
   const isNew = !initialData
 
-  const [companyId, setCompanyId] = useState(initialData?.company_id || globalSelectedCompany?.id || "")
+  const [companyId, setCompanyId] = useState(initialData?.company_id || "")
 
   // Effect to sync with sidebar if creating new
   useEffect(() => {
@@ -75,8 +75,18 @@ export function InvoiceForm({
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
-  const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || format(new Date(), "yyyy-MM-dd"))
-  const [dueDate, setDueDate] = useState(initialData?.due_date || format(addDays(new Date(), 30), "yyyy-MM-dd"))
+  const [invoiceDate, setInvoiceDate] = useState(initialData?.invoice_date || "")
+  const [dueDate, setDueDate] = useState(initialData?.due_date || "")
+
+  useEffect(() => {
+    // Set default dates on client side only to avoid hydration mismatch
+    if (!invoiceDate && isNew) {
+      setInvoiceDate(format(new Date(), "yyyy-MM-dd"))
+    }
+    if (!dueDate && isNew) {
+      setDueDate(format(addDays(new Date(), 30), "yyyy-MM-dd"))
+    }
+  }, [isNew, invoiceDate, dueDate])
   const [currency, setCurrency] = useState(initialData?.currency || quoteInitialData?.currency || "TND")
 
   // Refactor: lines use string | number for controlled inputs

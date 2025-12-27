@@ -1,11 +1,11 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Trash2, Info, Check, X, MapPin } from "lucide-react"
+import { Trash2, Info, Check, X, MapPin, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useCompany } from "@/components/providers/company-provider"
 import { CustomerImportDialog } from "@/components/customer-import-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 type Customer = {
   id: string
@@ -28,6 +29,11 @@ type Customer = {
   calculated_balance?: number | null
 }
 
+type SortConfig = {
+  key: keyof Customer | 'balance'
+  direction: 'asc' | 'desc'
+}
+
 export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
   const supabase = createClient()
   const router = useRouter()
@@ -36,6 +42,10 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
   const selectedCompanyId = selectedCompany?.id
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(false)
+
+  // -- FILTER & SORT STATE --
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' })
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -52,11 +62,68 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
     } else {
       const mappedData = data.map((c: any) => ({
         ...c,
-        balance: c.calculated_balance !== undefined ? c.calculated_balance : c.balance
+        balance: (c.calculated_balance || 0) + (c.balance || 0)
       }))
       setCustomers(mappedData as Customer[])
     }
     setIsInitialLoading(false)
+  }
+
+  // -- FILTERED & SORTED DATA --
+  const filteredAndSortedCustomers = useMemo(() => {
+    let result = [...customers]
+
+    // 1. Filter
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase()
+      result = result.filter(c =>
+        c.name?.toLowerCase().includes(lowerTerm) ||
+        c.email?.toLowerCase().includes(lowerTerm) ||
+        c.contact_person?.toLowerCase().includes(lowerTerm) ||
+        c.matricule_fiscal?.toLowerCase().includes(lowerTerm)
+      )
+    }
+
+    // 2. Sort
+    result.sort((a, b) => {
+      const aValue = a[sortConfig.key]
+      const bValue = b[sortConfig.key]
+
+      if (aValue === bValue) return 0
+
+      // Handle nulls always last or first? Let's treat null as empty/zero
+      if (aValue === null || aValue === undefined) return 1
+      if (bValue === null || bValue === undefined) return -1
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortConfig.direction === 'asc'
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue)
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+
+      return 0
+    })
+
+    return result
+  }, [customers, searchTerm, sortConfig])
+
+
+  const handleSort = (key: keyof Customer | 'balance') => {
+    setSortConfig(current => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const renderSortIcon = (key: string) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground opacity-50" />
+    return sortConfig.direction === 'asc'
+      ? <ChevronUp className="ml-1 h-3 w-3 text-primary" />
+      : <ChevronDown className="ml-1 h-3 w-3 text-primary" />
   }
 
   const handleEditClick = (customerId: string) => {
@@ -81,7 +148,7 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {!selectedCompanyId && userCompanies.length > 1 && (
         <Card className="text-center py-12">
           <CardContent><p className="text-muted-foreground">Veuillez sélectionner une entreprise pour gérer ses clients.</p></CardContent>
@@ -89,98 +156,132 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
       )}
 
       {selectedCompanyId && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Liste des Clients</CardTitle>
-              <CardDescription>Gérez vos clients et leurs adresses de livraison.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <CustomerImportDialog companyId={selectedCompanyId} onImportSuccess={() => fetchCustomers(selectedCompanyId!)} />
-              <Button onClick={handleAddNewClick}>Ajouter un client</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="hidden md:table-cell">Contact</TableHead>
-                  <TableHead className="hidden md:table-cell">Matricule</TableHead>
-                  <TableHead className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      Solde
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="h-4 w-4 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-xs">Solde = Total Facturé (Non annulé) - Total Payé.<br />Un solde positif indique un montant dû par le client.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isInitialLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <TableRow key={index}>
-                      <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
-                      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[150px]" /></TableCell>
-                      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[100px]" /></TableCell>
-                      <TableCell className="text-right"><Skeleton className="h-4 w-[80px] ml-auto" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-[70px] ml-auto" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : customers.length === 0 ? (
+        <>
+          {/* HEADER CARD */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Liste des Clients</CardTitle>
+                <CardDescription>Gérez vos clients et leurs adresses.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <CustomerImportDialog companyId={selectedCompanyId} onImportSuccess={() => fetchCustomers(selectedCompanyId!)} />
+                <Button onClick={handleAddNewClick}>Ajouter un client</Button>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* FILTER TOOLBAR */}
+          <FilterToolbar
+            className="mb-4"
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Rechercher par nom, email, contact..."
+            resultCount={filteredAndSortedCustomers.length}
+            resultLabel={filteredAndSortedCustomers.length > 1 ? "clients trouvés" : "client trouvé"}
+            onReset={() => { setSearchTerm(""); setSortConfig({ key: 'name', direction: 'asc' }); }}
+            showReset={!!searchTerm || sortConfig.key !== 'name' || sortConfig.direction !== 'asc'}
+          />
+
+          {/* TABLE CARD */}
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      Aucun client trouvé.
-                      <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
-                        Ajoutez votre premier client.
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  customers.map((customer) => (
-                    <TableRow
-                      key={customer.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleEditClick(customer.id)}
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => handleSort('name')}
                     >
-                      <TableCell className="font-medium">{customer.name}</TableCell>
-                      <TableCell><Badge variant={customer.customer_type === 'ENTREPRISE' ? 'default' : 'secondary'}>{customer.customer_type}</Badge></TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex flex-col text-sm">
-                          <span>{customer.contact_person}</span>
-                          <span className="text-muted-foreground text-xs">{customer.email}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">{customer.matricule_fiscal || "-"}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        <span className={customer.balance && customer.balance > 0 ? "text-destructive font-bold" : ""}>
-                          {customer.balance != null ? customer.balance.toFixed(3) : 'N/A'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={(e) => handleDelete(e, customer.id)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <div className="flex items-center">Nom {renderSortIcon('name')}</div>
+                    </TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50" onClick={() => handleSort('contact_person')}>
+                      <div className="flex items-center">Contact {renderSortIcon('contact_person')}</div>
+                    </TableHead>
+                    <TableHead className="hidden md:table-cell">Matricule</TableHead>
+                    <TableHead
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort('balance')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Solde {renderSortIcon('balance')}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">Solde = Total Facturé (Non annulé) - Total Payé + Solde Initial.<br />Un solde positif indique un montant dû par le client.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isInitialLoading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[150px]" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[100px]" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-[80px] ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-[70px] ml-auto" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredAndSortedCustomers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center">
+                        {searchTerm ? "Aucun client ne correspond à votre recherche." : (
+                          <>
+                            Aucun client trouvé.
+                            <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
+                              Ajoutez votre premier client.
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  ) : (
+                    filteredAndSortedCustomers.map((customer) => (
+                      <TableRow
+                        key={customer.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleEditClick(customer.id)}
+                      >
+                        <TableCell className="font-medium">{customer.name}</TableCell>
+                        <TableCell><Badge variant={customer.customer_type === 'ENTREPRISE' ? 'default' : 'secondary'}>{customer.customer_type}</Badge></TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex flex-col text-sm">
+                            <span>{customer.contact_person}</span>
+                            <span className="text-muted-foreground text-xs">{customer.email}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{customer.matricule_fiscal || "-"}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          <span className={customer.balance && customer.balance > 0 ? "text-destructive font-bold" : ""}>
+                            {customer.balance != null ? customer.balance.toFixed(3) : 'N/A'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={(e) => handleDelete(e, customer.id)} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   )
 }
+

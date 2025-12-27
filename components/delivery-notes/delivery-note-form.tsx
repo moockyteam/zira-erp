@@ -59,7 +59,7 @@ export function DeliveryNoteForm({
   const isNew = !initialData
 
   const { selectedCompany } = useCompany()
-  const [companyId, setCompanyId] = useState(initialData?.company_id || selectedCompany?.id || "")
+  const [companyId, setCompanyId] = useState(initialData?.company_id || "")
 
   useEffect(() => {
     if (!initialData && selectedCompany && !companyId) {
@@ -70,9 +70,16 @@ export function DeliveryNoteForm({
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [openCustomerPopover, setOpenCustomerPopover] = useState(false)
   const [deliveryAddress, setDeliveryAddress] = useState(initialData?.delivery_address || "")
-  const [deliveryDate, setDeliveryDate] = useState(initialData?.delivery_date || format(new Date(), "yyyy-MM-dd"))
+  const [deliveryDate, setDeliveryDate] = useState(initialData?.delivery_date || "")
+
+  useEffect(() => {
+    if (isNew && !deliveryDate) {
+      setDeliveryDate(format(new Date(), "yyyy-MM-dd"))
+    }
+  }, [isNew, deliveryDate])
+
   const [lines, setLines] = useState<DnLine[]>(
-    initialData?.delivery_note_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
+    initialData?.delivery_note_lines?.map((l: any) => ({ ...l, local_id: l.id || crypto.randomUUID() })) || [],
   )
   const [driverName, setDriverName] = useState(initialData?.driver_name || lastUsedValues?.driver_name || "")
   const [vehicleRegistration, setVehicleRegistration] = useState(initialData?.vehicle_registration || lastUsedValues?.vehicle_registration || "")
@@ -203,9 +210,13 @@ export function DeliveryNoteForm({
     }
 
     if (isNew) {
-      const { data: numberData } = await supabase.rpc("get_next_delivery_note_number", { p_company_id: companyId })
+      // Call Edge Function instead of RPC
+      const { data: numberData, error: numberError } = await supabase.functions.invoke("get-next-delivery-note-number", {
+        body: JSON.stringify({ companyId }),
+        headers: { "Content-Type": "application/json" },
+      })
 
-      if (!numberData) {
+      if (numberError || !numberData?.delivery_note_number) {
         toast.error("Impossible de générer un numéro de BL.");
         setIsLoading(false);
         return;
@@ -213,7 +224,7 @@ export function DeliveryNoteForm({
 
       const { data: newDn, error: insertError } = await supabase.from("delivery_notes").insert({
         ...dnPayload,
-        delivery_note_number: numberData
+        delivery_note_number: numberData.delivery_note_number
       }).select("id").single();
 
       if (insertError) {

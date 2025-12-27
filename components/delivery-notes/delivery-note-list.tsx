@@ -7,19 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, Package, Truck, XCircle, ArrowUpDown, ChevronUp, ChevronDown, FileText } from "lucide-react"
+import { PlusCircle, Package, Truck, XCircle, ArrowUpDown, ChevronUp, ChevronDown, FileText, CreditCard } from "lucide-react"
 import { useCompany } from "@/components/providers/company-provider"
 import { DnActions } from "./delivery-note-actions"
 import { SearchInput } from "@/components/ui/search-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { DeliveryNotePaymentDialog } from "@/components/delivery-notes/delivery-note-payment-dialog"
 
 type Dn = {
   id: string
   delivery_note_number: string
+  customer_id: string
   customers: { name: string } | null
   delivery_date: string
   status: "BROUILLON" | "LIVRE" | "ANNULE"
+  total_ttc?: number
 }
 
 type SortConfig = {
@@ -52,7 +55,7 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
     setIsLoading(true)
     const { data, error } = await supabase
       .from("delivery_notes")
-      .select(`id, delivery_note_number, customers(name), delivery_date, status`)
+      .select(`id, delivery_note_number, customer_id, customers(name), delivery_date, status, total_ttc`)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
 
@@ -258,6 +261,14 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                         Statut {getSortIcon("status")}
                       </div>
                     </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:text-primary transition-colors h-11 text-right"
+                      onClick={() => requestSort("total_ttc" as any)}
+                    >
+                      <div className="flex items-center justify-end text-xs font-medium uppercase tracking-wider text-muted-foreground gap-1">
+                        Montant {getSortIcon("total_ttc" as any)}
+                      </div>
+                    </TableHead>
                     <TableHead className="h-11 w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -294,8 +305,28 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                             {dn.status}
                           </Badge>
                         </TableCell>
+                        <TableCell className="text-right font-mono font-medium">
+                          {dn.total_ttc ? dn.total_ttc.toFixed(3) : "0.000"} <span className="text-xs text-muted-foreground font-sans">TND</span>
+                        </TableCell>
                         <TableCell className="text-right">
-                          <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />
+                          <div className="flex justify-end gap-2">
+                            {dn.status === "LIVRE" && (
+
+                              <DeliveryNotePaymentDialog
+                                deliveryNoteId={dn.id}
+                                deliveryNoteReference={dn.delivery_note_number}
+                                amountDue={dn.total_ttc || 0}
+                                customerId={dn.customer_id}
+                                onPaymentSuccess={() => fetchDns(selectedCompanyId!)}
+                              >
+                                <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                  Payer
+                                </Button>
+                              </DeliveryNotePaymentDialog>
+                            )}
+                            <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

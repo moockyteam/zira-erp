@@ -22,24 +22,37 @@ import { Label } from "@/components/ui/label"
 import { Loader2 } from "lucide-react"
 
 interface PaymentDialogProps {
-  invoiceId: string
-  invoiceNumber: string
+  documentId: string
+  documentReference: string
   amountDue: number
+  customerId: string
+  companyId: string
   onPaymentSuccess: () => void
-  children: React.ReactNode // Le bouton qui déclenche l'ouverture
+  children: React.ReactNode
 }
 
-export function PaymentDialog({ invoiceId, invoiceNumber, amountDue, onPaymentSuccess, children }: PaymentDialogProps) {
+export function PaymentDialog({
+  documentId,
+  documentReference,
+  amountDue,
+  customerId,
+  companyId,
+  onPaymentSuccess,
+  children
+}: PaymentDialogProps) {
   const supabase = createClient()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // États du formulaire, réinitialisés à chaque ouverture
+  // États du formulaire
   const [amount, setAmount] = useState(amountDue.toFixed(3))
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"))
   const [paymentMethod, setPaymentMethod] = useState("")
   const [notes, setNotes] = useState("")
+  const [bankName, setBankName] = useState("")
+  const [checkNumber, setCheckNumber] = useState("")
+  const [checkDate, setCheckDate] = useState("")
 
   const handleSubmit = async () => {
     const paymentAmount = Number.parseFloat(amount)
@@ -49,7 +62,6 @@ export function PaymentDialog({ invoiceId, invoiceNumber, amountDue, onPaymentSu
     }
 
     if (paymentAmount > amountDue + 0.001) {
-      // Tolérance pour les erreurs de virgule flottante
       if (
         !window.confirm(
           `Le montant saisi (${paymentAmount.toFixed(3)}) est supérieur au montant dû (${amountDue.toFixed(3)}). Continuer ?`,
@@ -62,32 +74,42 @@ export function PaymentDialog({ invoiceId, invoiceNumber, amountDue, onPaymentSu
     setIsLoading(true)
     setError(null)
 
-    // On appelle la fonction RPC que nous avons créée dans Supabase
-    const { error: rpcError } = await supabase.rpc("record_invoice_payment", {
-      p_invoice_id: invoiceId,
+    // Construct payload for invoice payment
+    const payload = {
+      p_company_id: companyId,
+      p_customer_id: customerId,
       p_amount: paymentAmount,
       p_payment_date: paymentDate,
       p_payment_method: paymentMethod || null,
       p_notes: notes || null,
-    })
+      p_bank_name: bankName || null,
+      p_check_number: checkNumber || null,
+      p_check_date: checkDate || null,
+      p_invoice_id: documentId
+    }
+
+    // Call the original RPC for INVOICES
+    const { error: rpcError } = await supabase.rpc("record_payment", payload)
 
     if (rpcError) {
       setError("Erreur : " + rpcError.message)
       console.error(rpcError)
     } else {
-      onPaymentSuccess() // Rafraîchit la liste parente
-      setIsOpen(false) // Ferme la popup
+      onPaymentSuccess()
+      setIsOpen(false)
     }
     setIsLoading(false)
   }
 
-  // Gère la réinitialisation du formulaire à l'ouverture
   const handleOpenChange = (open: boolean) => {
     if (open) {
       setAmount(amountDue.toFixed(3))
       setPaymentDate(format(new Date(), "yyyy-MM-dd"))
       setPaymentMethod("")
       setNotes("")
+      setBankName("")
+      setCheckNumber("")
+      setCheckDate("")
       setError(null)
     }
     setIsOpen(open)
@@ -98,72 +120,67 @@ export function PaymentDialog({ invoiceId, invoiceNumber, amountDue, onPaymentSu
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Paiement pour la facture {invoiceNumber}</DialogTitle>
+          <DialogTitle>Enregistrer un paiement</DialogTitle>
           <DialogDescription>
-            Montant restant à payer : <span className="font-bold">{amountDue.toFixed(3)} TND</span>
+            Facture {documentReference} - Reste à payer : {amountDue.toFixed(3)} TND
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="amount" className="text-right">
-              Montant *
-            </Label>
-            <Input
-              id="amount"
-              type="text"
-              step="0.001"
-              defaultValue={amount}
-              onBlur={(e) => setAmount(e.target.value.replace(",", "."))}
-              className="col-span-3"
-            />
+            <Label htmlFor="amount" className="text-right">Montant</Label>
+            <Input id="amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="col-span-3" step="0.001" />
           </div>
+
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="paymentDate" className="text-right">
-              Date *
-            </Label>
-            <Input
-              id="paymentDate"
-              type="date"
-              value={paymentDate}
-              onChange={(e) => setPaymentDate(e.target.value)}
-              className="col-span-3"
-            />
+            <Label htmlFor="date" className="text-right">Date</Label>
+            <Input id="date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="col-span-3" />
           </div>
+
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="paymentMethod" className="text-right">
-              Méthode
-            </Label>
-            <Input
-              id="paymentMethod"
-              placeholder="Virement, Chèque..."
+            <Label htmlFor="method" className="text-right">Méthode</Label>
+            {/* Simple select or input for method */}
+            <select
+              id="method"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              className="col-span-3"
-            />
+            >
+              <option value="">Sélectionner...</option>
+              <option value="ESPECES">Espèces</option>
+              <option value="CHEQUE">Chèque</option>
+              <option value="VIREMENT">Virement</option>
+              <option value="TRAITE">Traite</option>
+            </select>
           </div>
+
+          {paymentMethod === 'CHEQUE' && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="bank" className="text-right">Banque</Label>
+                <Input id="bank" value={bankName} onChange={(e) => setBankName(e.target.value)} className="col-span-3" placeholder="Nom de la banque" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="checkNum" className="text-right">N° Chèque</Label>
+                <Input id="checkNum" value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} className="col-span-3" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="checkDate" className="text-right">Échéance</Label>
+                <Input id="checkDate" type="date" value={checkDate} onChange={(e) => setCheckDate(e.target.value)} className="col-span-3" />
+              </div>
+            </>
+          )}
+
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="notes" className="text-right">
-              Notes
-            </Label>
-            <Input
-              id="notes"
-              placeholder="Réf. transaction..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="col-span-3"
-            />
+            <Label htmlFor="notes" className="text-right">Notes</Label>
+            <Input id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="col-span-3" placeholder="Optionnel" />
           </div>
-          {error && <p className="col-span-4 text-sm text-destructive text-center pt-2">{error}</p>}
         </div>
         <DialogFooter>
-          <Button type="button" onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sauvegarde...
-              </>
-            ) : (
-              "Enregistrer le paiement"
-            )}
+          <Button type="submit" onClick={handleSubmit} disabled={isLoading}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Enregistrer
           </Button>
         </DialogFooter>
       </DialogContent>

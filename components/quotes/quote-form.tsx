@@ -63,7 +63,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
   // Actually, if we are in "New Quote" mode, we usually want to use the currently selected company.
   // And if the user switches company in sidebar, the form should probably update IF it hasn't been saved yet.
 
-  const [companyId, setCompanyId] = useState(initialData?.company_id || globalSelectedCompany?.id || "")
+  const [companyId, setCompanyId] = useState(initialData?.company_id || "")
 
   // Effect to sync with sidebar selection ONLY if creating new
   useEffect(() => {
@@ -74,7 +74,14 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
 
 
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
-  const [quoteDate, setQuoteDate] = useState(initialData?.quote_date || new Date().toISOString().split("T")[0])
+  const [quoteDate, setQuoteDate] = useState(initialData?.quote_date || "")
+
+  useEffect(() => {
+    if (isNew && !quoteDate) {
+      setQuoteDate(new Date().toISOString().split("T")[0])
+    }
+  }, [isNew, quoteDate])
+
   const [currency, setCurrency] = useState(initialData?.currency || "TND")
 
   const [prospectName, setProspectName] = useState(initialData?.prospect_name || "")
@@ -83,7 +90,7 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
   const [prospectPhone, setProspectPhone] = useState(initialData?.prospect_phone || "")
 
   const [lines, setLines] = useState<QuoteLine[]>(
-    initialData?.quote_lines?.map((l: any) => ({ ...l, local_id: crypto.randomUUID() })) || [],
+    initialData?.quote_lines?.map((l: any) => ({ ...l, local_id: l.id || crypto.randomUUID() })) || [],
   )
 
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
@@ -227,9 +234,25 @@ export function QuoteForm({ initialData, companies, customers, items, defaultTer
     })
 
     if (isNew) {
+      // --- START: Generate Quote Number via Edge Function ---
+      const { data: numberData, error: numberError } = await supabase.functions.invoke("get-next-quote-number", {
+        body: JSON.stringify({ companyId }),
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (numberError) {
+        console.error("Error generating quote number:", numberError)
+        toast.error("Impossible de générer le numéro de devis.")
+        setIsSaving(false)
+        return
+      }
+
+      const generatedQuoteNumber = numberData.quote_number
+      // --- END: Generate Quote Number ---
+
       const { data: newQuote, error: quoteError } = await supabase
         .from("quotes")
-        .insert(quotePayload)
+        .insert({ ...quotePayload, quote_number: generatedQuoteNumber })
         .select("id")
         .single()
       if (quoteError) {

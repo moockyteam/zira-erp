@@ -17,7 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 
+import { CustomerImportDialog } from "@/components/customer-import-dialog"
 import { CustomerPricingManager } from "@/components/customer-pricing-manager"
+import { CustomerHistory } from "./customer-history"
 
 type Address = {
     id?: string
@@ -306,10 +308,11 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mb-8">
+                <TabsList className="grid w-full grid-cols-4 lg:w-[800px] mb-8">
                     <TabsTrigger value="infogenerale">Informations Générales</TabsTrigger>
                     <TabsTrigger value="addresses">Adresses de Livraison</TabsTrigger>
                     <TabsTrigger value="tarifs" disabled={!customerId}>Tarifs & Abonnements</TabsTrigger>
+                    <TabsTrigger value="history" disabled={!customerId}>Historique</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="infogenerale" className="space-y-8 mt-6">
@@ -537,6 +540,10 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                             </CardContent>
                         </Card>
                     )}
+                </TabsContent>
+
+                <TabsContent value="history" className="mt-6">
+                    <CustomerHistory customerId={customerId} />
                 </TabsContent>
             </Tabs>
         </form>
