@@ -189,6 +189,20 @@ export function DeliveryNoteForm({
       }, 0)
       : 0;
 
+    const total_ttc = isValued
+      ? lines.reduce((sum, l) => {
+        const qty = typeof l.quantity === 'string' ? parseFloat(l.quantity.replace(',', '.')) || 0 : l.quantity;
+        const price = typeof l.unit_price_ht === 'string' ? parseFloat(l.unit_price_ht.replace(',', '.')) || 0 : l.unit_price_ht;
+        const remise = typeof l.remise_percentage === 'string' ? parseFloat(l.remise_percentage.replace(',', '.')) || 0 : l.remise_percentage;
+        const tva = l.tva_rate || 19; // Default to 19 if missing
+
+        const lineHt = qty * price * (1 - remise / 100);
+        const lineTtc = lineHt * (1 + tva / 100);
+
+        return sum + lineTtc;
+      }, 0)
+      : 0;
+
     const dnPayload = {
       company_id: companyId,
       customer_id: customerId,
@@ -201,6 +215,7 @@ export function DeliveryNoteForm({
       is_valued: isValued,
       show_remise_column: showRemise,
       total_ht: total_ht,
+      total_ttc: total_ttc, // Added total_ttc
       bank_name: bankName || null,
       iban: iban || null,
       bic_swift: bicSwift || null,

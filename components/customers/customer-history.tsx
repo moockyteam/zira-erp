@@ -167,7 +167,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     date: bl.delivery_date || bl.created_at,
                     type: 'DELIVERY_NOTE',
                     reference: bl.delivery_note_number,
-                    amount: bl.total_ttc || 0,
+                    amount: Number(bl.total_ttc) || 0,
                     status: bl.status,
                     details: myLines,
                     linkedPayments: myPayments
