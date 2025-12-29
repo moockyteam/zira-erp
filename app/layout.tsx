@@ -9,7 +9,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "ZIRA - Gestion d'Entreprise",
-  description: "ZIRA - Solution de gestion complète pour votre entreprise",
+  description: "ZIRA - Gestion d'entreprise simplifiée",
   generator: "v0.app",
   icons: {
     icon: [
