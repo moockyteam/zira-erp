@@ -32,8 +32,18 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
 
   const displayTotalHT = deliveryNote.total_ht || calculatedTotalHT
   const displayTotalTVA = deliveryNote.total_tva || calculatedTotalTVA
-  const displayTotalTTC =
-    deliveryNote.total_ttc || displayTotalHT - escompteAmount + fodecAmount + displayTotalTVA + stampAmount
+
+  // Calcul dynamique du TTC à partir des lignes (même logique que delivery-note-form.tsx)
+  // Cela garantit que le preview reflète toujours les modifications de TVA
+  const calculatedTotalTTC = deliveryNote.delivery_note_lines.reduce(
+    (sum: number, l: any) => {
+      const lineHt = l.quantity * l.unit_price_ht * (1 - (l.remise_percentage || 0) / 100)
+      const lineTtc = lineHt * (1 + (l.tva_rate || 0) / 100)
+      return sum + lineTtc
+    },
+    0,
+  )
+  const displayTotalTTC = calculatedTotalTTC + stampAmount
 
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">

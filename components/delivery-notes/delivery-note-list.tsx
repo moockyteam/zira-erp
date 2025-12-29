@@ -51,6 +51,29 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
     }
   }, [selectedCompanyId])
 
+  // Force refresh when the page becomes visible (after navigating back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && selectedCompanyId) {
+        fetchDns(selectedCompanyId)
+      }
+    }
+
+    const handleFocus = () => {
+      if (selectedCompanyId) {
+        fetchDns(selectedCompanyId)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [selectedCompanyId])
+
   const fetchDns = async (companyId: string) => {
     setIsLoading(true)
     const { data, error } = await supabase

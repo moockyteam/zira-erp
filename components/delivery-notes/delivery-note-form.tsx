@@ -194,7 +194,7 @@ export function DeliveryNoteForm({
         const qty = typeof l.quantity === 'string' ? parseFloat(l.quantity.replace(',', '.')) || 0 : l.quantity;
         const price = typeof l.unit_price_ht === 'string' ? parseFloat(l.unit_price_ht.replace(',', '.')) || 0 : l.unit_price_ht;
         const remise = typeof l.remise_percentage === 'string' ? parseFloat(l.remise_percentage.replace(',', '.')) || 0 : l.remise_percentage;
-        const tva = l.tva_rate || 19; // Default to 19 if missing
+        const tva = l.tva_rate ?? 19; // Default to 19 only if null/undefined (0% TVA is valid)
 
         const lineHt = qty * price * (1 - remise / 100);
         const lineTtc = lineHt * (1 + tva / 100);
@@ -211,16 +211,15 @@ export function DeliveryNoteForm({
       driver_name: driverName || null,
       vehicle_registration: vehicleRegistration || null,
       notes: notes || null,
-      status: "BROUILLON",
+      status: initialData?.status || "BROUILLON",
       is_valued: isValued,
       show_remise_column: showRemise,
       total_ht: total_ht,
-      total_ttc: total_ttc, // Added total_ttc
+      total_ttc: total_ttc,
       bank_name: bankName || null,
       iban: iban || null,
       bic_swift: bicSwift || null,
       rib: rib || null,
-      // manager_name is now fetched from company profile
       show_manager_name: showManagerName,
     }
 
@@ -267,8 +266,19 @@ export function DeliveryNoteForm({
       toast.success("Bon de Livraison créé avec succès.");
 
     } else {
-      await supabase.from("delivery_notes").update(dnPayload).eq("id", initialData.id);
-      await supabase.from("delivery_note_lines").delete().eq("delivery_note_id", initialData.id);
+      const { error: updateError } = await supabase.from("delivery_notes").update(dnPayload).eq("id", initialData.id);
+      if (updateError) {
+        toast.error("Erreur mise à jour BL: " + updateError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      const { error: deleteError } = await supabase.from("delivery_note_lines").delete().eq("delivery_note_id", initialData.id);
+      if (deleteError) {
+        toast.error("Erreur suppression lignes: " + deleteError.message);
+        setIsLoading(false);
+        return;
+      }
 
       const linesPayload = lines.map(line => ({
         delivery_note_id: initialData.id,
@@ -281,7 +291,12 @@ export function DeliveryNoteForm({
       }))
 
       if (linesPayload.length > 0) {
-        await supabase.from("delivery_note_lines").insert(linesPayload);
+        const { error: linesError } = await supabase.from("delivery_note_lines").insert(linesPayload);
+        if (linesError) {
+          toast.error("Erreur insertion lignes: " + linesError.message);
+          setIsLoading(false);
+          return;
+        }
       }
       toast.success("Bon de Livraison mis à jour.");
     }
