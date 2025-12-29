@@ -16,6 +16,7 @@ export default async function InvoiceEditorPage({
   const { invoiceId } = await params
   const resolvedSearchParams = await searchParams
   const fromQuoteId = resolvedSearchParams.fromQuote as string | undefined
+  const fromDeliveryNoteId = resolvedSearchParams.fromDeliveryNote as string | undefined
 
   const supabase = await createClient()
 
@@ -58,12 +59,25 @@ export default async function InvoiceEditorPage({
 
   let companyIdForData = companies[0].id
   let quoteInitialData = null
+  let deliveryNoteInitialData = null
 
   if (fromQuoteId) {
     const { data: quoteData } = await supabase.from("quotes").select("*, quote_lines(*)").eq("id", fromQuoteId).single()
     quoteInitialData = quoteData
     if (quoteData) {
       companyIdForData = quoteData.company_id
+    }
+  }
+
+  if (fromDeliveryNoteId) {
+    const { data: dnData } = await supabase
+      .from("delivery_notes")
+      .select("*, delivery_note_lines(*)")
+      .eq("id", fromDeliveryNoteId)
+      .single()
+    deliveryNoteInitialData = dnData
+    if (dnData) {
+      companyIdForData = dnData.company_id
     }
   }
 
@@ -137,6 +151,7 @@ export default async function InvoiceEditorPage({
         <InvoiceForm
           initialData={invoiceData}
           quoteInitialData={quoteInitialData}
+          deliveryNoteInitialData={deliveryNoteInitialData}
           companies={companies}
           customers={customers || []}
           items={allItems || []}

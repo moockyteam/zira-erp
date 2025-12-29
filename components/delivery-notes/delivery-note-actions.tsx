@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Truck, Ban, Eye, Printer, Edit, CheckCircle, Globe } from "lucide-react"
+import { MoreHorizontal, Truck, Ban, Eye, Printer, Edit, CheckCircle, Globe, FileText } from "lucide-react"
 import { DeliveryNotePreviewDialog } from "./delivery-note-preview-dialog"
 import { LANGUAGES } from "@/lib/translations"
 
@@ -145,6 +145,11 @@ export function DnActions({ dn, onActionSuccess }: { dn: any; onActionSuccess: (
             <DropdownMenuItem disabled>
               <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Déjà livré
             </DropdownMenuItem>
+            <Link href={`/dashboard/invoices/new?fromDeliveryNote=${dn.id}`}>
+              <DropdownMenuItem>
+                <FileText className="mr-2 h-4 w-4 text-indigo-500" /> Créer une Facture
+              </DropdownMenuItem>
+            </Link>
             <DropdownMenuItem onClick={() => updateStatus("ANNULE")} className="text-red-600">
               <Ban className="mr-2 h-4 w-4" /> Annuler la livraison (Retour Stock)
             </DropdownMenuItem>

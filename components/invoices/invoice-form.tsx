@@ -46,6 +46,7 @@ import { useCompany } from "@/components/providers/company-provider" // Add impo
 export function InvoiceForm({
   initialData,
   quoteInitialData,
+  deliveryNoteInitialData,
   companies,
   customers,
   items,
@@ -53,6 +54,7 @@ export function InvoiceForm({
 }: {
   initialData: any | null
   quoteInitialData?: any | null
+  deliveryNoteInitialData?: any | null
   companies: any[]
   customers: any[]
   items: any[]
@@ -103,6 +105,7 @@ export function InvoiceForm({
   const [iban, setIban] = useState(initialData?.iban || "")
   const [bicSwift, setBicSwift] = useState(initialData?.bic_swift || "")
   const [rib, setRib] = useState(initialData?.rib || "")
+  const [sourceDeliveryNoteId, setSourceDeliveryNoteId] = useState<string | null>(initialData?.source_delivery_note_id || null)
 
   useEffect(() => {
     if (quoteInitialData && isNew) {
@@ -125,6 +128,28 @@ export function InvoiceForm({
       setLines(newLines)
     }
   }, [quoteInitialData, isNew])
+
+  // Handle Delivery Note Initial Data (BL → Facture)
+  useEffect(() => {
+    if (deliveryNoteInitialData && isNew) {
+      setCompanyId(deliveryNoteInitialData.company_id)
+      setCustomerId(deliveryNoteInitialData.customer_id || "")
+      setHasStamp(deliveryNoteInitialData.has_stamp ?? true)
+      setShowRemise(deliveryNoteInitialData.show_remise_column ?? true)
+      setCurrency(deliveryNoteInitialData.currency || "TND")
+      setSourceDeliveryNoteId(deliveryNoteInitialData.id) // Track source BL
+      const newLines = (deliveryNoteInitialData.delivery_note_lines || []).map((line: any) => ({
+        local_id: crypto.randomUUID(),
+        item_id: line.item_id,
+        description: line.description,
+        quantity: line.quantity,
+        unit_price_ht: line.unit_price_ht,
+        remise_percentage: line.remise_percentage || 0,
+        tva_rate: line.tva_rate ?? 19,
+      }))
+      setLines(newLines)
+    }
+  }, [deliveryNoteInitialData, isNew])
 
   const selectedCompany = useMemo(() => companies.find((c) => c.id === companyId), [companyId, companies])
   const isFodecApplicable = useMemo(() => selectedCompany?.is_subject_to_fodec === true, [selectedCompany])
@@ -280,6 +305,7 @@ export function InvoiceForm({
         iban: iban || null,
         bic_swift: bicSwift || null,
         rib: rib || null,
+        source_delivery_note_id: sourceDeliveryNoteId, // Track BL origin
       }
 
       let targetInvoiceId = initialData?.id
