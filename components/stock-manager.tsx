@@ -29,7 +29,9 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
-  PlusCircle
+  PlusCircle,
+  PackagePlus,
+  Plus
 } from "lucide-react"
 import { useCompany } from "@/components/providers/company-provider"
 import { ManageItemDialog, type Item } from "./manage-item-dialog"
@@ -200,6 +202,37 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     return { stockValue, lowStockItems, totalItems: items.length }
   }, [items])
 
+  const handleExport = () => {
+    const headers = ["Référence", "Nom", "Catégorie", "Quantité", "Unité", "Prix Achat", "Prix Vente", "Valeur Stock", "Seuil Alerte"]
+    const csvContent = [
+      headers.join(","),
+      ...filteredItems.map(item => {
+        // @ts-ignore
+        const categoryName = item.supplier_categories?.name || ""
+        return [
+          `"${(item.reference || "").replace(/"/g, '""')}"`,
+          `"${item.name.replace(/"/g, '""')}"`,
+          `"${categoryName.replace(/"/g, '""')}"`,
+          item.quantity_on_hand,
+          item.unit_of_measure,
+          item.default_purchase_price || 0,
+          item.sale_price || 0,
+          (item.quantity_on_hand * (item.default_purchase_price || 0)).toFixed(3),
+          item.alert_quantity
+        ].join(",")
+      })
+    ].join("\n")
+
+    const blob = new Blob([`\ufeff${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `inventaire_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="space-y-6">
       {!selectedCompanyId && (
@@ -219,42 +252,50 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
             description="Suivez vos articles, valorisation de stock et mouvements en temps réel."
             icon={Package}
           >
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="default">
-                  <MoreVertical className="h-4 w-4 mr-2" />
-                  Options
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => document.getElementById("stock-import-trigger")?.click()}>
-                  <StockImportDialog
-                    companyId={selectedCompanyId}
-                    onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
-                  />
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Exporter vers Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setItemToEntry(null)
+                  setIsEntryOpen(true)
+                }}
+                title="Entrée Stock (F7)"
+              >
+                <PackagePlus className="h-5 w-5 text-muted-foreground" />
+              </Button>
 
-            <Button
-              variant="outline"
-              onClick={() => {
-                setItemToEntry(null)
-                setIsEntryOpen(true)
-              }}
-            >
-              <ArrowDownToLine className="h-4 w-4 mr-2" />
-              Entrée Stock
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleOpenManageDialog(null)}
+                title="Nouvel Article (N)"
+              >
+                <Plus className="h-5 w-5 text-muted-foreground" />
+              </Button>
 
-            <Button onClick={() => handleOpenManageDialog(null)}>
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Nouvel Article
-            </Button>
+              <div className="h-6 w-px bg-border mx-2" />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" title="Options">
+                    <MoreVertical className="h-5 w-5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => document.getElementById("stock-import-trigger")?.click()}>
+                    <StockImportDialog
+                      companyId={selectedCompanyId}
+                      onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
+                    />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExport}>
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Exporter vers Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </PageHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
