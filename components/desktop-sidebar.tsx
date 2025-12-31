@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Building, LayoutDashboard, Users, Boxes, ChevronLeft, ChevronRight, FileText,
   Contact, Receipt, Truck, CornerUpLeft, Package, ShoppingCart,
-  TrendingDown, Briefcase, Check, ChevronsUpDown, PlusCircle
+  TrendingDown, Briefcase, Check, ChevronsUpDown, PlusCircle, Banknote
 } from "lucide-react"
 import LogoutButton from "@/components/logout-button"
 import { cn } from "@/lib/utils"
@@ -85,6 +85,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
     {
       title: "Finance",
       links: [
+        { href: "/dashboard/payments", label: "Encaissements", icon: Banknote },
         { href: "/dashboard/expenses", label: "Dépenses & Échéances", icon: TrendingDown },
       ],
     },

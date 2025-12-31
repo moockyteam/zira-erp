@@ -206,3 +206,21 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+/* Global Print Styles */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: white;
+  }
+
+  /* Hide common UI elements globally */
+  header, footer, nav, aside, .sidebar {
+    display: none !important;
+  }
+}

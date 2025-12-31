@@ -188,7 +188,7 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
               <Archive className="mr-2 h-4 w-4 text-purple-500" /> Déduire du Stock
             </DropdownMenuItem>
 
-            <PaymentDialog
+            {/* <PaymentDialog
               invoiceId={invoice.id}
               invoiceNumber={invoice.invoice_number}
               amountDue={invoice.amount_due}
@@ -197,7 +197,7 @@ export function InvoiceActions({ invoice, onActionSuccess }: InvoiceActionsProps
               <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                 <DollarSign className="mr-2 h-4 w-4 text-green-600" /> Enregistrer un paiement
               </DropdownMenuItem>
-            </PaymentDialog>
+            </PaymentDialog> */}
 
             <Link href={`/dashboard/delivery-notes/new?fromInvoice=${invoice.id}`}>
               <DropdownMenuItem>

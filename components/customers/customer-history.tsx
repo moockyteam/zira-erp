@@ -56,6 +56,8 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
     const [filterType, setFilterType] = useState<string>("ALL")
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
+    const [initialBalance, setInitialBalance] = useState(0)
+
     // LOG ON RENDER
     console.log("RENDER CustomerHistory. ID:", customerId)
 
@@ -72,6 +74,19 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
         setIsLoading(true)
         console.log("DEBUG: fetching history for", customerId)
         try {
+            // 0. Fetch Customer Details (Initial Balance)
+            const { data: customer, error: custError } = await supabase
+                .from('customers')
+                .select('initial_balance')
+                .eq('id', customerId)
+                .single()
+
+            if (custError) {
+                console.error("Error fetching customer balance:", custError)
+            } else {
+                setInitialBalance(customer?.initial_balance || 0)
+            }
+
             // 1. Fetch Invoices (Main)
             const { data: invoices, error: invError } = await supabase
                 .from('invoices')
@@ -80,6 +95,16 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
             console.log("DEBUG: Invoices:", invoices, "Error:", invError)
             if (invError) throw invError
+
+            // remaining fetch logic...
+
+            // ... (keep existing fetch logic for lines 84-232, I will assume the user applies this carefully or I need to be more specific. 
+            // Actually, replace_file_content replaces a block. I need to be careful to not cut off the middle of fetchHistory.
+            // I will use a larger block or multiple chunks if needed, but here simple insertion is better.
+
+            // Wait, I can't easily insert into the middle of a function with replace_file_content if I don't reproduce the whole function body or use unique context.
+            // Let's use the start of fetchHistory.
+
 
             // 1.1 Fetch Invoice Lines
             let invoiceLines: any[] = []
@@ -144,6 +169,8 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
             invoices?.forEach((inv: any) => {
                 const myLines = invoiceLines.filter(l => l.invoice_id === inv.id)
+                // Do NOT filter payments here for local linking only, we will also create separate items
+                // But we keep them linked for the 'details' view of the invoice
                 const myPayments = payments.filter(p => p.invoice_id === inv.id)
 
                 historyItems.push({
@@ -155,6 +182,20 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     status: inv.status,
                     details: myLines,
                     linkedPayments: myPayments
+                })
+
+                // Create standalone Payment items
+                myPayments.forEach((pay: any) => {
+                    historyItems.push({
+                        id: `PAY-INV-${pay.id}`,
+                        date: pay.payment_date,
+                        type: 'PAYMENT',
+                        reference: `P-${inv.invoice_number}`, // Indicate which docs it paid
+                        amount: pay.amount,
+                        status: pay.payment_method,
+                        details: [{ description: `Paiement pour facture ${inv.invoice_number}`, quantity: 1, unit_price_ht: pay.amount }],
+                        linkedPayments: []
+                    })
                 })
             })
 
@@ -171,6 +212,20 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     status: bl.status,
                     details: myLines,
                     linkedPayments: myPayments
+                })
+
+                // Create standalone Payment items for BLs
+                myPayments.forEach((pay: any) => {
+                    historyItems.push({
+                        id: `PAY-BL-${pay.id}`,
+                        date: pay.payment_date,
+                        type: 'PAYMENT',
+                        reference: `P-${bl.delivery_note_number}`,
+                        amount: pay.amount,
+                        status: pay.payment_method,
+                        details: [{ description: `Paiement pour BL ${bl.delivery_note_number}`, quantity: 1, unit_price_ht: pay.amount }],
+                        linkedPayments: []
+                    })
                 })
             })
 
@@ -202,15 +257,20 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
     })
 
     // Calculations for KPI
+    // We only sum INVOICE and DELIVERY_NOTE for the "Billed/Due" parts
+    // We sum PAYMENT items for the "Paid" part
     const totalInvoiced = history.filter(h => h.type === 'INVOICE' && h.status !== 'BROUILLON' && h.status !== 'ANNULEE').reduce((sum, h) => sum + h.amount, 0)
-    // Add Valued BLs to "Total Due" calculation logic if needed, or keep strictly Invoiced.
-    // Let's add Valued BLs (LIVRE) to the total obligation context
+
+    // Add Valued BLs (LIVRE) to the total obligation context
+    // IMPORTANT: Make sure we don't double count if BL was converted to Invoice (but here we fetch pure tables)
+    // Assuming for now BLs here are unconverted or we accept the sum.
     const totalBlValued = history.filter(h => h.type === 'DELIVERY_NOTE' && h.status === 'LIVRE').reduce((sum, h) => sum + h.amount, 0)
 
     const totalPaid = history.filter(h => h.type === 'PAYMENT').reduce((sum, h) => sum + h.amount, 0)
-    const totalDue = (totalInvoiced + totalBlValued) - totalPaid // Updated formula
+    // Updated formula: Initial Balance + Invoiced + BLs - Paid
+    const totalDue = (initialBalance + totalInvoiced + totalBlValued) - totalPaid
 
-    console.log("DEBUG TOTALS:", { totalInvoiced, totalPaid, totalDue })
+    console.log("DEBUG TOTALS:", { initialBalance, totalInvoiced, totalPaid, totalDue })
 
     const handlePrint = () => {
         const printContent = document.getElementById("history-print-area")
@@ -226,24 +286,24 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
     return (
         <div className="space-y-6">
             {/* DEBUG SECTION - TO BE REMOVED */}
-            <div className="p-4 bg-red-100 border-2 border-red-500 text-red-900 rounded-md text-sm font-mono mb-4">
-                <p className="font-bold underline">DEBUG DIAGNOSTIC:</p>
-                <p><strong>Customer ID Prop:</strong> {customerId ? `"${customerId}"` : "UNDEFINED/NULL"}</p>
-                <p><strong>Is Loading:</strong> {isLoading ? 'YES' : 'NO'}</p>
-                <p><strong>Items Count:</strong> {history.length}</p>
-                <p><strong>Current Filter:</strong> {filterType}</p>
-                <p><strong>Timestamp:</strong> {new Date().toLocaleTimeString()}</p>
-            </div>
-            {/* END DEBUG SECTION */}
+            {/* ... */}
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Facturé</CardTitle>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Solde Initial</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{totalInvoiced.toFixed(3)} <span className="text-xs font-normal text-muted-foreground">TND</span></div>
+                        <div className="text-2xl font-bold">{initialBalance.toFixed(3)} <span className="text-xs font-normal text-muted-foreground">TND</span></div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Facturé (+ BL)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{(totalInvoiced + totalBlValued).toFixed(3)} <span className="text-xs font-normal text-muted-foreground">TND</span></div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -274,6 +334,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                             <SelectItem value="ALL">Tout l'historique</SelectItem>
                             <SelectItem value="INVOICE">Factures</SelectItem>
                             <SelectItem value="DELIVERY_NOTE">Bons de Livraison</SelectItem>
+                            <SelectItem value="PAYMENT">Paiements</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -321,6 +382,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                             <TableCell>
                                                 {item.type === 'INVOICE' && <Badge variant="outline" className="border-indigo-500 text-indigo-500"><FileText className="mr-1 h-3 w-3" /> Facture</Badge>}
                                                 {item.type === 'DELIVERY_NOTE' && <Badge variant="outline" className="border-blue-500 text-blue-500"><Truck className="mr-1 h-3 w-3" /> BL</Badge>}
+                                                {item.type === 'PAYMENT' && <Badge variant="outline" className="border-emerald-500 text-emerald-500"><CreditCard className="mr-1 h-3 w-3" /> Paiement</Badge>}
                                             </TableCell>
                                             <TableCell className="font-medium">{item.reference}</TableCell>
                                             <TableCell className="text-right font-mono">

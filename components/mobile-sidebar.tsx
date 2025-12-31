@@ -17,6 +17,8 @@ import {
   CornerUpLeft,
   Package,
   ShoppingCart,
+  Banknote,
+  TrendingDown,
 } from "lucide-react"
 import LogoutButton from "@/components/logout-button"
 import { usePathname } from "next/navigation"
@@ -38,6 +40,8 @@ const navLinks = [
   { href: "/dashboard/delivery-notes", label: "Bons de Livraison", icon: Truck },
   { href: "/dashboard/returns", label: "Bons de Retour", icon: CornerUpLeft },
   { href: "/dashboard/stock-issues", label: "Bons de Sortie", icon: Package },
+  { href: "/dashboard/payments", label: "Encaissements", icon: Banknote },
+  { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown },
 ]
 
 export function MobileSidebar({ userEmail }: MobileSidebarProps) {
