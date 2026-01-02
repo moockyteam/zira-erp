@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Plus, Trash2, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown, X, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Trash2, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown, X, ChevronDown, ChevronUp, Tag, Percent } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -57,6 +57,8 @@ import {
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 const priceRuleSchema = z.object({
     type: z.enum(["service", "item"]),
@@ -91,6 +93,10 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [openCombobox, setOpenCombobox] = useState(false)
 
+    // Filter Logic
+    const [searchTerm, setSearchTerm] = useState("")
+    const [typeFilter, setTypeFilter] = useState<string>("all")
+
     // UI Helpers for selected item in Form
     const [selectedType, setSelectedType] = useState<"service" | "item">("service")
     const [selectedItemData, setSelectedItemData] = useState<any>(null)
@@ -109,7 +115,6 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     })
 
     const itemId = form.watch("itemId")
-    // Note: We don't watch specialPrice for side effects anymore to avoid loops.
     const overrideVat = form.watch("overrideVat")
     const specialVatRate = form.watch("specialVatRate")
 
@@ -118,7 +123,6 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         fetchOptions()
     }, [customerId, companyId])
 
-    // Effect to update local copy of selected item data for UI visuals
     useEffect(() => {
         if (!itemId) {
             setSelectedItemData(null)
@@ -130,9 +134,6 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
 
         setSelectedItemData(found)
 
-        // Update default VAT and Price if not overridden
-        // Only run this when item changes significantly to defaults, try to avoid overwriting user edits if they just clicked around
-        // For simplicity: When itemId changes, we reset to defaults.
         if (found) {
             const defaultVat = selectedType === 'service' ? (found.vat_rate ?? 19) : (found.tva ?? 19)
 
@@ -141,11 +142,9 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
                 form.setValue('specialVatRate', defaultVat)
             }
 
-            // Auto-fill price from default
             const defPrice = found.price || found.sale_price || 0
             form.setValue("specialPrice", defPrice)
 
-            // Calculate TTC initial
             const effectiveVat = overrideVat ? (specialVatRate ?? defaultVat) : defaultVat
             const ttc = defPrice * (1 + effectiveVat / 100)
             setPriceTTC(ttc.toFixed(3))
@@ -153,18 +152,15 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
 
     }, [itemId, selectedType, services, items, form])
 
-    // Effect: Keep Local VAT in sync with form if overridden
     useEffect(() => {
         if (overrideVat && specialVatRate !== null && specialVatRate !== undefined) {
             setLocalVAT(specialVatRate)
         } else if (!overrideVat && selectedItemData) {
-            // Revert to default
             const defaultVat = selectedType === 'service' ? (selectedItemData.vat_rate ?? 19) : (selectedItemData.tva ?? 19)
             setLocalVAT(defaultVat)
         }
     }, [specialVatRate, overrideVat, selectedItemData, selectedType])
 
-    // Effect: Update TTC when VAT changes (keep HT constant)
     useEffect(() => {
         const currentHT = form.getValues("specialPrice")
         if (currentHT !== undefined && !isNaN(currentHT) && localVAT !== undefined) {
@@ -204,7 +200,6 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
                 toast.error("Erreur chargement articles: " + iError.message)
             }
             if (iData) {
-                // Filter locally to handle nulls safely: include if is_archived is false OR null
                 const validItems = iData.filter((i: any) => i.is_archived !== true)
                 setItems(validItems)
             }
@@ -213,9 +208,7 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         }
     }
 
-    // Handles changes in HT Input -> Updates TTC
     const handleHTChange = (valueStr: string) => {
-        // Allow decimals
         const val = parseFloat(valueStr)
         form.setValue("specialPrice", isNaN(val) ? 0 : val)
 
@@ -227,7 +220,6 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         }
     }
 
-    // Handles changes in TTC Input -> Updates HT in form
     const handleTTCChange = (valueStr: string) => {
         setPriceTTC(valueStr)
         const val = parseFloat(valueStr)
@@ -241,7 +233,7 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         const payload: any = {
             customer_id: customerId,
             special_price: values.specialPrice,
-            special_vat_rate: values.overrideVat ? values.specialVatRate : null, // If not overridden, store NULL to use item default
+            special_vat_rate: values.overrideVat ? values.specialVatRate : null,
             subscription_start_date: values.startDate ? format(values.startDate, "yyyy-MM-dd") : null,
             subscription_renewal_date: values.renewalDate ? format(values.renewalDate, "yyyy-MM-dd") : null,
         }
@@ -261,7 +253,7 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
             else toast.error("Erreur technique.")
         } else {
             toast.success("Tarif ajouté correctement")
-            setIsFormOpen(false) // Close inline form
+            setIsFormOpen(false)
             form.reset({
                 type: selectedType,
                 itemId: "",
@@ -289,25 +281,38 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         setPriceTTC("")
     }
 
+    // Filter Logic
+    const filteredRules = useMemo(() => {
+        let res = rules
+        if (searchTerm) {
+            const lowerInfo = searchTerm.toLowerCase()
+            res = res.filter(r =>
+                (r.services?.name || "").toLowerCase().includes(lowerInfo) ||
+                (r.items?.name || "").toLowerCase().includes(lowerInfo) ||
+                (r.items?.reference || "").toLowerCase().includes(lowerInfo)
+            )
+        }
+        if (typeFilter !== "all") {
+            if (typeFilter === "service") res = res.filter(r => r.service_id)
+            if (typeFilter === "item") res = res.filter(r => r.item_id)
+        }
+        return res
+    }, [rules, searchTerm, typeFilter])
+
     return (
-        <div className="space-y-8">
-            {/* Header & Explainer */}
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h3 className="text-lg font-semibold text-gray-900">Tarifs Spéciaux & Abonnements</h3>
-                        <p className="text-sm text-gray-500 max-w-2xl">
-                            Configurez ici les exceptions tarifaires pour ce client. Ces prix prévaudront sur les prix catalogue lors de la création de factures ou devis.
-                        </p>
-                    </div>
-                    {!isFormOpen && (
-                        <Button onClick={() => setIsFormOpen(true)} className="gap-2">
-                            <Plus className="h-4 w-4" />
-                            Ajouter un tarif
-                        </Button>
-                    )}
-                </div>
-            </div>
+        <div className="space-y-6">
+            <PageHeader
+                title="Tarifs Spéciaux & Abonnements"
+                description="Configurez ici les exceptions tarifaires pour ce client."
+                icon={Tag}
+            >
+                {!isFormOpen && (
+                    <Button onClick={() => setIsFormOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Ajouter un tarif
+                    </Button>
+                )}
+            </PageHeader>
 
             {/* Inline Form Card */}
             <Collapsible open={isFormOpen} onOpenChange={setIsFormOpen} className="space-y-4">
@@ -340,7 +345,7 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
                                                             field.onChange(val)
                                                             setSelectedType(val as any)
                                                             form.setValue("itemId", "")
-                                                            setPriceTTC("") // Reset TTC
+                                                            setPriceTTC("")
                                                         }} defaultValue={field.value}>
                                                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                             <SelectContent>
@@ -565,67 +570,92 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
                 </CollapsibleContent>
             </Collapsible>
 
+            <FilterToolbar
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                searchPlaceholder="Rechercher par nom ou référence..."
+                resultCount={filteredRules.length}
+                resultLabel={filteredRules.length > 1 ? "tarifs configurés" : "tarif configuré"}
+                onReset={() => { setSearchTerm(""); setTypeFilter("all"); }}
+                showReset={!!searchTerm || typeFilter !== "all"}
+            >
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Tous types</SelectItem>
+                        <SelectItem value="service">Services</SelectItem>
+                        <SelectItem value="item">Articles</SelectItem>
+                    </SelectContent>
+                </Select>
+            </FilterToolbar>
+
             {/* List Table */}
-            <div className="border rounded-md overflow-hidden shadow-sm bg-white">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-slate-50 hover:bg-slate-50">
-                            <TableHead className="w-[120px] py-4">Type</TableHead>
-                            <TableHead className="min-w-[250px] py-4">Désignation</TableHead>
-                            <TableHead className="text-right py-4">Prix Spécial (HT)</TableHead>
-                            <TableHead className="text-right py-4">TVA Appliquée</TableHead>
-                            <TableHead className="min-w-[150px] py-4">Renouvellement</TableHead>
-                            <TableHead className="w-[80px] py-4"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
-                            <TableRow><TableCell colSpan={6} className="h-32 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-primary/50" /></TableCell></TableRow>
-                        ) : rules.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">Aucun tarif spécial configuré pour ce client.</TableCell></TableRow>
-                        ) : rules.map(rule => (
-                            <TableRow key={rule.id} className="hover:bg-slate-50/50">
-                                <TableCell>
-                                    <span className={cn(
-                                        "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
-                                        rule.service_id ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-                                    )}>
-                                        {rule.service_id ? "Service" : "Article"}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm text-slate-900">{rule.service_id ? rule.services?.name : rule.items?.name}</span>
-                                        {rule.items?.reference && <span className="text-xs text-slate-500">Ref: {rule.items.reference}</span>}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <span className="font-mono font-bold text-slate-900 text-base">{rule.special_price?.toFixed(3)}</span>
-                                    <span className="text-xs text-muted-foreground ml-1">TND</span>
-                                </TableCell>
-                                <TableCell className="text-right text-sm">
-                                    {rule.special_vat_rate
-                                        ? <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{rule.special_vat_rate}%</span>
-                                        : <span className="text-slate-500">Standard</span>}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-sm text-slate-600">
-                                    {rule.subscription_renewal_date ? (
-                                        <div className="flex items-center gap-2">
-                                            <CalendarIcon className="h-3.5 w-3.5 text-primary/70" />
-                                            {format(new Date(rule.subscription_renewal_date), "dd/MM/yyyy")}
-                                        </div>
-                                    ) : "-"}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(rule.id)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </TableCell>
+            <Card className="border rounded-md overflow-hidden shadow-sm bg-white">
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-slate-50 hover:bg-slate-50">
+                                <TableHead className="w-[120px] py-4">Type</TableHead>
+                                <TableHead className="min-w-[250px] py-4">Désignation</TableHead>
+                                <TableHead className="text-right py-4">Prix Spécial (HT)</TableHead>
+                                <TableHead className="text-right py-4">TVA Appliquée</TableHead>
+                                <TableHead className="min-w-[150px] py-4">Renouvellement</TableHead>
+                                <TableHead className="w-[80px] py-4"></TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={6} className="h-32 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-primary/50" /></TableCell></TableRow>
+                            ) : filteredRules.length === 0 ? (
+                                <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                                    {searchTerm ? "Aucun tarif trouvé pour cette recherche." : "Aucun tarif spécial configuré pour ce client."}
+                                </TableCell></TableRow>
+                            ) : filteredRules.map(rule => (
+                                <TableRow key={rule.id} className="hover:bg-slate-50/50">
+                                    <TableCell>
+                                        <span className={cn(
+                                            "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
+                                            rule.service_id ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                                        )}>
+                                            {rule.service_id ? "Service" : "Article"}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm text-slate-900">{rule.service_id ? rule.services?.name : rule.items?.name}</span>
+                                            {rule.items?.reference && <span className="text-xs text-slate-500">Ref: {rule.items.reference}</span>}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <span className="font-mono font-bold text-slate-900 text-base">{rule.special_price?.toFixed(3)}</span>
+                                        <span className="text-xs text-muted-foreground ml-1">TND</span>
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm">
+                                        {rule.special_vat_rate
+                                            ? <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{rule.special_vat_rate}%</span>
+                                            : <span className="text-slate-500">Standard</span>}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                                        {rule.subscription_renewal_date ? (
+                                            <div className="flex items-center gap-2">
+                                                <CalendarIcon className="h-3.5 w-3.5 text-primary/70" />
+                                                {format(new Date(rule.subscription_renewal_date), "dd/MM/yyyy")}
+                                            </div>
+                                        ) : "-"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(rule.id)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
     )
 }

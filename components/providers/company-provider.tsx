@@ -22,6 +22,10 @@ export type Company = {
     cnss_registry_number: string | null
     activity_code: string | null
     customs_code: string | null
+    invoice_start_number: number | null
+    quote_start_number: number | null
+    delivery_note_start_number: number | null
+    default_withholding_tax_rate: number | null
 }
 
 interface CompanyContextType {

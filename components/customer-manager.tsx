@@ -1,13 +1,12 @@
-
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Trash2, Info, Check, X, MapPin, ArrowUpDown, ChevronUp, ChevronDown, CreditCard, History, Edit } from "lucide-react"
+import { Trash2, Info, ArrowUpDown, ChevronUp, ChevronDown, CreditCard, History, Users } from "lucide-react"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +16,7 @@ import { CustomerImportDialog } from "@/components/customer-import-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { FilterToolbar } from "@/components/ui/filter-toolbar"
 import { GlobalPaymentDialog } from "./customers/global-payment-dialog"
+import { PageHeader } from "@/components/ui/page-header"
 
 type Customer = {
   id: string
@@ -174,21 +174,17 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
 
       {selectedCompanyId && (
         <>
-          {/* HEADER CARD */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Liste des Clients</CardTitle>
-                <CardDescription>Gérez vos clients et leurs adresses.</CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <CustomerImportDialog companyId={selectedCompanyId} onImportSuccess={() => fetchCustomers(selectedCompanyId!)} />
-                <Button onClick={handleAddNewClick}>Ajouter un client</Button>
-              </div>
-            </CardHeader>
-          </Card>
+          <PageHeader
+            title="Liste des Clients"
+            description="Gérez vos clients et leurs adresses."
+            icon={Users}
+          >
+            <div className="flex items-center gap-2">
+              <CustomerImportDialog companyId={selectedCompanyId} onImportSuccess={() => fetchCustomers(selectedCompanyId!)} />
+              <Button onClick={handleAddNewClick}>Ajouter un client</Button>
+            </div>
+          </PageHeader>
 
-          {/* FILTER TOOLBAR */}
           <FilterToolbar
             className="mb-4"
             searchValue={searchTerm}
@@ -200,7 +196,6 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
             showReset={!!searchTerm || sortConfig.key !== 'name' || sortConfig.direction !== 'asc'}
           />
 
-          {/* TABLE CARD */}
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -338,4 +333,3 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
     </div >
   )
 }
-

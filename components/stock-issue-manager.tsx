@@ -8,14 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { PlusCircle, Trash2, FileText, Package, Truck, ArrowUpDown, ChevronUp, ChevronDown, Search, PackageX } from "lucide-react"
+import { PlusCircle, Trash2, FileText, Package, PackageX, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react"
 import { PrintButton } from "./print-button"
 import { VoucherPreviewDialog } from "./voucher-preview-dialog"
 import { useCompany } from "@/components/providers/company-provider"
-import { SearchInput } from "@/components/ui/search-input"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 // Définition des types
 type Company = { id: string; name: string }
@@ -26,6 +26,7 @@ type StockIssueVoucher = {
   reference: string | null
   reason: string | null
   voucher_date: string
+  created_at?: string
 }
 
 type SortConfig = {
@@ -125,7 +126,6 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
     if (linesError) {
       setError("Erreur lors de l'ajout des articles au bon de sortie.")
     } else {
-      // alert("Bon de sortie créé avec succès ! Le stock a été mis à jour.") // Removed alert for better UX
       setVoucherReference("")
       setVoucherReason("")
       setVoucherLines([{ itemId: "", quantity: "" }])
@@ -180,7 +180,7 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {!selectedCompanyId && userCompanies.length > 1 && (
         <Card className="text-center py-12 border-dashed">
           <CardContent>
@@ -191,159 +191,160 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
       )}
 
       {selectedCompanyId && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          {/* COLONNE 1 : FORMULAIRE DE CRÉATION */}
-          <div className="space-y-6">
-            {/* Note: Keeping the Card style for the Form to distinguish it as an input area, but cleaning it up */}
-            <Card className="border-l-4 border-l-orange-500 shadow-md">
-              <CardHeader className="bg-orange-50/30 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl text-orange-950">Nouveau Bon de Sortie</CardTitle>
-                    <CardDescription>
-                      Enregistrez une sortie de stock (perte, usage interne...)
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* General Info */}
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="reference" className="text-xs font-semibold uppercase text-muted-foreground">
-                          Référence *
-                        </Label>
-                        <Input
-                          id="reference"
-                          value={voucherReference}
-                          onChange={(e) => setVoucherReference(e.target.value)}
-                          placeholder="Ex: BS-2025-001"
-                          required
-                          className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="reason" className="text-xs font-semibold uppercase text-muted-foreground">
-                          Motif
-                        </Label>
-                        <Input
-                          id="reason"
-                          value={voucherReason}
-                          onChange={(e) => setVoucherReason(e.target.value)}
-                          placeholder="Ex: Utilisation interne"
-                          className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
-                        />
-                      </div>
+        <>
+          <PageHeader
+            title="Bons de Sortie"
+            description="Gérez les sorties de stock (pertes, consommation interne, etc.)"
+            icon={PackageX}
+          />
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            {/* COLONNE 1 : FORMULAIRE DE CRÉATION */}
+            <div className="space-y-6">
+              <Card className="border-l-4 border-l-orange-500 shadow-md">
+                <CardHeader className="bg-orange-50/30 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-orange-950">Nouveau Bon de Sortie</CardTitle>
+                      <CardDescription>
+                        Enregistrez une sortie de stock
+                      </CardDescription>
                     </div>
                   </div>
-
-                  {/* Lines */}
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between pb-2 border-b">
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <Package className="h-4 w-4 text-orange-500" />
-                        Articles
-                      </h3>
-                    </div>
-
-                    {voucherLines.map((line, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <div className="flex-1 space-y-1">
-                          <Select value={line.itemId} onValueChange={(value) => updateLine(index, "itemId", value)}>
-                            <SelectTrigger className={cn("h-10", !line.itemId && "text-muted-foreground")}>
-                              <SelectValue placeholder="Sélectionner un article" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {items.map((item) => (
-                                <SelectItem key={item.id} value={item.id}>
-                                  <span className="font-medium">{item.name}</span>
-                                  <span className="ml-2 text-xs text-muted-foreground">(Stock: {item.quantity_on_hand})</span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="w-24 space-y-1">
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* General Info */}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="reference" className="text-xs font-semibold uppercase text-muted-foreground">
+                            Référence *
+                          </Label>
                           <Input
-                            type="number"
-                            placeholder="Qté"
-                            className="h-10 text-right"
-                            value={line.quantity}
-                            onChange={(e) => updateLine(index, "quantity", e.target.value)}
-                            step="0.01"
-                            min="0"
+                            id="reference"
+                            value={voucherReference}
+                            onChange={(e) => setVoucherReference(e.target.value)}
+                            placeholder="Ex: BS-2025-001"
+                            required
+                            className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
                           />
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeLine(index)}
-                          disabled={voucherLines.length <= 1}
-                          className="h-10 w-10 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="space-y-2">
+                          <Label htmlFor="reason" className="text-xs font-semibold uppercase text-muted-foreground">
+                            Motif
+                          </Label>
+                          <Input
+                            id="reason"
+                            value={voucherReason}
+                            onChange={(e) => setVoucherReason(e.target.value)}
+                            placeholder="Ex: Utilisation interne"
+                            className="h-10 border-orange-200 focus:border-orange-500 focus:ring-orange-500/20"
+                          />
+                        </div>
                       </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addLine}
-                      className="w-full mt-2 border-dashed text-muted-foreground hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
-                    >
-                      <PlusCircle className="h-4 w-4 mr-2" /> Ajouter un article
-                    </Button>
-                  </div>
-
-                  {error && (
-                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-100 flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-red-600 flex-shrink-0" />
-                      {error}
                     </div>
-                  )}
 
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-orange-600 hover:bg-orange-700 text-white shadow-md transition-all h-11"
-                  >
-                    {isLoading ? "Création en cours..." : "Valider la Sortie de Stock"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
+                    {/* Lines */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between pb-2 border-b">
+                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Package className="h-4 w-4 text-orange-500" />
+                          Articles
+                        </h3>
+                      </div>
 
-          {/* COLONNE 2 : HISTORIQUE (LISTE) */}
-          <div className="space-y-6">
-            <Card className="border-none shadow-none bg-transparent">
-              <CardHeader className="px-0 pt-0 pb-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-xl font-bold text-foreground">Historique</CardTitle>
-                    <CardDescription>Liste des bons de sortie créés</CardDescription>
-                  </div>
-                  <SearchInput
-                    placeholder="Rechercher..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onClear={() => setSearchTerm("")}
-                    className="w-full sm:w-[250px]"
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+                      {voucherLines.map((line, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Select value={line.itemId} onValueChange={(value) => updateLine(index, "itemId", value)}>
+                              <SelectTrigger className={cn("h-10", !line.itemId && "text-muted-foreground")}>
+                                <SelectValue placeholder="Sélectionner un article" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {items.map((item) => (
+                                  <SelectItem key={item.id} value={item.id}>
+                                    <span className="font-medium">{item.name}</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">(Stock: {item.quantity_on_hand})</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-24 space-y-1">
+                            <Input
+                              type="number"
+                              placeholder="Qté"
+                              className="h-10 text-right"
+                              value={line.quantity}
+                              onChange={(e) => updateLine(index, "quantity", e.target.value)}
+                              step="0.01"
+                              min="0"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeLine(index)}
+                            disabled={voucherLines.length <= 1}
+                            className="h-10 w-10 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addLine}
+                        className="w-full mt-2 border-dashed text-muted-foreground hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
+                      >
+                        <PlusCircle className="h-4 w-4 mr-2" /> Ajouter un article
+                      </Button>
+                    </div>
+
+                    {error && (
+                      <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-100 flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                        {error}
+                      </div>
+                    )}
+
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white shadow-md transition-all h-11"
+                    >
+                      {isLoading ? "Création en cours..." : "Valider la Sortie de Stock"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* COLONNE 2 : HISTORIQUE (LISTE) */}
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Historique</h3>
+                <FilterToolbar
+                  searchValue={searchTerm}
+                  onSearchChange={setSearchTerm}
+                  searchPlaceholder="Rechercher..."
+                  resultCount={filteredVouchers.length}
+                  resultLabel="bons"
+                />
+              </div>
+
+              <Card>
+                <CardContent className="p-0">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableRow>
                         <TableHead
                           className="cursor-pointer hover:text-primary transition-colors h-10"
                           onClick={() => requestSort("reference")}
@@ -425,11 +426,11 @@ export function StockIssueManager({ userCompanies }: { userCompanies: Company[] 
                       )}
                     </TableBody>
                   </Table>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

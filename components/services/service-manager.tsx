@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/client"
 import { useCompany } from "@/components/providers/company-provider"
 import { ServiceList } from "./service-list"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Plus, Search, X } from "lucide-react"
+import { Plus, Wrench } from "lucide-react"
 import { ServiceDialog } from "./service-dialog"
 import { toast } from "sonner"
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 export type Service = {
     id: string
@@ -109,45 +110,27 @@ export function ServiceManager({ userCompanies }: ServiceManagerProps) {
         <div className="space-y-6">
             {selectedCompanyId && (
                 <>
-                    {/* Header with title and actions */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-lg border shadow-sm">
-                        <div>
-                            <h2 className="text-lg font-semibold">Services ({filteredServices.length})</h2>
-                            <p className="text-sm text-muted-foreground">Gérez votre offre de prestations et tarifs.</p>
-                        </div>
+                    <PageHeader
+                        title="Services"
+                        description="Gérez votre offre de prestations et tarifs."
+                        icon={Wrench}
+                    >
                         <Button onClick={handleCreateClick}>
                             <Plus className="mr-2 h-4 w-4" />
                             Nouveau Service
                         </Button>
-                    </div>
+                    </PageHeader>
 
-                    {/* Search bar */}
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="text"
-                            placeholder="Rechercher par nom, référence ou description..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 pr-10 bg-white dark:bg-slate-900"
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
+                    <FilterToolbar
+                        searchValue={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        searchPlaceholder="Rechercher par nom, référence ou description..."
+                        resultCount={filteredServices.length}
+                        resultLabel={filteredServices.length !== 1 ? 'services' : 'service'}
+                    />
 
-                    {/* Results info when searching */}
-                    {searchQuery && (
-                        <p className="text-sm text-muted-foreground">
-                            {filteredServices.length} résultat{filteredServices.length !== 1 ? 's' : ''}
-                            {filteredServices.length !== services.length && ` sur ${services.length} services`}
-                        </p>
-                    )}
+                    {/* Results info when searching - Optional as FilterToolbar shows count, but we can keep explicitly if needed, but FilterToolbar has it. */}
+                    {/* FilterToolbar shows count, so we can remove the explicit p tag unless we want "sur X services" */}
 
                     <ServiceList
                         services={filteredServices}

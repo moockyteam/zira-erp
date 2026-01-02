@@ -219,8 +219,8 @@
     background: white;
   }
 
-  /* Hide common UI elements globally */
-  header, footer, nav, aside, .sidebar {
+  /* Hide common UI elements globally - NOT footer (used for document totals) */
+  header, nav, aside, .sidebar {
     display: none !important;
   }
 }

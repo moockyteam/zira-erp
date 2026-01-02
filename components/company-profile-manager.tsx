@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 import Image from "next/image"
 import { toast } from "sonner"
-import { Store, Wrench, Factory, Pickaxe, Building2, Pencil, Save, X, Phone, MapPin, Mail, CreditCard, Check } from "lucide-react"
+import { Store, Wrench, Factory, Pickaxe, Building2, Pencil, Save, X, Phone, MapPin, Mail, CreditCard, Check, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCompany } from "@/components/providers/company-provider"
 
@@ -19,6 +19,8 @@ import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 // --- TYPES ---
 type Governorate = { id: number; name: string }
@@ -42,6 +44,7 @@ const initialFormData = {
     invoice_start_number: 1,
     quote_start_number: 1,
     delivery_note_start_number: 1,
+    default_withholding_tax_rate: 0,
 }
 
 const ACTIVITIES = [
@@ -104,11 +107,12 @@ export function CompanyProfileManager() {
                 cnss_ind: selectedCompany.cnss_ind || "",
                 cnss_registry_number: selectedCompany.cnss_registry_number || "",
                 activity_code: selectedCompany.activity_code || "",
-                activity_code: selectedCompany.activity_code || "",
+
                 customs_code: selectedCompany.customs_code || "",
                 invoice_start_number: selectedCompany.invoice_start_number || 1,
                 quote_start_number: selectedCompany.quote_start_number || 1,
                 delivery_note_start_number: selectedCompany.delivery_note_start_number || 1,
+                default_withholding_tax_rate: selectedCompany.default_withholding_tax_rate || 0,
             })
 
             if (selectedCompany.governorate_id) {
@@ -173,11 +177,12 @@ export function CompanyProfileManager() {
                 cnss_ind: selectedCompany.cnss_ind || "",
                 cnss_registry_number: selectedCompany.cnss_registry_number || "",
                 activity_code: selectedCompany.activity_code || "",
-                activity_code: selectedCompany.activity_code || "",
+
                 customs_code: selectedCompany.customs_code || "",
                 invoice_start_number: selectedCompany.invoice_start_number || 1,
                 quote_start_number: selectedCompany.quote_start_number || 1,
                 delivery_note_start_number: selectedCompany.delivery_note_start_number || 1,
+                default_withholding_tax_rate: selectedCompany.default_withholding_tax_rate || 0,
             })
             setSelectedGov(selectedCompany.governorate_id ? String(selectedCompany.governorate_id) : "")
             setSelectedDel(selectedCompany.delegation_id ? String(selectedCompany.delegation_id) : "")
@@ -226,7 +231,9 @@ export function CompanyProfileManager() {
                 customs_code: formData.customs_code,
                 invoice_start_number: Number(formData.invoice_start_number) || 1,
                 quote_start_number: Number(formData.quote_start_number) || 1,
+
                 delivery_note_start_number: Number(formData.delivery_note_start_number) || 1,
+                default_withholding_tax_rate: Number(formData.default_withholding_tax_rate) || 0,
             }
 
             const { error } = await supabase
@@ -318,125 +325,232 @@ export function CompanyProfileManager() {
                     </Button>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left Column: General Info */}
-                    <div className="lg:col-span-2 space-y-8">
-                        {/* Card Contact */}
-                        <Card className="shadow-sm border-0 ring-1 ring-border/50 bg-card/50 backdrop-blur-sm">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg flex items-center gap-2.5">
-                                    <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
-                                        <Building2 className="h-5 w-5" />
-                                    </div>
-                                    Informations & Coordonnées
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
-                                    <div className="space-y-1.5 group">
-                                        <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Gérant</Label>
-                                        <div className="font-medium text-base flex items-center gap-2">
-                                            {formData.manager_name || "-"}
+                {/* Contact Card - Full Width */}
+                <Card className="shadow-sm border-0 ring-1 ring-border/50 bg-card/50 backdrop-blur-sm">
+                    <CardHeader className="pb-4">
+                        <CardTitle className="text-lg flex items-center gap-2.5">
+                            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            Informations & Coordonnées
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
+                            <div className="space-y-1.5 group">
+                                <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Secteur d'activité</Label>
+                                <div className="font-medium text-base flex items-center gap-2">
+                                    {activityInfo ? (
+                                        <div className="flex items-center gap-2">
+                                            <activityInfo.icon className="h-4 w-4 text-muted-foreground" />
+                                            <span>{activityInfo.label}</span>
                                         </div>
-                                    </div>
-                                    <div className="space-y-1.5 group">
-                                        <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Email</Label>
-                                        <div className="font-medium text-base flex items-center gap-2 truncate" title={formData.email}>
-                                            {formData.email ? (
-                                                <>
-                                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                                    <a href={`mailto:${formData.email}`} className="hover:underline hover:text-primary transition-colors">{formData.email}</a>
-                                                </>
-                                            ) : "-"}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5 group">
-                                        <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Téléphone</Label>
-                                        <div className="font-medium text-base flex items-center gap-2">
-                                            {formData.phone_number ? (
-                                                <>
-                                                    <Phone className="h-4 w-4 text-muted-foreground" />
-                                                    <a href={`tel:${formData.phone_number}`} className="hover:underline hover:text-primary transition-colors">{formData.phone_number}</a>
-                                                </>
-                                            ) : "-"}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5 group">
-                                        <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Adresse</Label>
-                                        <div className="font-medium text-base flex items-start gap-2">
-                                            <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                            <div>
-                                                {formData.address || "-"}
-                                                {(governorateName || delegationName) && (
-                                                    <div className="text-sm text-muted-foreground mt-0.5">
-                                                        {delegationName ? `${delegationName}, ` : ""}{governorateName}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    ) : "-"}
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Right Column: Fiscal Status */}
-                    <div className="space-y-6">
-                        <Card className="shadow-sm border-primary/20 bg-primary/5 h-full">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg flex items-center gap-2.5">
-                                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                        <CreditCard className="h-5 w-5" />
-                                    </div>
-                                    Statut Fiscal
-                                </CardTitle>
-                                <CardDescription>Paramètres de facturation</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between p-3 rounded-xl bg-background border shadow-sm">
-                                        <div className="flex flex-col">
-                                            <span className="font-semibold text-sm">Exportateur</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Exonération TVA</span>
-                                        </div>
-                                        {formData.is_fully_exporting ? (
-                                            <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                                                <Check className="h-4 w-4" />
-                                            </div>
-                                        ) : (
-                                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/50">
-                                                <X className="h-4 w-4" />
+                            </div>
+                            <div className="space-y-1.5 group">
+                                <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Gérant</Label>
+                                <div className="font-medium text-base flex items-center gap-2">
+                                    {formData.manager_name || "-"}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5 group">
+                                <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Email</Label>
+                                <div className="font-medium text-base flex items-center gap-2 truncate" title={formData.email}>
+                                    {formData.email ? (
+                                        <>
+                                            <Mail className="h-4 w-4 text-muted-foreground" />
+                                            <a href={`mailto:${formData.email}`} className="hover:underline hover:text-primary transition-colors">{formData.email}</a>
+                                        </>
+                                    ) : "-"}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5 group">
+                                <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Téléphone</Label>
+                                <div className="font-medium text-base flex items-center gap-2">
+                                    {formData.phone_number ? (
+                                        <>
+                                            <Phone className="h-4 w-4 text-muted-foreground" />
+                                            <a href={`tel:${formData.phone_number}`} className="hover:underline hover:text-primary transition-colors">{formData.phone_number}</a>
+                                        </>
+                                    ) : "-"}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5 group">
+                                <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground/70 group-hover:text-primary transition-colors">Adresse</Label>
+                                <div className="font-medium text-base flex items-start gap-2">
+                                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                    <div>
+                                        {formData.address || "-"}
+                                        {(governorateName || delegationName) && (
+                                            <div className="text-sm text-muted-foreground mt-0.5">
+                                                {delegationName ? `${delegationName}, ` : ""}{governorateName}
                                             </div>
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between p-3 rounded-xl bg-background border shadow-sm">
-                                        <div className="flex flex-col">
-                                            <span className="font-semibold text-sm">FODEC</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Taxe 1%</span>
-                                        </div>
-                                        {formData.is_subject_to_fodec ? (
-                                            <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                                                <Check className="h-4 w-4" />
-                                            </div>
-                                        ) : (
-                                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/50">
-                                                <X className="h-4 w-4" />
-                                            </div>
-                                        )}
+                {/* Split Row: Legal & Fiscal */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left: Identifiants Légaux */}
+                    <Card className="shadow-sm border-primary/20 bg-primary/5 h-full">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-lg flex items-center gap-2.5">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                    <Building2 className="h-5 w-5" />
+                                </div>
+                                Identifiants Légaux
+                            </CardTitle>
+                            <CardDescription>Immatriculations officielles</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 gap-x-2 gap-y-6">
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Matricule Fiscal</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.matricule_fiscal || "-"}</div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Code Douane</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.customs_code || "-"}</div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Code Activité</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.activity_code || "-"}</div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Matricule CNSS</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.cnss_registry_number || "-"}</div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">CNSS GEN</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.cnss_gen || "-"}</div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">CNSS IND</Label>
+                                    <div className="font-semibold font-mono text-sm tracking-wide">{formData.cnss_ind || "-"}</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Right: Paramètres de Facturation */}
+                    <Card className="shadow-sm border-primary/20 bg-primary/5 h-full">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-lg flex items-center gap-2.5">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                    <CreditCard className="h-5 w-5" />
+                                </div>
+                                Paramètres de Facturation
+                            </CardTitle>
+                            <CardDescription>Régime fiscal et taxes</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-background border shadow-sm">
+                                    <div className="flex flex-col">
+                                        <span className="font-semibold text-sm">
+                                            {formData.is_fully_exporting ? "Totalement Exportateur" : "Régime Local"}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                            {formData.is_fully_exporting ? "Exonération TVA" : "Soumis à la TVA"}
+                                        </span>
                                     </div>
+                                    {formData.is_fully_exporting ? (
+                                        <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                                            <Check className="h-4 w-4" />
+                                        </div>
+                                    ) : (
+                                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/50">
+                                            <Check className="h-4 w-4" />
+                                        </div>
+                                    )}
                                 </div>
+                            </div>
 
-                                <div className="pt-4 border-t border-primary/10">
-                                    <p className="text-xs text-muted-foreground text-center">
-                                        Ces paramètres influencent le calcul automatique des taxes sur vos documents.
-                                    </p>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-background border shadow-sm">
+                                    <div className="flex flex-col">
+                                        <span className="font-semibold text-sm">
+                                            {formData.is_subject_to_fodec ? "Soumis au FODEC" : "Non Soumis au FODEC"}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                            {formData.is_subject_to_fodec ? "Taxe 1% Appliquée" : "Pas de taxe FODEC"}
+                                        </span>
+                                    </div>
+                                    {formData.is_subject_to_fodec ? (
+                                        <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                                            <Check className="h-4 w-4" />
+                                        </div>
+                                    ) : (
+                                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/50">
+                                            <X className="h-4 w-4" />
+                                        </div>
+                                    )}
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                            </div>
+
+                            <div className="space-y-3 pt-4 border-t border-dashed">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Label className="text-sm font-semibold">Retenue à la Source (RS)</Label>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full text-muted-foreground hover:text-primary">
+                                                    <Info className="h-4 w-4" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[450px] p-0" align="end">
+                                                <div className="p-3 bg-muted/20 border-b font-semibold text-sm">Guide des Taux de Retenue à la Source</div>
+                                                <div className="max-h-[300px] overflow-y-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead className="w-[70px]">Taux</TableHead>
+                                                                <TableHead>Type de prestation</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody className="text-xs">
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">3 %</TableCell>
+                                                                <TableCell>Honoraires payés au régime réel (Avocat, Expert-comptable, Bureau d'études).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">10 %</TableCell>
+                                                                <TableCell>Loyers, Commissions, Courtages (Location bureau, Intermédiaires).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">15 %</TableCell>
+                                                                <TableCell>Honoraires non-résidents (Prestataires étrangers).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">2.5 %</TableCell>
+                                                                <TableCell>Vente d'immeuble ou fonds de commerce.</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">1 %</TableCell>
+                                                                <TableCell>Marchés publics, Taux réduit spécifique.</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">0.5 %</TableCell>
+                                                                <TableCell>Cas spécifiques de marchés de l'état.</TableCell>
+                                                            </TableRow>
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                    <Badge variant="outline" className="font-mono text-base px-3 py-1">
+                                        {formData.default_withholding_tax_rate ? `${formData.default_withholding_tax_rate}%` : "0%"}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         )
@@ -657,6 +771,78 @@ export function CompanyProfileManager() {
                                 </div>
                                 <Switch id="switch-fodec" checked={formData.is_subject_to_fodec} onCheckedChange={(c) => setFormData(p => ({ ...p, is_subject_to_fodec: c }))} />
                             </div>
+
+                            <div className="flex items-center justify-between border p-4 rounded-xl space-x-4 md:col-span-2">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <Label className="text-base cursor-pointer">Taux de Retenue à la Source</Label>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-primary">
+                                                    <Info className="h-3 w-3" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[450px] p-0" align="end">
+                                                <div className="p-3 bg-muted/20 border-b font-semibold text-sm">Guide des Taux de Retenue à la Source</div>
+                                                <div className="max-h-[300px] overflow-y-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead className="w-[70px]">Taux</TableHead>
+                                                                <TableHead>Type de prestation</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody className="text-xs">
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">3 %</TableCell>
+                                                                <TableCell>Honoraires payés au régime réel (Avocat, Expert-comptable, Bureau d'études).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">10 %</TableCell>
+                                                                <TableCell>Loyers, Commissions, Courtages (Location bureau, Intermédiaires).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">15 %</TableCell>
+                                                                <TableCell>Honoraires non-résidents (Prestataires étrangers).</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">2.5 %</TableCell>
+                                                                <TableCell>Vente d'immeuble ou fonds de commerce.</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">1 %</TableCell>
+                                                                <TableCell>Marchés publics, Taux réduit spécifique.</TableCell>
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                <TableCell className="font-bold">0.5 %</TableCell>
+                                                                <TableCell>Cas spécifiques de marchés de l'état.</TableCell>
+                                                            </TableRow>
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Sélectionnez le taux applicable.</p>
+                                </div>
+                                <Select
+                                    value={formData.default_withholding_tax_rate?.toString()}
+                                    onValueChange={(val) => setFormData(p => ({ ...p, default_withholding_tax_rate: Number(val) }))}
+                                >
+                                    <SelectTrigger className="w-[140px]">
+                                        <SelectValue placeholder="-" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {[0, 0.5, 1, 1.5, 2.5, 3, 10, 15].map(rate => (
+                                            <SelectItem key={rate} value={rate.toString()}>
+                                                {rate}%
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+
                         </div>
                     </CardContent>
                 </Card>

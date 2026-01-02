@@ -10,9 +10,11 @@ import { Badge } from "@/components/ui/badge"
 import { PlusCircle, Package, ArrowUpDown, ChevronUp, ChevronDown, PackageX, TrendingDown, FileText } from "lucide-react"
 import { ReturnVoucherActions } from "./return-voucher-actions"
 import { ReturnVoucherForm } from "./return-voucher-form"
-import { SearchInput } from "@/components/ui/search-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+// Import standardized components
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 type ReturnVoucher = {
   id: string
@@ -20,6 +22,7 @@ type ReturnVoucher = {
   customers: { name: string } | null
   return_date: string
   status: "BROUILLON" | "RETOURNE" | "ANNULE"
+  return_voucher_lines?: any[]
 }
 
 type SortConfig = {
@@ -91,10 +94,8 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
       const now = new Date()
       return returnDate.getMonth() === now.getMonth() && returnDate.getFullYear() === now.getFullYear()
     }).length
-    // Note: Assuming 'return_voucher_lines' is available on the raw object for stats calculation, 
-    // though strict typing might complain if not added to ReturnVoucher type. 
-    // Casting to any for safety in reducing lines count.
-    const totalItems = returns.reduce((sum, r: any) => sum + (r.return_voucher_lines?.length || 0), 0)
+
+    const totalItems = returns.reduce((sum, r) => sum + (r.return_voucher_lines?.length || 0), 0)
 
     return { totalReturns, thisMonthReturns, totalItems }
   }, [returns])
@@ -126,6 +127,9 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
         aValue = a.customers?.name || ""
         bValue = b.customers?.name || ""
       }
+
+      if (aValue === null || aValue === undefined) aValue = ""
+      if (bValue === null || bValue === undefined) bValue = ""
 
       if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
       if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
@@ -160,7 +164,7 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {!selectedCompanyId && (
         <Card className="text-center py-12 border-dashed">
           <CardContent>
@@ -174,16 +178,16 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
       {selectedCompanyId && (
         <>
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Bons de Retour</h1>
-              <p className="text-muted-foreground mt-1">Gérez les retours de marchandises clients.</p>
-            </div>
-            <Button size="lg" className="shadow-sm" onClick={() => handleOpenForm(null)}>
+          <PageHeader
+            title="Bons de Retour"
+            description="Gérez les retours de marchandises clients."
+            icon={TrendingDown}
+          >
+            <Button onClick={() => handleOpenForm(null)}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Nouveau Bon de Retour
             </Button>
-          </div>
+          </PageHeader>
 
           {/* Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -204,31 +208,30 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
           </div>
 
           {/* Filters & Table */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center sm:h-10">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <SearchInput
-                  placeholder="Rechercher par numéro ou client..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onClear={() => setSearchTerm("")}
-                  className="w-full sm:w-[300px]"
-                />
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Statut" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tous les statuts</SelectItem>
-                    <SelectItem value="BROUILLON">Brouillon</SelectItem>
-                    <SelectItem value="RETOURNE">Retourné</SelectItem>
-                    <SelectItem value="ANNULE">Annulé</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <FilterToolbar
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Rechercher par numéro ou client..."
+            resultCount={filteredReturns.length}
+            resultLabel={filteredReturns.length > 1 ? "bons de retour" : "bon de retour"}
+            onReset={() => { setSearchTerm(""); setStatusFilter("all"); }}
+            showReset={!!searchTerm || statusFilter !== "all"}
+          >
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="BROUILLON">Brouillon</SelectItem>
+                <SelectItem value="RETOURNE">Retourné</SelectItem>
+                <SelectItem value="ANNULE">Annulé</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterToolbar>
 
-            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+          <Card className="border bg-card shadow-sm overflow-hidden">
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30 hover:bg-muted/30">
@@ -348,8 +351,8 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
                   )}
                 </TableBody>
               </Table>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </>
       )}
 

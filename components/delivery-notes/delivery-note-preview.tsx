@@ -30,20 +30,12 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
   const fodecAmount = isFodecApplicable ? deliveryNote.total_fodec : 0
   const escompteAmount = deliveryNote.total_escompte || 0
 
-  const displayTotalHT = deliveryNote.total_ht || calculatedTotalHT
-  const displayTotalTVA = deliveryNote.total_tva || calculatedTotalTVA
+  // Utiliser les valeurs calculées si les valeurs stockées sont 0 ou nulles
+  const displayTotalHT = (deliveryNote.total_ht && deliveryNote.total_ht > 0) ? deliveryNote.total_ht : calculatedTotalHT
+  const displayTotalTVA = (deliveryNote.total_tva && deliveryNote.total_tva > 0) ? deliveryNote.total_tva : calculatedTotalTVA
 
-  // Calcul dynamique du TTC à partir des lignes (même logique que delivery-note-form.tsx)
-  // Cela garantit que le preview reflète toujours les modifications de TVA
-  const calculatedTotalTTC = deliveryNote.delivery_note_lines.reduce(
-    (sum: number, l: any) => {
-      const lineHt = l.quantity * l.unit_price_ht * (1 - (l.remise_percentage || 0) / 100)
-      const lineTtc = lineHt * (1 + (l.tva_rate || 0) / 100)
-      return sum + lineTtc
-    },
-    0,
-  )
-  const displayTotalTTC = calculatedTotalTTC + stampAmount
+  // Calcul dynamique du TTC = HT - Escompte + FODEC + TVA + Timbre
+  const displayTotalTTC = displayTotalHT - escompteAmount + fodecAmount + displayTotalTVA + stampAmount
 
   return (
     <div className="bg-white text-black font-sans text-[10pt] print:text-[9pt]">
@@ -136,12 +128,12 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
               <tr>
                 <th className="p-2 border font-semibold w-[50%]">{t.description}</th>
                 <th className="p-2 border font-semibold text-right">{t.quantity}</th>
-                {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">{t.unitPriceHT}</th>}
-                {deliveryNote.is_valued && deliveryNote.show_remise_column && (
+                {(deliveryNote.is_valued || displayTotalHT > 0) && <th className="p-2 border font-semibold text-right">{t.unitPriceHT}</th>}
+                {(deliveryNote.is_valued || displayTotalHT > 0) && deliveryNote.show_remise_column && (
                   <th className="p-2 border font-semibold text-right">{t.discount}</th>
                 )}
-                {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">{t.unitPriceTTC}</th>}
-                {deliveryNote.is_valued && <th className="p-2 border font-semibold text-right">{t.totalHT}</th>}
+                {(deliveryNote.is_valued || displayTotalHT > 0) && <th className="p-2 border font-semibold text-right">{t.unitPriceTTC}</th>}
+                {(deliveryNote.is_valued || displayTotalHT > 0) && <th className="p-2 border font-semibold text-right">{t.totalHT}</th>}
               </tr>
             </thead>
             <tbody>
@@ -152,18 +144,18 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
                   <tr key={line.id}>
                     <td className="p-2 border">{line.description}</td>
                     <td className="p-2 border text-right">{line.quantity}</td>
-                    {deliveryNote.is_valued && (
+                    {(deliveryNote.is_valued || displayTotalHT > 0) && (
                       <td className="p-2 border text-right font-mono">{line.unit_price_ht.toFixed(3)}</td>
                     )}
-                    {deliveryNote.is_valued && deliveryNote.show_remise_column && (
+                    {(deliveryNote.is_valued || displayTotalHT > 0) && deliveryNote.show_remise_column && (
                       <td className="p-2 border text-right font-mono">{(line.remise_percentage || 0).toFixed(2)}%</td>
                     )}
 
-                    {deliveryNote.is_valued && (
+                    {(deliveryNote.is_valued || displayTotalHT > 0) && (
                       <td className="p-2 border text-right font-mono">{unitPriceTTC.toFixed(3)}</td>
                     )}
 
-                    {deliveryNote.is_valued && (
+                    {(deliveryNote.is_valued || displayTotalHT > 0) && (
                       <td className="p-2 border text-right font-mono font-semibold">{lineTotalHT.toFixed(3)}</td>
                     )}
                   </tr>
@@ -173,7 +165,7 @@ export function DeliveryNotePreview({ deliveryNote, language = "fr" }: { deliver
           </table>
         </div>
 
-        {deliveryNote.is_valued && (
+        {(deliveryNote.is_valued || displayTotalHT > 0) && (
           <footer className="pt-4" style={{ pageBreakInside: "avoid" }}>
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="p-3 border rounded-md bg-gray-50 text-xs">

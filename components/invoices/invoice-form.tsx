@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils"
 
 const TVA_RATES = [19, 13, 7, 0]
 const FODEC_RATE = 0.01
-const WITHHOLDING_TAX_RATE = 0.015
+
 
 const CURRENCIES = [
   { code: "TND", symbol: "TND", label: "Dinar Tunisien" },
@@ -178,7 +178,8 @@ export function InvoiceForm({
     }, 0)
     const timbre = hasStamp ? 1.0 : 0
     const total_ttc = base_tva + total_tva + timbre
-    const withholding_tax_amount = hasWithholdingTax ? total_ht_net * WITHHOLDING_TAX_RATE : 0
+    const rs_rate = (selectedCompany?.default_withholding_tax_rate || 0) / 100
+    const withholding_tax_amount = hasWithholdingTax ? total_ht_net * rs_rate : 0
     const net_to_pay = total_ttc - withholding_tax_amount
 
     const tva_details = TVA_RATES.map((rate) => {
@@ -202,9 +203,8 @@ export function InvoiceForm({
       timbre,
       total_ttc,
       withholding_tax_amount,
-      net_to_pay,
     }
-  }, [lines, isFodecApplicable, hasStamp, hasWithholdingTax])
+  }, [lines, isFodecApplicable, hasStamp, hasWithholdingTax, selectedCompany])
 
   const addLine = () =>
     setLines([
@@ -699,7 +699,7 @@ export function InvoiceForm({
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
                 <Label htmlFor="withholding-switch" className="flex items-center gap-2 cursor-pointer text-sm">
                   <Switch id="withholding-switch" checked={hasWithholdingTax} onCheckedChange={setHasWithholdingTax} />
-                  Retenue à la Source (1.5%)
+                  Retenue à la Source ({selectedCompany?.default_withholding_tax_rate || 0}%)
                 </Label>
               </div>
 
@@ -731,7 +731,7 @@ export function InvoiceForm({
                 {hasWithholdingTax && (
                   <>
                     <div className="flex justify-between text-red-600 dark:text-red-400 p-1">
-                      <span>Retenue (1.5%)</span>
+                      <span>Retenue ({selectedCompany?.default_withholding_tax_rate || 0}%)</span>
                       <span>- {totals.withholding_tax_amount.toFixed(3)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t-2 border-emerald-500 pt-3 mt-3 text-emerald-600 dark:text-emerald-400 p-2 rounded bg-emerald-50 dark:bg-emerald-950/20">

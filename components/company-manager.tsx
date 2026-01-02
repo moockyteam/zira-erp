@@ -1,17 +1,14 @@
-// components/company-manager.tsx
-
 "use client"
 
 import type React from "react"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { v4 as uuidv4 } from "uuid"
 import Image from "next/image"
 import { toast } from "sonner"
-import { Store, Wrench, Factory, Pickaxe, Building2 } from "lucide-react"
+import { Store, Wrench, Factory, Pickaxe, Building2, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// NOUVEAU: Importations depuis shadcn/ui pour la modale (Dialog), les skeletons, etc.
 import {
   Dialog,
   DialogContent,
@@ -21,15 +18,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
+import { PageHeader } from "@/components/ui/page-header"
 
-// --- Les types restent inchangés ---
 type Company = {
   id: string
   name: string
@@ -79,11 +76,10 @@ export function CompanyManager() {
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
 
-  // NOUVEAU: États pour gérer l'UX
-  const [isFormOpen, setIsFormOpen] = useState(false) // Gère l'ouverture de la modale
-  const [isInitialLoading, setIsInitialLoading] = useState(true) // Gère le skeleton loader initial
-  const [isSubmitting, setIsSubmitting] = useState(false) // Gère le chargement du formulaire
-  const [logoPreview, setLogoPreview] = useState<string | null>(null) // Gère l'aperçu du logo
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -105,7 +101,6 @@ export function CompanyManager() {
     }
   }
 
-  // fetchGovernorates et fetchDelegations restent inchangés...
   async function fetchGovernorates() {
     const { data, error } = await supabase.from("governorates").select("id, name")
     if (error) console.error("Erreur chargement gouvernorats:", error)
@@ -130,7 +125,6 @@ export function CompanyManager() {
     setFilteredDelegations(filtered)
   }
 
-  // MODIFIÉ: Gestion du logo avec aperçu
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0]
@@ -139,7 +133,6 @@ export function CompanyManager() {
     }
   }
 
-  // MODIFIÉ: La fonction de reset ferme maintenant la modale et nettoie l'aperçu
   const resetFormAndClose = () => {
     setEditingCompany(null)
     setFormData(initialFormData)
@@ -151,7 +144,6 @@ export function CompanyManager() {
     setError(null)
   }
 
-  // NOUVEAU: Ouvre le formulaire pour une nouvelle entreprise
   const handleAddNewClick = () => {
     setEditingCompany(null)
     setFormData(initialFormData)
@@ -161,7 +153,6 @@ export function CompanyManager() {
     setIsFormOpen(true)
   }
 
-  // MODIFIÉ: Ouvre le formulaire pour l'édition
   const handleEditClick = (company: Company) => {
     setEditingCompany(company)
     setFormData({
@@ -185,11 +176,10 @@ export function CompanyManager() {
       setFilteredDelegations([])
     }
     setSelectedDel(company.delegation_id ? String(company.delegation_id) : "")
-    setLogoPreview(company.logo_url) // Affiche le logo existant
+    setLogoPreview(company.logo_url)
     setIsFormOpen(true)
   }
 
-  // MODIFIÉ: Logique de soumission avec notifications et gestion d'état
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
@@ -261,76 +251,76 @@ export function CompanyManager() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* --- CARTE LISTE DES ENTREPRISES --- */}
+    <div className="space-y-6">
+      <PageHeader
+        title="Mes Entreprises"
+        description="Gérez les informations de vos structures."
+        icon={Building2}
+      >
+        <Button onClick={handleAddNewClick}>
+          <Plus className="mr-2 h-4 w-4" />
+          Ajouter une entreprise
+        </Button>
+      </PageHeader>
+
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Mes Entreprises</CardTitle>
-          <Button onClick={handleAddNewClick}>Ajouter une entreprise</Button>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50 hover:bg-slate-50">
+                <TableHead className="w-[80px] py-4">Logo</TableHead>
+                <TableHead className="py-4">Nom</TableHead>
+                <TableHead className="hidden sm:table-cell py-4">Matricule Fiscal</TableHead>
+                <TableHead className="hidden md:table-cell py-4">Email</TableHead>
+                <TableHead className="py-4">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isInitialLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell><Skeleton className="h-10 w-10 rounded-md" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
+                    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-[150px]" /></TableCell>
+                    <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[180px]" /></TableCell>
+                    <TableCell><Skeleton className="h-8 w-[70px]" /></TableCell>
+                  </TableRow>
+                ))
+              ) : companies.length === 0 ? (
                 <TableRow>
-                  <TableHead className="w-[80px]">Logo</TableHead>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden sm:table-cell">Matricule Fiscal</TableHead>
-                  <TableHead className="hidden md:table-cell">Email</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    Vous n'avez pas encore d'entreprise.
+                    <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
+                      Commencez par en ajouter une.
+                    </Button>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isInitialLoading ? (
-                  // NOUVEAU: Skeleton loader pendant le chargement initial
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <TableRow key={index}>
-                      <TableCell><Skeleton className="h-10 w-10 rounded-md" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
-                      <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-[150px]" /></TableCell>
-                      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-[180px]" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-[70px]" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : companies.length === 0 ? (
-                  // NOUVEAU: État vide si aucune entreprise n'est trouvée
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      Vous n'avez pas encore d'entreprise.
-                      <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
-                        Commencez par en ajouter une.
+              ) : (
+                companies.map((company) => (
+                  <TableRow key={company.id} className="hover:bg-slate-50/50">
+                    <TableCell>
+                      {company.logo_url ? (
+                        <Image src={company.logo_url} alt={`Logo de ${company.name}`} width={40} height={40} className="rounded-md object-contain" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center text-muted-foreground text-xs">Pas de logo</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{company.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
+                    <TableCell className="hidden md:table-cell">{company.email}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
+                        Gérer
                       </Button>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  // Affichage normal des entreprises
-                  companies.map((company) => (
-                    <TableRow key={company.id}>
-                      <TableCell>
-                        {company.logo_url ? (
-                          <Image src={company.logo_url} alt={`Logo de ${company.name}`} width={40} height={40} className="rounded-md object-contain" />
-                        ) : (
-                          <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center text-muted-foreground text-xs">Pas de logo</div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium">{company.name}</TableCell>
-                      <TableCell className="hidden sm:table-cell">{company.matricule_fiscal}</TableCell>
-                      <TableCell className="hidden md:table-cell">{company.email}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => handleEditClick(company)}>
-                          Gérer
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      {/* NOUVEAU: Le formulaire est maintenant dans une modale (Dialog) */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader className="px-1">

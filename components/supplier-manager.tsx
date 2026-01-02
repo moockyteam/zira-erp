@@ -5,10 +5,10 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Trash2 } from "lucide-react"
+import { Trash2, Truck, Download, Check, ChevronsUpDown, Building2, User, Wallet, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
 
 // Importations des composants UI
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -16,16 +16,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeft, ChevronRight, Search, Download, Check, ChevronsUpDown, Building2, User, Wallet, MapPin } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { SupplierImportDialog } from "./supplier-import-dialog"
 import { AddCategoryDialog } from "./add-category-dialog"
-// import { CompanySelector } from "@/components/company-selector" // REMOVE
-import { useCompany } from "@/components/providers/company-provider" // Add import
+import { useCompany } from "@/components/providers/company-provider"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 type Company = { id: string; name: string; logo_url: string | null }
 type Supplier = {
@@ -71,9 +71,8 @@ const initialFormData = {
 
 export function SupplierManager({ userCompanies }: { userCompanies: Company[] }) {
   const supabase = createClient()
-  const { selectedCompany } = useCompany() // Context usage
+  const { selectedCompany } = useCompany()
 
-  // const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null) // Remove local state
   const selectedCompanyId = selectedCompany?.id
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
@@ -91,15 +90,6 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Remove props sync effect
-  /*
-  useEffect(() => {
-    if (userCompanies && userCompanies.length === 1 && !selectedCompanyId) {
-      setSelectedCompanyId(userCompanies[0].id)
-    }
-  }, [userCompanies, selectedCompanyId])
-  */
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -229,6 +219,7 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
     return matchesSearch && matchesCategory
   })
 
+  // Pagination Logic
   const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage)
   const paginatedSuppliers = filteredSuppliers.slice(
     (currentPage - 1) * itemsPerPage,
@@ -250,9 +241,7 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
   }
 
   return (
-    <div className="space-y-8">
-      {/* <CompanySelector ... /> */}
-
+    <div className="space-y-6">
       {!selectedCompanyId && (
         <Card className="text-center py-12">
           <CardContent>
@@ -262,155 +251,153 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
       )}
 
       {selectedCompanyId && (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <CardTitle>Liste des Fournisseurs</CardTitle>
-                <CardDescription>
-                  Gérez vos fournisseurs, filtrez par catégorie et suivez les soldes.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleExportTemplate}>
-                  <Download className="h-4 w-4 mr-2" /> Modèle Excel
-                </Button>
-                <SupplierImportDialog
-                  companyId={selectedCompanyId}
-                  onImportSuccess={() => fetchSuppliers(selectedCompanyId!)}
-                  categories={categories}
-                />
-                <Button onClick={handleAddNewClick}>Ajouter</Button>
-              </div>
+        <>
+          <PageHeader
+            title="Liste des Fournisseurs"
+            description="Gérez vos fournisseurs, filtrez par catégorie et suivez les soldes."
+            icon={Truck}
+          >
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={handleExportTemplate}>
+                <Download className="h-4 w-4 mr-2" /> Modèle Excel
+              </Button>
+              <SupplierImportDialog
+                companyId={selectedCompanyId}
+                onImportSuccess={() => fetchSuppliers(selectedCompanyId!)}
+                categories={categories}
+              />
+              <Button onClick={handleAddNewClick}>Ajouter</Button>
             </div>
+          </PageHeader>
 
-            <div className="flex flex-col sm:flex-row gap-4 mt-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher par nom, email..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Toutes catégories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes catégories</SelectItem>
-                  {parentCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden md:table-cell">Catégorie</TableHead>
-                  <TableHead className="hidden md:table-cell">Contact</TableHead>
-                  <TableHead className="hidden md:table-cell">Matricule Fiscal</TableHead>
-                  <TableHead className="text-right">Solde</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isInitialLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-[200px]" />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Skeleton className="h-4 w-[150px]" />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Skeleton className="h-4 w-[150px]" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-4 w-[80px] ml-auto" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-8 w-[70px]" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : suppliers.length === 0 ? (
+          <FilterToolbar
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Rechercher par nom, email..."
+            resultCount={filteredSuppliers.length}
+            resultLabel={filteredSuppliers.length > 1 ? "fournisseurs trouvés" : "fournisseur trouvé"}
+            onReset={() => { setSearchTerm(""); setCategoryFilter("all"); }}
+            showReset={!!searchTerm || categoryFilter !== "all"}
+          >
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-full sm:w-[200px] h-9">
+                <SelectValue placeholder="Toutes catégories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes catégories</SelectItem>
+                {parentCategories.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterToolbar>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      Aucun fournisseur trouvé pour cette entreprise.
-                      <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
-                        Ajoutez votre premier fournisseur.
-                      </Button>
-                    </TableCell>
+                    <TableHead>Nom</TableHead>
+                    <TableHead className="hidden md:table-cell">Catégorie</TableHead>
+                    <TableHead className="hidden md:table-cell">Contact</TableHead>
+                    <TableHead className="hidden md:table-cell">Matricule Fiscal</TableHead>
+                    <TableHead className="text-right">Solde</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ) : (
-                  paginatedSuppliers.map((supplier) => {
-                    const categoryName = categories.find(c => c.id === supplier.category_id)?.name
-                    const subCategoryName = categories.find(c => c.id === supplier.subcategory_id)?.name
-
-                    return (
-                      <TableRow key={supplier.id}>
-                        <TableCell className="font-medium">
-                          <div>{supplier.name}</div>
-                          <div className="text-xs text-muted-foreground md:hidden">{categoryName}</div>
+                </TableHeader>
+                <TableBody>
+                  {isInitialLoading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Skeleton className="h-4 w-[200px]" />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          {categoryName && (
-                            <div className="flex flex-col text-sm">
-                              <span className="font-medium">{categoryName}</span>
-                              {subCategoryName && <span className="text-xs text-muted-foreground">{subCategoryName}</span>}
-                            </div>
-                          )}
+                          <Skeleton className="h-4 w-[150px]" />
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{supplier.contact_person}</TableCell>
-                        <TableCell className="hidden md:table-cell">{supplier.matricule_fiscal}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {supplier.balance != null ? supplier.balance.toFixed(3) : "N/A"} TND
+                        <TableCell className="hidden md:table-cell">
+                          <Skeleton className="h-4 w-[150px]" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Skeleton className="h-4 w-[80px] ml-auto" />
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => handleEditClick(supplier)}>
-                            Gérer
-                          </Button>
+                          <Skeleton className="h-8 w-[70px]" />
                         </TableCell>
                       </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
+                    ))
+                  ) : suppliers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center">
+                        Aucun fournisseur trouvé pour cette entreprise.
+                        <Button variant="link" className="pl-1" onClick={handleAddNewClick}>
+                          Ajoutez votre premier fournisseur.
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginatedSuppliers.map((supplier) => {
+                      const categoryName = categories.find(c => c.id === supplier.category_id)?.name
+                      const subCategoryName = categories.find(c => c.id === supplier.subcategory_id)?.name
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-end space-x-2 py-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {currentPage} sur {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      return (
+                        <TableRow key={supplier.id}>
+                          <TableCell className="font-medium">
+                            <div>{supplier.name}</div>
+                            <div className="text-xs text-muted-foreground md:hidden">{categoryName}</div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {categoryName && (
+                              <div className="flex flex-col text-sm">
+                                <span className="font-medium">{categoryName}</span>
+                                {subCategoryName && <span className="text-xs text-muted-foreground">{subCategoryName}</span>}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{supplier.contact_person}</TableCell>
+                          <TableCell className="hidden md:table-cell">{supplier.matricule_fiscal}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {supplier.balance != null ? supplier.balance.toFixed(3) : "N/A"} TND
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="outline" size="sm" onClick={() => handleEditClick(supplier)}>
+                              Gérer
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-end space-x-2 py-4 px-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {currentPage} sur {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>

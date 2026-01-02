@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { FilterToolbar } from "@/components/ui/filter-toolbar"
 
 interface PaymentHistoryListProps {
     companyId: string
@@ -30,6 +31,7 @@ export function PaymentHistoryList({ companyId, refreshTrigger }: PaymentHistory
     const supabase = createClient()
     const [payments, setPayments] = useState<PaymentItem[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [searchTerm, setSearchTerm] = useState("")
 
     const fetchHistory = async () => {
         setIsLoading(true)
@@ -47,7 +49,7 @@ export function PaymentHistoryList({ companyId, refreshTrigger }: PaymentHistory
                 `)
                 .eq('invoice.company_id', companyId)
                 .order('payment_date', { ascending: false })
-                .limit(20)
+                .limit(50)
 
             // 2. Fetch BL Payments
             const { data: blPayments, error: blError } = await supabase
@@ -62,7 +64,7 @@ export function PaymentHistoryList({ companyId, refreshTrigger }: PaymentHistory
                 `)
                 .eq('delivery_note.company_id', companyId)
                 .order('payment_date', { ascending: false })
-                .limit(20)
+                .limit(50)
 
             if (invError) console.error("Inv Pay Error", invError)
             if (blError) console.error("BL Pay Error", blError)
@@ -110,9 +112,9 @@ export function PaymentHistoryList({ companyId, refreshTrigger }: PaymentHistory
                 all = [...all, ...blMapped]
             }
 
-            // 4. Sort and Slice
+            // 4. Sort
             all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            setPayments(all.slice(0, 30))
+            setPayments(all)
 
         } catch (err) {
             console.error(err)
@@ -127,64 +129,88 @@ export function PaymentHistoryList({ companyId, refreshTrigger }: PaymentHistory
         }
     }, [companyId, refreshTrigger])
 
+    // Filter Logic
+    const filteredPayments = useMemo(() => {
+        if (!searchTerm) return payments
+        const lower = searchTerm.toLowerCase()
+        return payments.filter(p =>
+            p.customerName.toLowerCase().includes(lower) ||
+            p.reference.toLowerCase().includes(lower) ||
+            (p.notes && p.notes.toLowerCase().includes(lower))
+        )
+    }, [payments, searchTerm])
+
     return (
-        <Card className="h-full shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="space-y-1">
-                    <CardTitle className="text-xl">Derniers Encaissements</CardTitle>
-                    <CardDescription>Flux de trésorerie récent (Global)</CardDescription>
+        <Card className="h-full shadow-md border-none bg-transparent">
+            <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <h3 className="text-lg font-semibold">Derniers Encaissements</h3>
+                    <p className="text-sm text-muted-foreground">Flux de trésorerie récent (Global)</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={fetchHistory} disabled={isLoading}>
-                    <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <Button variant="ghost" size="sm" onClick={fetchHistory} disabled={isLoading}>
+                    <RefreshCcw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    Actualiser
                 </Button>
-            </CardHeader>
-            <CardContent>
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/50">
-                                <TableHead className="w-[100px]">Date</TableHead>
-                                <TableHead>Client</TableHead>
-                                <TableHead>Document</TableHead>
-                                <TableHead>Mode</TableHead>
-                                <TableHead className="text-right">Montant</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {payments.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground italic">
-                                        Aucun paiement récent trouvé.
-                                    </TableCell>
+            </div>
+
+            <FilterToolbar
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                searchPlaceholder="Rechercher par client, référence..."
+                resultCount={filteredPayments.length}
+                resultLabel="paiements"
+                className="mb-4"
+            />
+
+            <Card className="border bg-card">
+                <CardContent className="p-0">
+                    <div className="rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50">
+                                    <TableHead className="w-[100px]">Date</TableHead>
+                                    <TableHead>Client</TableHead>
+                                    <TableHead>Document</TableHead>
+                                    <TableHead>Mode</TableHead>
+                                    <TableHead className="text-right">Montant</TableHead>
                                 </TableRow>
-                            ) : (
-                                payments.map((payment) => (
-                                    <TableRow key={payment.id} className="hover:bg-muted/50">
-                                        <TableCell className="font-medium text-xs">
-                                            {format(new Date(payment.date), "dd/MM/yyyy")}
-                                        </TableCell>
-                                        <TableCell className="font-medium">
-                                            {payment.customerName}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="font-normal text-[10px] gap-1">
-                                                {payment.type === 'INVOICE' ? <FileText className="h-3 w-3 text-indigo-500" /> : <Truck className="h-3 w-3 text-blue-500" />}
-                                                {payment.reference}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-xs text-muted-foreground">
-                                            {payment.method}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono font-semibold text-emerald-600">
-                                            +{payment.amount.toFixed(3)}
+                            </TableHeader>
+                            <TableBody>
+                                {filteredPayments.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground italic">
+                                            {searchTerm ? "Aucun paiement trouvé pour cette recherche." : "Aucun paiement récent trouvé."}
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </CardContent>
+                                ) : (
+                                    filteredPayments.map((payment) => (
+                                        <TableRow key={payment.id} className="hover:bg-muted/50">
+                                            <TableCell className="font-medium text-xs">
+                                                {format(new Date(payment.date), "dd/MM/yyyy")}
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {payment.customerName}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="font-normal text-[10px] gap-1">
+                                                    {payment.type === 'INVOICE' ? <FileText className="h-3 w-3 text-indigo-500" /> : <Truck className="h-3 w-3 text-blue-500" />}
+                                                    {payment.reference}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {payment.method}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono font-semibold text-emerald-600">
+                                                +{payment.amount.toFixed(3)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
         </Card>
     )
 }
