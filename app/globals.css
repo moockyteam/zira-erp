@@ -219,8 +219,8 @@
     background: white;
   }
 
-  /* Hide common UI elements globally - NOT footer (used for document totals) */
-  header, nav, aside, .sidebar {
+  /* Hide dashboard UI elements only - NOT document content headers/footers */
+  nav, aside, .sidebar, [data-hide-print], .no-print {
     display: none !important;
   }
 }
