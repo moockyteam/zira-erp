@@ -41,6 +41,7 @@ const navLinks = [
   { href: "/dashboard/returns", label: "Bons de Retour", icon: CornerUpLeft },
   { href: "/dashboard/stock-issues", label: "Bons de Sortie", icon: Package },
   { href: "/dashboard/payments", label: "Encaissements", icon: Banknote },
+  { href: "/dashboard/global-collections", label: "Encaissement Global", icon: Receipt },
   { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown },
 ]
 

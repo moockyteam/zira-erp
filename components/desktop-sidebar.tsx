@@ -86,6 +86,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
       title: "Finance",
       links: [
         { href: "/dashboard/payments", label: "Encaissements", icon: Banknote },
+        { href: "/dashboard/global-collections", label: "Encaissement Global", icon: Receipt },
         { href: "/dashboard/expenses", label: "Dépenses & Échéances", icon: TrendingDown },
       ],
     },
