@@ -97,7 +97,7 @@ export function InvoiceForm({
   )
 
   const [hasStamp, setHasStamp] = useState(initialData?.has_stamp ?? true)
-  const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? true)
+  const [showRemise, setShowRemise] = useState(initialData?.show_remise_column ?? false)
   const [hasWithholdingTax, setHasWithholdingTax] = useState(initialData?.has_withholding_tax ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [quoteId, setQuoteId] = useState(initialData?.quote_id || null)
