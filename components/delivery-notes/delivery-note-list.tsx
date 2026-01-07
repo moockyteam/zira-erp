@@ -25,6 +25,7 @@ type Dn = {
   delivery_date: string
   status: "BROUILLON" | "LIVRE" | "ANNULE"
   total_ttc?: number
+  invoice_id?: string
 }
 
 type SortConfig = {
@@ -54,6 +55,9 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
   }, [selectedCompanyId])
 
   // Force refresh when the page becomes visible (after navigating back)
+  // Force refresh when the page becomes visible (after navigating back)
+  // REMOVED at user request for stability
+  /*
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && selectedCompanyId) {
@@ -75,27 +79,74 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
       window.removeEventListener('focus', handleFocus)
     }
   }, [selectedCompanyId])
+  */
 
   const fetchDns = async (companyId: string) => {
     setIsLoading(true)
+
+    // 1. Fetch BLs
     const { data, error } = await supabase
       .from("delivery_notes")
-      .select(`id, delivery_note_number, customer_id, customers(name), delivery_date, status, total_ttc`)
+      .select(`
+        id, 
+        delivery_note_number, 
+        customer_id, 
+        customers(name), 
+        delivery_date, 
+        status, 
+        total_ttc,
+        invoice_id
+      `)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Erreur chargement BL:", error)
-    } else {
-      // Map the data to handle Supabase returning arrays for joined relations
-      const formattedData = (data as any[]).map(item => ({
+      setIsLoading(false)
+      return
+    }
+
+    // 2. Fetch Payments for these BLs explicitly
+    const blIds = data?.map(d => d.id) || []
+    let paymentsMap: Record<string, number> = {}
+
+    if (blIds.length > 0) {
+      const { data: payments } = await supabase
+        .from("delivery_note_payments")
+        .select("delivery_note_id, amount")
+        .in("delivery_note_id", blIds)
+
+      if (payments) {
+        payments.forEach((p: any) => {
+          if (!paymentsMap[p.delivery_note_id]) paymentsMap[p.delivery_note_id] = 0
+          paymentsMap[p.delivery_note_id] += (p.amount || 0)
+        })
+      }
+    }
+
+    // 3. Merge & Calculate Status
+    const formattedData = (data as any[]).map(item => {
+      const totalPaid = paymentsMap[item.id] || 0
+      const totalTTC = item.total_ttc || 0
+
+      let paymentStatus = "NON_PAYE"
+      if (totalPaid >= (totalTTC - 0.005) && totalTTC > 0) paymentStatus = "PAYE"
+      else if (totalPaid > 0) paymentStatus = "PARTIELLEMENT_PAYE"
+
+      // Only relevant for LIVRE and not cancelled
+      if (item.status !== "LIVRE") paymentStatus = "NA"
+
+      return {
         ...item,
         customers: Array.isArray(item.customers) && item.customers.length > 0
           ? item.customers[0]
-          : item.customers
-      }))
-      setDeliveryNotes(formattedData as Dn[])
-    }
+          : item.customers,
+        totalPaid,
+        paymentStatus
+      }
+    })
+
+    setDeliveryNotes(formattedData as Dn[])
     setIsLoading(false)
   }
 
@@ -108,6 +159,11 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
 
     return { total, draft, delivered, cancelled }
   }, [deliveryNotes])
+
+  // Payment Status Filter
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all")
+
+  // ... (existing useEffects)
 
   // Filtering & Sorting Logic
   const filteredDeliveryNotes = useMemo(() => {
@@ -127,7 +183,18 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
       result = result.filter((dn) => dn.status === statusFilter)
     }
 
-    // 3. Sorting
+    // 3. Payment Status Filter
+    if (paymentStatusFilter !== "all") {
+      result = result.filter((dn: any) => {
+        // Handle mapped payment status
+        const payStatus = dn.paymentStatus || "NON_PAYE"
+        // Special case: if invoiced, we might want to exclude it or include it based on logic?
+        // For now, simple string match
+        return payStatus === paymentStatusFilter
+      })
+    }
+
+    // 4. Sorting
     result.sort((a, b) => {
       let aValue: any = a[sortConfig.key as keyof Dn]
       let bValue: any = b[sortConfig.key as keyof Dn]
@@ -143,7 +210,7 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
     })
 
     return result
-  }, [deliveryNotes, searchTerm, statusFilter, sortConfig])
+  }, [deliveryNotes, searchTerm, statusFilter, paymentStatusFilter, sortConfig])
 
   const requestSort = (key: keyof Dn | "customer_name") => {
     let direction: "asc" | "desc" = "asc"
@@ -227,30 +294,45 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
           variant="danger"
           subtitle="BLs annulés"
         />
-      </div>
+      </div >
 
       {/* Filters & Table */}
-      <FilterToolbar
+      < FilterToolbar
         searchValue={searchTerm}
         onSearchChange={setSearchTerm}
         searchPlaceholder="Rechercher par numéro ou client..."
         resultCount={filteredDeliveryNotes.length}
         resultLabel={filteredDeliveryNotes.length > 1 ? "bons de livraison trouvés" : "bon de livraison trouvé"}
-        onReset={() => { setSearchTerm(""); setStatusFilter("all"); }}
-        showReset={!!searchTerm || statusFilter !== "all"}
+        onReset={() => { setSearchTerm(""); setStatusFilter("all"); setPaymentStatusFilter("all"); }
+        }
+        showReset={!!searchTerm || statusFilter !== "all" || paymentStatusFilter !== "all"
+        }
       >
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px] h-9">
-            <SelectValue placeholder="Statut" />
+          <SelectTrigger className="w-[150px] h-9">
+            <SelectValue placeholder="Statut BL" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous les statuts</SelectItem>
+            <SelectItem value="all">Tous (Statut BL)</SelectItem>
             <SelectItem value="BROUILLON">Brouillon</SelectItem>
             <SelectItem value="LIVRE">Livré</SelectItem>
             <SelectItem value="ANNULE">Annulé</SelectItem>
           </SelectContent>
         </Select>
-      </FilterToolbar>
+
+        <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+          <SelectTrigger className="w-[160px] h-9">
+            <SelectValue placeholder="Paiement" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous (Paiement)</SelectItem>
+            <SelectItem value="PAYE">Payé</SelectItem>
+            <SelectItem value="PARTIELLEMENT_PAYE">Partiellement</SelectItem>
+            <SelectItem value="NON_PAYE">Non Payé</SelectItem>
+            <SelectItem value="NA">N/A (Non Livré)</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterToolbar >
 
       <Card className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <CardContent className="p-0">
@@ -286,7 +368,12 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                   onClick={() => requestSort("status")}
                 >
                   <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Statut {getSortIcon("status")}
+                    Statut BL {getSortIcon("status")}
+                  </div>
+                </TableHead>
+                <TableHead className="h-11">
+                  <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Paiement
                   </div>
                 </TableHead>
                 <TableHead
@@ -333,6 +420,22 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                         {dn.status}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      {dn.status === "LIVRE" && !dn.invoice_id && (
+                        <Badge variant="outline" className={cn(
+                          "font-normal text-[10px] px-2 py-0.5 border-0",
+                          (dn as any).paymentStatus === "PAYE" && "bg-emerald-100 text-emerald-700",
+                          (dn as any).paymentStatus === "PARTIELLEMENT_PAYE" && "bg-amber-100 text-amber-700",
+                          (dn as any).paymentStatus === "NON_PAYE" && "bg-rose-100 text-rose-700"
+                        )}>
+                          {(dn as any).paymentStatus === "PAYE" ? "PAYÉ" :
+                            (dn as any).paymentStatus === "PARTIELLEMENT_PAYE" ? "PARTIEL" : "NON PAYÉ"}
+                        </Badge>
+                      )}
+                      {dn.invoice_id && (
+                        <Badge variant="secondary" className="text-[10px] opacity-70">FACTURÉ</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-mono font-medium">
                       {dn.total_ttc ? dn.total_ttc.toFixed(3) : "0.000"} <span className="text-xs text-muted-foreground font-sans">TND</span>
                     </TableCell>
@@ -346,18 +449,7 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                                 Facturer
                               </Button>
                             </Link>
-                            <DeliveryNotePaymentDialog
-                              deliveryNoteId={dn.id}
-                              deliveryNoteReference={dn.delivery_note_number}
-                              amountDue={dn.total_ttc || 0}
-                              customerId={dn.customer_id}
-                              onPaymentSuccess={() => fetchDns(selectedCompanyId!)}
-                            >
-                              <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
-                                <CreditCard className="h-3.5 w-3.5" />
-                                Payer
-                              </Button>
-                            </DeliveryNotePaymentDialog>
+                            {/* Payment button removed to enforce Global Collections workflow */}
                           </>
                         )}
                         <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />
@@ -408,6 +500,6 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
           </Table>
         </CardContent>
       </Card>
-    </div>
+    </div >
   )
 }

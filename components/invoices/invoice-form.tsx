@@ -203,6 +203,7 @@ export function InvoiceForm({
       timbre,
       total_ttc,
       withholding_tax_amount,
+      net_to_pay,
     }
   }, [lines, isFodecApplicable, hasStamp, hasWithholdingTax, selectedCompany])
 

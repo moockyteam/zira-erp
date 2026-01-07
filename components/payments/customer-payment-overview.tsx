@@ -144,30 +144,34 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                 })
 
                 invPayments?.forEach((p: any) => {
+                    const isAvoir = p.payment_method === 'AVOIR';
                     tempItems.push({
                         id: `pay-inv-${p.id}`,
                         date: p.payment_date,
                         type: 'PAYMENT',
-                        reference: `Paie ${p.payment_method}`,
-                        description: `Règlement Facture`,
+                        reference: isAvoir ? `Avoir` : `Paie ${p.payment_method}`,
+                        description: isAvoir ? `Avoir / Avance` : `Règlement Facture`,
                         amount: p.amount,
                         debit: 0,
                         credit: p.amount,
-                        details: p.notes
+                        details: p.notes,
+                        isAvoir: isAvoir // Helper flag
                     })
                 })
 
                 blPayments?.forEach((p: any) => {
+                    const isAvoir = p.payment_method === 'AVOIR';
                     tempItems.push({
                         id: `pay-bl-${p.id}`,
                         date: p.payment_date,
                         type: 'PAYMENT',
-                        reference: `Paie ${p.payment_method}`,
-                        description: `Règlement BL`,
+                        reference: isAvoir ? `Avoir` : `Paie ${p.payment_method}`,
+                        description: isAvoir ? `Avoir / Avance` : `Règlement BL`,
                         amount: p.amount,
                         debit: 0,
                         credit: p.amount,
-                        details: p.notes
+                        details: p.notes,
+                        isAvoir: isAvoir
                     })
                 })
 
@@ -262,7 +266,7 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
 
                     {/* Financial Summary Strip */}
                     {statement.length > 0 && (
-                        <div className="grid grid-cols-4 gap-0 border border-gray-300 rounded overflow-hidden text-center text-xs bg-white mt-4">
+                        <div className="grid grid-cols-5 gap-0 border border-gray-300 rounded overflow-hidden text-center text-xs bg-white mt-4">
                             <div className="p-2 border-r border-gray-300 bg-gray-50">
                                 <p className="text-gray-500 uppercase text-[10px] mb-1">Solde Initial {balanceStartDate && `(${format(new Date(balanceStartDate), 'dd/MM/yy')})`}</p>
                                 <p className="font-bold text-base">
@@ -276,9 +280,21 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                                 </p>
                             </div>
                             <div className="p-2 border-r border-gray-300">
-                                <p className="text-gray-500 uppercase text-[10px] mb-1">Total Crédit (Payé)</p>
+                                <p className="text-gray-500 uppercase text-[10px] mb-1">Total Payé</p>
                                 <p className="font-bold text-emerald-700 text-base">
-                                    {statement.reduce((acc, item) => acc + (Number(item.credit) || 0), 0).toFixed(3)}
+                                    {statement.reduce((acc, item) => {
+                                        if ((item as any).isAvoir) return acc;
+                                        return acc + (Number(item.credit) || 0)
+                                    }, 0).toFixed(3)}
+                                </p>
+                            </div>
+                            <div className="p-2 border-r border-gray-300">
+                                <p className="text-gray-500 uppercase text-[10px] mb-1">Total Avoirs</p>
+                                <p className="font-bold text-emerald-700 text-base">
+                                    {statement.reduce((acc, item) => {
+                                        if (!(item as any).isAvoir) return acc;
+                                        return acc + (Number(item.credit) || 0)
+                                    }, 0).toFixed(3)}
                                 </p>
                             </div>
                             <div className="p-2 bg-gray-100">
@@ -386,7 +402,20 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                         <div className="bg-emerald-50/50 px-3 py-2 rounded border border-emerald-100 flex flex-col">
                             <span className="text-xs text-emerald-600 font-medium uppercase">Total Payé</span>
                             <span className="font-mono font-bold text-emerald-700">
-                                {statement.reduce((acc, item) => acc + (Number(item.credit) || 0), 0).toFixed(3)} TND
+                                {statement.reduce((acc, item) => {
+                                    if ((item as any).isAvoir) return acc;
+                                    return acc + (Number(item.credit) || 0)
+                                }, 0).toFixed(3)} TND
+                            </span>
+                        </div>
+
+                        <div className="bg-emerald-100/50 px-3 py-2 rounded border border-emerald-200 flex flex-col">
+                            <span className="text-xs text-emerald-800 font-medium uppercase">Total Avoirs</span>
+                            <span className="font-mono font-bold text-emerald-900">
+                                {statement.reduce((acc, item) => {
+                                    if (!(item as any).isAvoir) return acc;
+                                    return acc + (Number(item.credit) || 0)
+                                }, 0).toFixed(3)} TND
                             </span>
                         </div>
 
@@ -452,7 +481,11 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                                                         <span className="text-sm font-medium flex items-center gap-2">
                                                             {item.type === 'INVOICE' && <FileText className="h-3 w-3 text-indigo-500 print:text-black" />}
                                                             {item.type === 'DELIVERY_NOTE' && <Truck className="h-3 w-3 text-blue-500 print:text-black" />}
-                                                            {item.type === 'PAYMENT' && <CreditCard className="h-3 w-3 text-emerald-500 print:text-black" />}
+                                                            {item.type === 'PAYMENT' && (
+                                                                (item as any).isAvoir
+                                                                    ? <CreditCard className="h-3 w-3 text-white fill-emerald-600 print:text-black" />
+                                                                    : <CreditCard className="h-3 w-3 text-emerald-500 print:text-black" />
+                                                            )}
                                                             {item.reference}
                                                         </span>
                                                         <span className="text-[10px] text-muted-foreground hidden sm:inline-block print:inline-block">

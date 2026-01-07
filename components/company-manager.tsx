@@ -64,7 +64,11 @@ const ACTIVITIES = [
   { id: "extractive", label: "Extractive", icon: Pickaxe, description: "Mines et carrières" },
 ] as const
 
-export function CompanyManager() {
+interface CompanyManagerProps {
+  defaultOpen?: boolean
+}
+
+export function CompanyManager({ defaultOpen = false }: CompanyManagerProps) {
   const supabase = createClient()
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
   const [companies, setCompanies] = useState<Company[]>([])
@@ -76,7 +80,7 @@ export function CompanyManager() {
   const [selectedDel, setSelectedDel] = useState<string>("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
 
-  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isFormOpen, setIsFormOpen] = useState(defaultOpen)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Check, ChevronsUpDown, Loader2, AlertCircle, CheckCircle2, DollarSign, Calendar, CreditCard, FileText } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, AlertCircle, CheckCircle2, DollarSign, Calendar, CreditCard, FileText, Info } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -80,13 +80,14 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
         fetchBalance()
     }, [selectedCustomerId, supabase])
 
+    // Avoir Mode State
+    const [transactionType, setTransactionType] = useState<"PAYMENT" | "AVOIR">("PAYMENT")
+
     const handleReset = () => {
         setAmount(0)
         setNotes("")
         setResult(null)
-        // Keep customer selected for faster sequential entry? Or reset? 
-        // Let's keep customer selected is usually better, but maybe user wants to switch.
-        // Let's NOT reset customer by default, but provide a "New Transaction" button that just clears the result.
+        // Keep customer selected
     }
 
     const handleSave = async () => {
@@ -103,11 +104,15 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
         setResult(null)
 
         try {
+            // If AVOIR, force method to 'AVOIR'
+            // If PAYMENT, use selected method
+            const finalMethod = transactionType === "AVOIR" ? "AVOIR" : method
+
             // Call the RPC function (v2)
             const { data, error } = await supabase.rpc('record_global_payment', {
                 p_customer_id: selectedCustomerId,
                 p_amount: amount,
-                p_payment_method: method,
+                p_payment_method: finalMethod,
                 p_notes: notes,
                 p_date: date
             })
@@ -115,7 +120,7 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
             if (error) throw error
 
             setResult(data)
-            toast.success("Paiement enregistré avec succès")
+            toast.success(transactionType === "AVOIR" ? "Avoir enregistré avec succès" : "Paiement enregistré avec succès")
             onPaymentSuccess()
 
             // Refresh balance
@@ -138,10 +143,10 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-emerald-600">
                         <CheckCircle2 className="h-6 w-6" />
-                        Paiement enregistré !
+                        {transactionType === "AVOIR" ? "Avoir Enregistré !" : "Paiement enregistré !"}
                     </CardTitle>
                     <CardDescription>
-                        Le paiement de <strong>{amount.toFixed(3)} TND</strong> a été traité avec succès.
+                        {transactionType === "AVOIR" ? "L'avoir de" : "Le paiement de"} <strong>{amount.toFixed(3)} TND</strong> a été traité avec succès.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -194,7 +199,7 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
                 </CardContent>
                 <CardFooter>
                     <Button onClick={handleReset} className="w-full">
-                        Nouveau Paiement
+                        {transactionType === "AVOIR" ? "Nouvel Avoir" : "Nouveau Paiement"}
                     </Button>
                 </CardFooter>
             </Card>
@@ -206,11 +211,37 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
             <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent border-b">
                 <CardTitle className="flex items-center gap-2">
                     <DollarSign className="h-5 w-5 text-primary" />
-                    Nouveau Paiement
+                    Nouvelle Transaction
                 </CardTitle>
                 <CardDescription>
-                    Enregistrer un encaissement client. L'affectation se fera automatiquement sur les plus anciennes dettes.
+                    Enregistrer un encaissement ou un avoir client.
                 </CardDescription>
+
+                {/* TYPE TOGGLE */}
+                <div className="flex p-1 bg-muted rounded-lg mt-4">
+                    <button
+                        onClick={() => setTransactionType("PAYMENT")}
+                        className={cn(
+                            "flex-1 text-sm font-medium py-2 rounded-md transition-all",
+                            transactionType === "PAYMENT"
+                                ? "bg-background text-primary shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        Encaissement
+                    </button>
+                    <button
+                        onClick={() => setTransactionType("AVOIR")}
+                        className={cn(
+                            "flex-1 text-sm font-medium py-2 rounded-md transition-all",
+                            transactionType === "AVOIR"
+                                ? "bg-background text-emerald-600 shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        Avoir / Avance
+                    </button>
+                </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
 
@@ -302,47 +333,80 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <Label>Mode de Paiement</Label>
-                        <Select value={method} onValueChange={setMethod}>
-                            <SelectTrigger className="h-10">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ESPECES">Espèces</SelectItem>
-                                <SelectItem value="CHEQUE">Chèque</SelectItem>
-                                <SelectItem value="VIREMENT">Virement</SelectItem>
-                                <SelectItem value="TRAITE">Traite</SelectItem>
-                                <SelectItem value="CARTE_BANCAIRE">Carte Bancaire</SelectItem>
-                                <SelectItem value="AUTRE">Autre</SelectItem>
-                            </SelectContent>
-                        </Select>
+                {transactionType === "PAYMENT" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <Label>Mode de Paiement</Label>
+                            <Select value={method} onValueChange={setMethod}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ESPECES">Espèces</SelectItem>
+                                    <SelectItem value="CHEQUE">Chèque</SelectItem>
+                                    <SelectItem value="VIREMENT">Virement</SelectItem>
+                                    <SelectItem value="TRAITE">Traite</SelectItem>
+                                    <SelectItem value="CARTE_BANCAIRE">Carte Bancaire</SelectItem>
+                                    <SelectItem value="AUTRE">Autre</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Référence / Notes</Label>
+                            <Input
+                                placeholder="Ex: Chèque n°123456"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                className="h-10"
+                            />
+                        </div>
                     </div>
+                )}
+
+                {transactionType === "AVOIR" && (
                     <div className="space-y-2">
-                        <Label>Référence / Notes</Label>
+                        <Label>Motif de l'Avoir / Notes</Label>
                         <Input
-                            placeholder="Ex: Chèque n°123456"
+                            placeholder="Ex: Retour marchandise, Geste commercial..."
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            className="h-10"
+                            className="h-10 bg-emerald-50/50 border-emerald-100"
                         />
                     </div>
-                </div>
+                )}
 
-                <Alert className="bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900">
-                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <AlertTitle className="text-blue-800 dark:text-blue-300 text-xs font-semibold">Allocation Automatique</AlertTitle>
-                    <AlertDescription className="text-blue-700 dark:text-blue-400 text-xs text-muted-foreground">
-                        Ce paiement sera utilisé pour solder les factures et BL impayés les plus anciens en priorité.
+
+                <Alert className={cn(
+                    "border-l-4",
+                    transactionType === "AVOIR"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-800"
+                        : "bg-blue-50 border-blue-500 text-blue-800"
+                )}>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle className="text-xs font-bold uppercase mb-1">
+                        {transactionType === "AVOIR" ? "Mode Avoir Client" : "Mode Encaissement"}
+                    </AlertTitle>
+                    <AlertDescription className="text-xs opacity-90">
+                        {transactionType === "AVOIR"
+                            ? "Ce montant sera déduit de la dette du client. S'il ne doit rien, cela créera un solde créditeur (avance) en sa faveur."
+                            : "Ce paiement sera utilisé pour régler les factures et BL impayés les plus anciens (FIFO)."
+                        }
                     </AlertDescription>
                 </Alert>
 
             </CardContent>
             <CardFooter className="bg-muted/10 p-4 border-t">
-                <Button size="lg" className="w-full font-bold" onClick={handleSave} disabled={isLoading || !selectedCustomerId || amount <= 0}>
+                <Button
+                    size="lg"
+                    className={cn(
+                        "w-full font-bold transition-all",
+                        transactionType === "AVOIR" ? "bg-emerald-600 hover:bg-emerald-700" : ""
+                    )}
+                    onClick={handleSave}
+                    disabled={isLoading || !selectedCustomerId || amount <= 0}
+                >
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Enregistrer le Paiement
+                    {transactionType === "AVOIR" ? "Enregistrer l'Avoir" : "Enregistrer le Paiement"}
                 </Button>
             </CardFooter>
         </Card>

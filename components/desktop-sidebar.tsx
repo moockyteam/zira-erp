@@ -160,7 +160,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
                   </CommandGroup>
                   <CommandSeparator />
                   <CommandGroup>
-                    <Link href="/dashboard/companies" onClick={() => setOpenCombobox(false)}>
+                    <Link href="/dashboard/companies?mode=create" onClick={() => setOpenCombobox(false)}>
                       <CommandItem className="cursor-pointer">
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Créer une entreprise

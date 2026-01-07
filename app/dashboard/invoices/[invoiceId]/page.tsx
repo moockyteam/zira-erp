@@ -29,7 +29,7 @@ export default async function InvoiceEditorPage({
 
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, name, is_subject_to_fodec")
+    .select("id, name, is_subject_to_fodec, default_withholding_tax_rate")
     .eq("user_id", user.id)
 
   if (!companies || companies.length === 0) {

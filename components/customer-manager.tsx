@@ -275,9 +275,20 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{customer.matricule_fiscal || "-"}</TableCell>
                         <TableCell className="text-right font-mono">
-                          <span className={customer.balance && customer.balance > 0 ? "text-destructive font-bold" : ""}>
-                            {customer.balance != null ? customer.balance.toFixed(3) : 'N/A'}
-                          </span>
+                          {customer.balance != null ? (
+                            <span className={
+                              customer.balance > 0.001
+                                ? "text-destructive font-bold" // Customer owes money
+                                : customer.balance < -0.001
+                                  ? "text-emerald-600 font-bold" // Company owes money (Credit)
+                                  : "text-muted-foreground" // Zero
+                            }>
+                              {customer.balance.toFixed(3)}
+                              {customer.balance < -0.001 && <span className="text-[10px] ml-1 uppercase text-emerald-600/70">(Crédit)</span>}
+                            </span>
+                          ) : (
+                            'N/A'
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
