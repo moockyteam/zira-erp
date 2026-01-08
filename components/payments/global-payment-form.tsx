@@ -152,17 +152,25 @@ export function GlobalPaymentForm({ companyId, onPaymentSuccess, onCustomerSelec
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-4 rounded-lg">
                         <div>
-                            <span className="text-muted-foreground block">Montant Total</span>
-                            <span className="font-bold text-lg">{amount.toFixed(3)} <span className="text-xs font-normal">TND</span></span>
+                            <span className="text-muted-foreground block">Montant Saisi</span>
+                            <span className="font-bold text-lg">{(result.total_requested || amount).toFixed(3)} <span className="text-xs font-normal">TND</span></span>
                         </div>
                         <div>
-                            <span className="text-muted-foreground block text-right">Montant Alloué</span>
-                            <span className="font-bold text-lg text-emerald-600 block text-right">{result.total_paid.toFixed(3)} <span className="text-xs font-normal">TND</span></span>
+                            <span className="text-muted-foreground block text-right">Alloué aux Documents</span>
+                            <span className="font-bold text-lg text-emerald-600 block text-right">{(result.total_allocated || result.total_paid || 0).toFixed(3)} <span className="text-xs font-normal">TND</span></span>
                         </div>
-                        {result.remaining_unallocated > 0.001 && (
-                            <div className="col-span-2 pt-2 border-t mt-2 flex justify-between">
-                                <span className="text-orange-600 font-medium">Non alloué (Solde Créditeur)</span>
-                                <span className="font-bold text-orange-600">{result.remaining_unallocated.toFixed(3)} TND</span>
+                        {(result.total_credited > 0.001 || result.remaining_unallocated > 0.001) && (
+                            <div className="col-span-2 pt-2 border-t mt-2 flex justify-between items-center">
+                                <span className="text-blue-600 font-medium flex items-center gap-2">
+                                    <CreditCard className="h-4 w-4" />
+                                    {result.total_credited > 0 ? "Stocké en Crédit Client" : "Non alloué"}
+                                </span>
+                                <span className="font-bold text-blue-600">{(result.total_credited || result.remaining_unallocated || 0).toFixed(3)} TND</span>
+                            </div>
+                        )}
+                        {result.total_credited > 0.001 && (
+                            <div className="col-span-2 bg-blue-50 border border-blue-200 text-blue-700 p-2 rounded text-xs">
+                                ✓ Le crédit a été enregistré et sera déduit automatiquement du solde client.
                             </div>
                         )}
                     </div>

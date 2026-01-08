@@ -19,15 +19,23 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { AddCategoryDialog } from "./add-category-dialog"
-import { Trash2, Save, Package, DollarSign, Users, Info } from "lucide-react"
+import { Trash2, Save, Package, DollarSign, Users, Info, Factory, Link as LinkIcon, Layers } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { cn } from "@/lib/utils"
+// Import BOM Manager
+import { BomManager } from "./bom-manager"
 
 // Types
+export type ItemType = 'product' | 'raw_material' | 'semi_finished' | 'consumable' | 'asset'
+
 export type Item = {
   id: string
   name: string
   reference: string | null
+  type: ItemType // New field
+  consumption_unit: string | null // New field
   category_id: string | null
   subcategory_id: string | null
   quantity_on_hand: number
@@ -59,6 +67,8 @@ interface ManageItemDialogProps {
 const initialFormData = {
   name: "",
   reference: "",
+  type: "product" as ItemType,
+  consumption_unit: "",
   description: "",
   category_id: null as string | null,
   subcategory_id: null as string | null,
@@ -85,7 +95,7 @@ export function ManageItemDialog({
 
   const isCreateMode = !currentItem?.id
 
-  // CORRECTION CRUCIALE : Synchroniser la prop 'initialItem' avec l'état interne 'currentItem'
+  // Synchroniser la prop 'initialItem' avec l'état interne
   useEffect(() => {
     setCurrentItem(initialItem)
   }, [initialItem])
@@ -94,11 +104,12 @@ export function ManageItemDialog({
     if (isOpen && companyId) {
       fetchInitialData()
     }
-    // La logique dépend maintenant de 'currentItem' qui est toujours à jour
     if (currentItem?.id) {
       setFormData({
         name: currentItem.name || "",
         reference: currentItem.reference || "",
+        type: currentItem.type || "product",
+        consumption_unit: currentItem.consumption_unit || "",
         description: currentItem.description || "",
         category_id: currentItem.category_id,
         subcategory_id: currentItem.subcategory_id || null,
@@ -155,15 +166,16 @@ export function ManageItemDialog({
         onOpenChange(false)
       }
     } else {
-      // FIX: Explicitly set is_archived to false to ensure new items are visible
       const payload = { ...dataToSave, is_archived: false }
       const { data: newItem, error } = await supabase.from("items").insert(payload).select().single()
       if (error) {
         toast.error(error.message)
       } else {
-        toast.success("Article créé. Vous pouvez maintenant associer des fournisseurs.")
+        toast.success("Article créé. Vous pouvez maintenant configurer la suite.")
         setCurrentItem(newItem as Item)
         onSuccess()
+        // We do NOT close dialog immediately if created, to allow configured Suppliers/BOM
+        // onOpenChange(false) 
       }
     }
     setIsSaving(false)
@@ -215,6 +227,12 @@ export function ManageItemDialog({
     }
   }
 
+  // --- Helpers for Type Logic ---
+  const isManufactured = formData.type === 'semi_finished' || formData.type === 'product'
+  const isRawMaterial = formData.type === 'raw_material'
+  const isAsset = formData.type === 'asset'
+  // ------------------------------
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl h-[90vh] flex flex-col">
@@ -225,24 +243,88 @@ export function ManageItemDialog({
           </DialogTitle>
           <DialogDescription>
             {isCreateMode
-              ? "Configurez les informations de base de l'article. Les fournisseurs pourront être ajoutés après la création."
-              : "Modifiez les détails de l'article, gérez les stocks et les fournisseurs associés."}
+              ? "Définissez d'abord le type d'article (Marchandise, MP, etc.)"
+              : `Type actuel : ${currentItem?.type === 'raw_material' ? 'Matière Première' :
+                currentItem?.type === 'semi_finished' ? 'Produit Semi-Fini' :
+                  currentItem?.type === 'asset' ? 'Immobilisation' :
+                    currentItem?.type === 'consumable' ? 'Consommable' : 'Marchandise'
+              }`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-1">
+          {/* TYPE SELECTION (Only in Create Mode for simplicity, or if type is missing) */}
+          {(isCreateMode || !formData.type) && (
+            <div className="mb-6 p-4 border rounded-lg bg-muted/20">
+              <Label className="mb-3 block text-sm font-medium">Quel type d'article créez-vous ?</Label>
+              <RadioGroup
+                value={formData.type}
+                onValueChange={(val: ItemType) => setFormData(p => ({ ...p, type: val }))}
+                className="grid grid-cols-1 md:grid-cols-3 gap-4"
+              >
+                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'product' && "border-primary bg-primary/5")}>
+                  <RadioGroupItem value="product" id="t-product" className="sr-only" />
+                  <Package className="h-6 w-6 mb-2 text-blue-600" />
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">Marchandise</div>
+                    <div className="text-[10px] text-muted-foreground">Achat & Vente standard</div>
+                  </div>
+                </label>
+
+                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'raw_material' && "border-primary bg-primary/5")}>
+                  <RadioGroupItem value="raw_material" id="t-raw" className="sr-only" />
+                  <Layers className="h-6 w-6 mb-2 text-amber-600" />
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">Matière Première</div>
+                    <div className="text-[10px] text-muted-foreground">Achat & Transformation</div>
+                  </div>
+                </label>
+
+                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'semi_finished' && "border-primary bg-primary/5")}>
+                  <RadioGroupItem value="semi_finished" id="t-semi" className="sr-only" />
+                  <Factory className="h-6 w-6 mb-2 text-purple-600" />
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">Semi-Fini</div>
+                    <div className="text-[10px] text-muted-foreground">Fabriqué & Consommé</div>
+                  </div>
+                </label>
+
+                {/* Plus discret pour Consommable/Asset si besoin, ajoutons-les en simple dropdown ou bouton toggle ?
+                      Pour l'instant on garde les 3 principaux en evidence. */}
+              </RadioGroup>
+              <div className="mt-2 flex gap-4 justify-center">
+                <div className="flex items-center space-x-2">
+                  <RadioGroup value={formData.type} onValueChange={(val: ItemType) => setFormData(p => ({ ...p, type: val }))} className="flex gap-4">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="consumable" id="t-cons" />
+                      <Label htmlFor="t-cons" className="text-xs text-muted-foreground">Consommable</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="asset" id="t-asset" />
+                      <Label htmlFor="t-asset" className="text-xs text-muted-foreground">Immobilisation</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Tabs defaultValue="info" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-4 mb-4">
               <TabsTrigger value="info">
                 <Info className="h-4 w-4 mr-2" /> Informations
               </TabsTrigger>
               <TabsTrigger value="prices">
                 <DollarSign className="h-4 w-4 mr-2" /> Prix & Stock
               </TabsTrigger>
-              <TabsTrigger value="suppliers" disabled={isCreateMode}>
+              <TabsTrigger value="suppliers" disabled={isCreateMode || isManufactured}>
                 <Users className="h-4 w-4 mr-2" /> Fournisseurs
-                {isCreateMode && <span className="ml-2 text-xs opacity-50">(Sauvegarder d'abord)</span>}
               </TabsTrigger>
+              {isManufactured && (
+                <TabsTrigger value="composition" disabled={isCreateMode}>
+                  <LinkIcon className="h-4 w-4 mr-2" /> Composition / Recette
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* TAB 1: INFORMATIONS */}
@@ -254,7 +336,7 @@ export function ManageItemDialog({
                     <Input
                       value={formData.name}
                       onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="Ex: Ordinateur Portable"
+                      placeholder={isRawMaterial ? "Ex: Tissu Coton Blanc" : "Ex: Ordinateur Portable"}
                     />
                   </div>
                   <div className="space-y-2">
@@ -329,8 +411,12 @@ export function ManageItemDialog({
             <TabsContent value="prices" className="space-y-4">
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-6">
+
+                  {/* PRIX ACHAT : Toujours pertinent (Coût matière pour MP, Coût s/t pour Semi, etc.) */}
                   <div className="space-y-2">
-                    <Label>Prix d'achat par défaut (HT)</Label>
+                    <Label>
+                      {isManufactured ? "Coût de revient Estimé (Main d'œuvre incluse?)" : "Prix d'achat par défaut (HT)"}
+                    </Label>
                     <div className="relative">
                       <Input
                         type="text"
@@ -341,7 +427,9 @@ export function ManageItemDialog({
                       <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">$</span>
                     </div>
                   </div>
-                  {categories.find((c) => c.id === formData.category_id)?.name === "Commerce & Distribution" && (
+
+                  {/* PRIX VENTE : Caché pour MP et Consommable */}
+                  {!isRawMaterial && !isAsset && formData.type !== 'consumable' && (
                     <div className="space-y-2">
                       <Label>Prix de vente (HT)</Label>
                       <div className="relative">
@@ -361,13 +449,27 @@ export function ManageItemDialog({
 
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label>Unité de mesure</Label>
+                    <Label>Unité de Mesure (Stock)</Label>
                     <Input
                       placeholder="ex: pièce, kg, mètre..."
                       value={formData.unit_of_measure}
                       onChange={(e) => setFormData((p) => ({ ...p, unit_of_measure: e.target.value }))}
                     />
                   </div>
+
+                  {/* UNITE DE CONSOMMATION : Spécifique pour MP */}
+                  {isRawMaterial && (
+                    <div className="space-y-2">
+                      <Label>Unité de Consommation (Recette)</Label>
+                      <Input
+                        placeholder="ex: grammes, ml..."
+                        value={formData.consumption_unit || ""}
+                        onChange={(e) => setFormData((p) => ({ ...p, consumption_unit: e.target.value }))}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Ex: Acheté en Kg, consommé en Grammes.</p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label>Seuil d'alerte (Stock faible)</Label>
                     <Input
@@ -375,17 +477,16 @@ export function ManageItemDialog({
                       defaultValue={formData.alert_quantity}
                       onBlur={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
                     />
-                    <p className="text-xs text-muted-foreground">Vous serez notifié si le stock descend sous cette valeur.</p>
                   </div>
                 </div>
               </div>
             </TabsContent>
 
-            {/* TAB 3: SUPPLIERS */}
+            {/* TAB 3: SUPPLIERS (Standard logic) */}
             <TabsContent value="suppliers" className="space-y-4">
               <div className="py-4 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">Fournisseurs référencés pour cet article</h4>
+                  <h4 className="text-sm font-medium">Fournisseurs référencés</h4>
                   <div className="w-[300px]">
                     <Select onValueChange={addSupplierLink} value="">
                       <SelectTrigger>
@@ -399,41 +500,28 @@ export function ManageItemDialog({
                     </Select>
                   </div>
                 </div>
-
+                {/* ... (Existing supplier list logic reused) ... */}
                 <div className="border rounded-md divide-y">
                   {itemSuppliers.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">
-                      Aucun fournisseur associé. Ajoutez-en un pour gérer les prix d'achat spécifiques.
+                      Aucun fournisseur associé.
                     </div>
                   ) : itemSuppliers.map((is) => (
                     <div key={is.id} className="grid grid-cols-12 gap-4 p-4 items-center">
                       <div className="col-span-4 font-medium flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                          {is.suppliers.name.substring(0, 2).toUpperCase()}
-                        </div>
-                        {is.suppliers.name}
+                        <Users className="h-4 w-4 opacity-50" /> {is.suppliers.name}
                       </div>
                       <div className="col-span-3">
                         <Label className="text-xs text-muted-foreground">Prix Achat</Label>
-                        <Input
-                          className="h-8 mt-1"
-                          placeholder="Prix..."
-                          defaultValue={is.last_purchase_price || ""}
-                          onBlur={(e) => updateItemSupplier(is.id, e.target.value.replace(",", "."), is.supplier_item_reference || "")}
-                        />
+                        <Input className="h-7 text-xs" defaultValue={is.last_purchase_price || ""} onBlur={(e) => updateItemSupplier(is.id, e.target.value.replace(",", "."), is.supplier_item_reference || "")} />
                       </div>
                       <div className="col-span-4">
-                        <Label className="text-xs text-muted-foreground">Réf. chez fournisseur</Label>
-                        <Input
-                          className="h-8 mt-1"
-                          placeholder="Réf..."
-                          defaultValue={is.supplier_item_reference || ""}
-                          onBlur={(e) => updateItemSupplier(is.id, is.last_purchase_price?.toString() || "", e.target.value)}
-                        />
+                        <Label className="text-xs text-muted-foreground">Réf. Fournisseur</Label>
+                        <Input className="h-7 text-xs" defaultValue={is.supplier_item_reference || ""} onBlur={(e) => updateItemSupplier(is.id, is.last_purchase_price?.toString() || "", e.target.value)} />
                       </div>
                       <div className="col-span-1 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => removeSupplierLink(is.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                          <Trash2 className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" onClick={() => removeSupplierLink(is.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -441,6 +529,26 @@ export function ManageItemDialog({
                 </div>
               </div>
             </TabsContent>
+
+            {/* TAB 4: COMPOSITION (Machines / Recettes) */}
+            {isManufactured && (
+              <TabsContent value="composition">
+                {/* Only works if item is saved first */}
+                {!isCreateMode && currentItem?.id ? (
+                  <BomManager parentItemId={currentItem.id} companyId={companyId} />
+                ) : (
+                  <div className="p-8 text-center border-dashed border rounded-lg bg-muted/10">
+                    <p className="text-muted-foreground mb-4">
+                      Veuillez d'abord sauvegarder les informations de base de l'article pour pouvoir définir sa composition.
+                    </p>
+                    <Button onClick={handleSave} disabled={isSaving}>
+                      <Save className="mr-2 h-4 w-4" /> Sauvegarder maintenant
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+            )}
+
           </Tabs>
         </div>
         <DialogFooter className="justify-between pt-4 border-t">
@@ -455,9 +563,9 @@ export function ManageItemDialog({
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               Fermer
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving || !formData.name}>
               <Save className="h-4 w-4 mr-2" />
-              {isCreateMode ? "Créer et Continuer" : "Sauvegarder et Fermer"}
+              {isCreateMode ? "Créer et Continuer" : "Sauvegarder"}
             </Button>
           </div>
         </DialogFooter>

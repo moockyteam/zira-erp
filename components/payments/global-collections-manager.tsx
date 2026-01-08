@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import {
@@ -9,11 +9,13 @@ import {
     CreditCard,
     Check,
     ChevronsUpDown,
-    Trash2,
-    Edit,
-    ExternalLink,
-    Loader2,
     Printer,
+    ArrowUpDown,
+    Banknote,
+    TrendingUp,
+    TrendingDown,
+    Edit,
+    Trash2,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -21,10 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/ui/page-header"
 import { useCompany } from "@/components/providers/company-provider"
-import { Banknote } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { toast } from "sonner"
-import { useRouter } from "next/navigation"
 import {
     Popover,
     PopoverContent,
@@ -39,16 +38,6 @@ import {
     CommandList,
 } from "@/components/ui/command"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -58,27 +47,20 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { toast } from "sonner"
 
-type LineItem = {
+// Type pour les mouvements du relevé de compte
+type AccountMovement = {
     id: string
     date: string
-    type: 'FACTURE' | 'BL' | 'PAIEMENT'
+    type: 'SOLDE_INITIAL' | 'FACTURE' | 'BL' | 'PAIEMENT' | 'CREDIT'
     reference: string
-    amount: number
-    paymentIds?: { invoicePaymentIds: string[], blPaymentIds: string[] }
-    documentId?: string
+    debit: number   // Ce qui augmente la dette (factures, BL)
+    credit: number  // Ce qui diminue la dette (paiements)
 }
 
 export function GlobalCollectionsManager() {
     const supabase = createClient()
-    const router = useRouter()
     const { selectedCompany } = useCompany()
     const [customers, setCustomers] = useState<any[]>([])
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
@@ -86,22 +68,22 @@ export function GlobalCollectionsManager() {
     const [isLoading, setIsLoading] = useState(false)
     const [customerName, setCustomerName] = useState("")
     const [customerDetails, setCustomerDetails] = useState<any>(null)
-    const [currentBalance, setCurrentBalance] = useState<number | null>(null)
-    const [items, setItems] = useState<LineItem[]>([])
+    const [movements, setMovements] = useState<AccountMovement[]>([])
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-    // Delete dialog state
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [itemToDelete, setItemToDelete] = useState<LineItem | null>(null)
-    const [isDeleting, setIsDeleting] = useState(false)
+    // Tri: true = chronologique (ancien→récent), false = anti-chronologique
+    const [sortAscending, setSortAscending] = useState(true)
 
     // Edit dialog state
     const [editDialogOpen, setEditDialogOpen] = useState(false)
-    const [itemToEdit, setItemToEdit] = useState<LineItem | null>(null)
-    const [editAmount, setEditAmount] = useState<number>(0)
-    const [editMethod, setEditMethod] = useState<string>("")
-    const [editDate, setEditDate] = useState<string>("")
+    const [editingPayment, setEditingPayment] = useState<any>(null)
+    const [editAmount, setEditAmount] = useState(0)
     const [isEditing, setIsEditing] = useState(false)
+
+    // Delete dialog state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [deletingPayment, setDeletingPayment] = useState<any>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const companyId = selectedCompany?.id || ""
 
@@ -119,218 +101,192 @@ export function GlobalCollectionsManager() {
         fetchCustomers()
     }, [companyId, supabase])
 
-    // Fetch Data when customer changes
+    // Fetch Account Movements
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchMovements = async () => {
             if (!selectedCustomerId) {
-                setItems([])
-                setCurrentBalance(null)
+                setMovements([])
                 setCustomerDetails(null)
                 return
             }
             setIsLoading(true)
             try {
-                // 1. Customer Name & Balance
-                const { data: cust } = await supabase.from('customers').select('*').eq('id', selectedCustomerId).single()
+                // 1. Customer Info
+                const { data: cust } = await supabase
+                    .from('customers')
+                    .select('*')
+                    .eq('id', selectedCustomerId)
+                    .single()
+
                 if (cust) {
                     setCustomerName(cust.name)
                     setCustomerDetails(cust)
                 }
 
-                const { data: balance } = await supabase.rpc('calculate_customer_balance', { p_customer_id: selectedCustomerId })
-                setCurrentBalance(balance)
+                let allMovements: AccountMovement[] = []
 
-                // 2. Fetch Invoices
+                // 2. Solde Initial (si existe)
+                if (cust?.initial_balance && cust.initial_balance > 0) {
+                    allMovements.push({
+                        id: 'initial',
+                        date: cust.balance_start_date || '1900-01-01',
+                        type: 'SOLDE_INITIAL',
+                        reference: 'Solde Initial',
+                        debit: cust.initial_balance,
+                        credit: 0
+                    })
+                }
+
+                // 3. Factures (augmentent la dette)
                 const { data: invoices } = await supabase
                     .from('invoices')
                     .select('id, invoice_number, invoice_date, total_ttc')
                     .eq('customer_id', selectedCustomerId)
+                    .not('status', 'in', '("BROUILLON","ANNULEE")')
 
-                // 3. Fetch BLs
-                const { data: bls } = await supabase
-                    .from('delivery_notes')
-                    .select('id, delivery_note_number, delivery_date, created_at, total_ttc')
-                    .eq('customer_id', selectedCustomerId)
-
-                // 4. Fetch Payments from invoice_payments
-                const { data: invPayments } = await supabase.from('invoice_payments')
-                    .select('id, payment_date, amount, payment_method, invoice:invoices!inner(customer_id)')
-                    .eq('invoice.customer_id', selectedCustomerId)
-
-                // 5. Fetch Payments from delivery_note_payments  
-                const { data: blPayments } = await supabase.from('delivery_note_payments')
-                    .select('id, payment_date, amount, payment_method, delivery_note:delivery_notes!inner(customer_id)')
-                    .eq('delivery_note.customer_id', selectedCustomerId)
-
-                // Build unified list
-                let allItems: LineItem[] = []
-
-                // Invoices
                 invoices?.forEach((inv: any) => {
-                    allItems.push({
+                    allMovements.push({
                         id: `inv-${inv.id}`,
                         date: inv.invoice_date,
                         type: 'FACTURE',
                         reference: inv.invoice_number,
-                        amount: inv.total_ttc,
-                        documentId: inv.id
+                        debit: inv.total_ttc,
+                        credit: 0
                     })
                 })
 
-                // BLs
+                // 4. BL non facturés (augmentent la dette)
+                const { data: bls } = await supabase
+                    .from('delivery_notes')
+                    .select('id, delivery_note_number, delivery_date, created_at, total_ttc')
+                    .eq('customer_id', selectedCustomerId)
+                    .eq('status', 'LIVRE')
+                    .is('invoice_id', null)
+
                 bls?.forEach((bl: any) => {
-                    allItems.push({
-                        id: `bl-${bl.id}`,
-                        date: bl.delivery_date || bl.created_at,
-                        type: 'BL',
-                        reference: bl.delivery_note_number,
-                        amount: bl.total_ttc,
-                        documentId: bl.id
-                    })
-                })
-
-                // Regrouper les paiements par (date + méthode)
-                const paymentGroups: { [key: string]: { date: string, method: string, total: number, invoicePaymentIds: string[], blPaymentIds: string[] } } = {}
-
-                invPayments?.forEach((p: any) => {
-                    const key = `${p.payment_date}_${p.payment_method}`
-                    if (!paymentGroups[key]) {
-                        paymentGroups[key] = { date: p.payment_date, method: p.payment_method, total: 0, invoicePaymentIds: [], blPaymentIds: [] }
+                    if (bl.total_ttc > 0) {
+                        allMovements.push({
+                            id: `bl-${bl.id}`,
+                            date: bl.delivery_date || bl.created_at?.split('T')[0],
+                            type: 'BL',
+                            reference: bl.delivery_note_number,
+                            debit: bl.total_ttc,
+                            credit: 0
+                        })
                     }
-                    paymentGroups[key].total += p.amount
-                    paymentGroups[key].invoicePaymentIds.push(p.id)
                 })
 
-                blPayments?.forEach((p: any) => {
-                    const key = `${p.payment_date}_${p.payment_method}`
-                    if (!paymentGroups[key]) {
-                        paymentGroups[key] = { date: p.payment_date, method: p.payment_method, total: 0, invoicePaymentIds: [], blPaymentIds: [] }
-                    }
-                    paymentGroups[key].total += p.amount
-                    paymentGroups[key].blPaymentIds.push(p.id)
-                })
+                // 5. Paiements Globaux (diminuent la dette)
+                const { data: globalPayments } = await supabase
+                    .from('global_payment_entries')
+                    .select('id, payment_date, amount, payment_method, notes')
+                    .eq('customer_id', selectedCustomerId)
 
-                Object.entries(paymentGroups).forEach(([key, group]) => {
-                    allItems.push({
-                        id: `pay-${key}`,
-                        date: group.date,
+                globalPayments?.forEach((p: any) => {
+                    allMovements.push({
+                        id: `gpay-${p.id}`,
+                        date: p.payment_date,
                         type: 'PAIEMENT',
-                        reference: group.method,
-                        amount: group.total,
-                        paymentIds: { invoicePaymentIds: group.invoicePaymentIds, blPaymentIds: group.blPaymentIds }
+                        reference: `Paiement ${p.payment_method}`,
+                        debit: 0,
+                        credit: p.amount
                     })
                 })
 
-                // Sort by date descending
-                allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                setItems(allItems)
+                // 6. Crédits/Avances (diminuent la dette)
+                const { data: credits } = await supabase
+                    .from('customer_credits')
+                    .select('id, payment_date, amount, payment_method')
+                    .eq('customer_id', selectedCustomerId)
+
+                credits?.forEach((c: any) => {
+                    allMovements.push({
+                        id: `credit-${c.id}`,
+                        date: c.payment_date,
+                        type: 'CREDIT',
+                        reference: `Avance ${c.payment_method}`,
+                        debit: 0,
+                        credit: c.amount
+                    })
+                })
+
+                setMovements(allMovements)
 
             } catch (error) {
-                console.error("Error fetching data:", error)
+                console.error("Error fetching movements:", error)
             } finally {
                 setIsLoading(false)
             }
         }
 
-        fetchData()
+        fetchMovements()
     }, [selectedCustomerId, supabase, refreshTrigger])
 
-    // Handle document click (navigate to invoice or BL in new tab)
-    const handleDocumentClick = (item: LineItem) => {
-        if (item.type === 'FACTURE' && item.documentId) {
-            window.open(`/dashboard/invoices/${item.documentId}`, '_blank')
-        } else if (item.type === 'BL' && item.documentId) {
-            window.open(`/dashboard/delivery-notes/${item.documentId}`, '_blank')
-        }
-    }
+    // Calculer les mouvements triés avec solde courant
+    const sortedMovementsWithBalance = useMemo(() => {
+        // Toujours trier chronologiquement pour calculer le solde courant
+        const chronological = [...movements].sort((a, b) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        )
 
-    // Handle delete payment
-    const handleDeletePayment = async () => {
-        if (!itemToDelete || !itemToDelete.paymentIds) return
-        setIsDeleting(true)
-        try {
-            const { invoicePaymentIds, blPaymentIds } = itemToDelete.paymentIds
+        // Calculer le solde courant cumulatif
+        let runningBalance = 0
+        const withBalance = chronological.map(m => {
+            runningBalance = runningBalance + m.debit - m.credit
+            return { ...m, balance: runningBalance }
+        })
 
-            if (invoicePaymentIds.length > 0) {
-                const { error: invError } = await supabase
-                    .from('invoice_payments')
-                    .delete()
-                    .in('id', invoicePaymentIds)
-                if (invError) throw invError
-            }
+        // Appliquer le tri choisi par l'utilisateur
+        return sortAscending ? withBalance : [...withBalance].reverse()
+    }, [movements, sortAscending])
 
-            if (blPaymentIds.length > 0) {
-                const { error: blError } = await supabase
-                    .from('delivery_note_payments')
-                    .delete()
-                    .in('id', blPaymentIds)
-                if (blError) throw blError
-            }
-
-            toast.success("Paiement supprimé avec succès")
-            setRefreshTrigger(prev => prev + 1)
-        } catch (error: any) {
-            console.error("Delete error:", error)
-            toast.error("Erreur lors de la suppression: " + error.message)
-        } finally {
-            setIsDeleting(false)
-            setDeleteDialogOpen(false)
-            setItemToDelete(null)
-        }
-    }
-
-    // Handle edit payment
-    const handleEditPayment = async () => {
-        if (!itemToEdit || !itemToEdit.paymentIds || !selectedCustomerId) return
-        setIsEditing(true)
-        try {
-            const { invoicePaymentIds, blPaymentIds } = itemToEdit.paymentIds
-
-            if (invoicePaymentIds.length > 0) {
-                await supabase.from('invoice_payments').delete().in('id', invoicePaymentIds)
-            }
-            if (blPaymentIds.length > 0) {
-                await supabase.from('delivery_note_payments').delete().in('id', blPaymentIds)
-            }
-
-            const { error } = await supabase.rpc('record_global_payment', {
-                p_customer_id: selectedCustomerId,
-                p_amount: editAmount,
-                p_payment_method: editMethod,
-                p_notes: '',
-                p_date: editDate
-            })
-
-            if (error) throw error
-
-            toast.success("Paiement modifié avec succès")
-            setRefreshTrigger(prev => prev + 1)
-        } catch (error: any) {
-            console.error("Edit error:", error)
-            toast.error("Erreur lors de la modification: " + error.message)
-        } finally {
-            setIsEditing(false)
-            setEditDialogOpen(false)
-            setItemToEdit(null)
-        }
-    }
-
-    const openEditDialog = (item: LineItem) => {
-        setItemToEdit(item)
-        setEditAmount(item.amount)
-        setEditMethod(item.reference)
-        setEditDate(item.date.split('T')[0])
-        setEditDialogOpen(true)
-    }
+    // Totaux
+    const totalDebit = movements.reduce((acc, m) => acc + m.debit, 0)
+    const totalCredit = movements.reduce((acc, m) => acc + m.credit, 0)
+    const currentBalance = totalDebit - totalCredit
 
     const handlePrint = () => {
         window.print()
     }
 
-    // Totals
-    const totalFactures = items.filter(i => i.type === 'FACTURE').reduce((acc, i) => acc + i.amount, 0)
-    const totalBLs = items.filter(i => i.type === 'BL').reduce((acc, i) => acc + i.amount, 0)
-    const totalPaiements = items.filter(i => i.type === 'PAIEMENT').reduce((acc, i) => acc + i.amount, 0)
+    // Handle Edit Payment
+    const handleEditPayment = async () => {
+        if (!editingPayment || editAmount <= 0) return
+        setIsEditing(true)
+        try {
+            const { data, error } = await supabase.rpc('update_global_payment', {
+                p_entry_id: editingPayment.id,
+                p_new_amount: editAmount
+            })
+            if (error) throw error
+            toast.success(`Paiement modifié : ${editAmount.toFixed(3)} TND`)
+            setEditDialogOpen(false)
+            setRefreshTrigger(r => r + 1)
+        } catch (err: any) {
+            toast.error("Erreur: " + err.message)
+        } finally {
+            setIsEditing(false)
+        }
+    }
+
+    // Handle Delete Payment
+    const handleDeletePayment = async () => {
+        if (!deletingPayment) return
+        setIsDeleting(true)
+        try {
+            const { error } = await supabase.rpc('delete_global_payment', {
+                p_entry_id: deletingPayment.id
+            })
+            if (error) throw error
+            toast.success(`Paiement supprimé`)
+            setDeleteDialogOpen(false)
+            setRefreshTrigger(r => r + 1)
+        } catch (err: any) {
+            toast.error("Erreur: " + err.message)
+        } finally {
+            setIsDeleting(false)
+        }
+    }
 
     if (!companyId) {
         return <div className="p-8 text-center bg-muted/20 rounded-lg">Veuillez sélectionner une entreprise.</div>
@@ -340,112 +296,60 @@ export function GlobalCollectionsManager() {
         <>
             {/* ==================== PRINT VIEW ==================== */}
             <div className="hidden print:block font-serif text-black p-6 text-sm max-w-[210mm] mx-auto bg-white">
-                {/* Header */}
                 <div className="flex justify-between items-start border-b-2 border-gray-900 pb-4 mb-6">
-                    <div className="w-1/2">
-                        <h1 className="text-2xl font-bold uppercase tracking-widest mb-2">{selectedCompany?.name || "SOCIÉTÉ"}</h1>
-                        <div className="text-sm text-gray-700 space-y-0.5">
-                            <p>{selectedCompany?.address}</p>
-                            <p>{selectedCompany?.email} {selectedCompany?.phone && `| Tél: ${selectedCompany.phone}`}</p>
-                            <p>MF: {selectedCompany?.fiscal_id || "N/A"}</p>
-                        </div>
+                    <div>
+                        <h1 className="text-2xl font-bold uppercase">{selectedCompany?.name || "SOCIÉTÉ"}</h1>
                     </div>
-                    <div className="w-1/2 text-right">
-                        <div className="inline-block text-left bg-gray-50 border border-gray-300 p-3 rounded min-w-[200px]">
-                            <p className="text-xs text-gray-500 uppercase font-semibold mb-1 border-b border-gray-200 pb-1">Client</p>
-                            <p className="font-bold text-lg">{customerName}</p>
-                            {customerDetails && (
-                                <div className="text-xs text-gray-600">
-                                    <p>{customerDetails.address}</p>
-                                    <p>{customerDetails.phone}</p>
-                                    <p>MF: {customerDetails.tax_id}</p>
-                                </div>
-                            )}
-                        </div>
+                    <div className="text-right">
+                        <p className="font-bold text-lg">{customerName}</p>
                     </div>
                 </div>
+                <h2 className="text-xl font-bold mb-4">Relevé de Compte</h2>
+                <p className="text-xs mb-4">Édité le {format(new Date(), "dd/MM/yyyy à HH:mm")}</p>
 
-                {/* Title & Balance */}
-                <div className="mb-6">
-                    <div className="flex justify-between items-end mb-4">
-                        <div>
-                            <h2 className="text-2xl font-bold text-gray-900 uppercase">Relevé de Compte</h2>
-                            <p className="text-xs text-gray-500 mt-1">Édité le {format(new Date(), "dd/MM/yyyy à HH:mm")}</p>
-                        </div>
-                        <div className="border-2 border-black p-3 bg-gray-50 min-w-[180px] text-center">
-                            <p className="text-xs text-gray-500 uppercase font-bold mb-1">Solde Net</p>
-                            <p className="text-xl font-bold">{(currentBalance || 0).toFixed(3)} <span className="text-sm font-normal">TND</span></p>
-                        </div>
-                    </div>
-
-                    {/* Summary Strip */}
-                    <div className="grid grid-cols-3 gap-0 border border-gray-300 rounded overflow-hidden text-center text-xs bg-white">
-                        <div className="p-2 border-r border-gray-300 bg-gray-50">
-                            <p className="text-gray-500 uppercase text-[10px] mb-1">Total Facturé</p>
-                            <p className="font-bold text-base">{(totalFactures + totalBLs).toFixed(3)}</p>
-                        </div>
-                        <div className="p-2 border-r border-gray-300">
-                            <p className="text-gray-500 uppercase text-[10px] mb-1">Total Payé</p>
-                            <p className="font-bold text-base text-emerald-700">{totalPaiements.toFixed(3)}</p>
-                        </div>
-                        <div className="p-2 bg-gray-100">
-                            <p className="text-gray-500 uppercase text-[10px] mb-1">Reste à Payer</p>
-                            <p className="font-bold text-base">{(currentBalance || 0).toFixed(3)}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Print Table */}
-                <table className="w-full text-xs border-collapse mb-6">
+                <table className="w-full text-xs border-collapse mb-4">
                     <thead>
-                        <tr className="border-b-2 border-black text-left">
-                            <th className="py-2 font-bold uppercase text-[10px] text-gray-600 w-20">Date</th>
-                            <th className="py-2 font-bold uppercase text-[10px] text-gray-600 w-24">Type</th>
-                            <th className="py-2 font-bold uppercase text-[10px] text-gray-600">Référence</th>
-                            <th className="py-2 font-bold uppercase text-[10px] text-gray-600 text-right w-28">Montant</th>
+                        <tr className="border-b-2 border-black">
+                            <th className="text-left py-2">Date</th>
+                            <th className="text-left py-2">Libellé</th>
+                            <th className="text-right py-2">Débit</th>
+                            <th className="text-right py-2">Crédit</th>
+                            <th className="text-right py-2">Solde</th>
                         </tr>
                     </thead>
-                    <tbody className="text-gray-800">
-                        {items.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="py-8 text-center text-gray-500 italic">Aucune transaction</td>
+                    <tbody>
+                        {sortedMovementsWithBalance.map((m: any) => (
+                            <tr key={m.id} className="border-b border-gray-200">
+                                <td className="py-1">{format(new Date(m.date), "dd/MM/yy")}</td>
+                                <td className="py-1">{m.reference}</td>
+                                <td className="py-1 text-right">{m.debit > 0 ? m.debit.toFixed(3) : '-'}</td>
+                                <td className="py-1 text-right">{m.credit > 0 ? m.credit.toFixed(3) : '-'}</td>
+                                <td className="py-1 text-right font-bold">{m.balance.toFixed(3)}</td>
                             </tr>
-                        ) : (
-                            items.map((item, index) => (
-                                <tr key={item.id} className={cn("border-b border-gray-200", index % 2 === 0 ? "bg-white" : "bg-gray-50/50")}>
-                                    <td className="py-2">{format(new Date(item.date), "dd/MM/yy")}</td>
-                                    <td className="py-2 font-medium">
-                                        {item.type === 'FACTURE' && 'Facture'}
-                                        {item.type === 'BL' && 'Bon de Livraison'}
-                                        {item.type === 'PAIEMENT' && 'Paiement'}
-                                    </td>
-                                    <td className="py-2">{item.reference}</td>
-                                    <td className={cn("py-2 text-right font-mono font-medium", item.type === 'PAIEMENT' && "text-emerald-700")}>
-                                        {item.type === 'PAIEMENT' ? '+' : ''}{item.amount.toFixed(3)}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
+                        ))}
                     </tbody>
+                    <tfoot>
+                        <tr className="border-t-2 border-black font-bold">
+                            <td colSpan={2} className="py-2">TOTAUX</td>
+                            <td className="py-2 text-right">{totalDebit.toFixed(3)}</td>
+                            <td className="py-2 text-right">{totalCredit.toFixed(3)}</td>
+                            <td className="py-2 text-right">{currentBalance.toFixed(3)}</td>
+                        </tr>
+                    </tfoot>
                 </table>
-
-                {/* Footer */}
-                <div className="text-center text-[10px] text-gray-400 pt-4 border-t border-gray-100">
-                    <p>Document généré automatiquement</p>
-                </div>
             </div>
 
             {/* ==================== SCREEN VIEW ==================== */}
             <div className="space-y-6 print:hidden">
                 <PageHeader
-                    title="Encaissement Global"
-                    description="Vue simplifiée: factures, bons de livraison et paiements globaux."
+                    title="Relevé de Compte Client"
+                    description="Vue consolidée des mouvements : factures, BL, paiements et solde courant."
                     icon={Banknote}
                 >
                     {selectedCustomerId && (
                         <Button variant="outline" size="sm" onClick={handlePrint}>
                             <Printer className="mr-2 h-4 w-4" />
-                            Imprimer Relevé
+                            Imprimer
                         </Button>
                     )}
                 </PageHeader>
@@ -500,122 +404,143 @@ export function GlobalCollectionsManager() {
                 {/* Content */}
                 {selectedCustomerId && (
                     <>
-                        {/* Summary Row */}
-                        <div className="flex flex-wrap gap-4 text-sm">
-                            <div className="bg-muted/30 px-4 py-2 rounded border">
-                                <span className="text-muted-foreground">Factures:</span>
-                                <span className="font-mono font-bold ml-2">{totalFactures.toFixed(3)} TND</span>
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-red-50 border border-red-200 px-4 py-3 rounded-lg">
+                                <div className="flex items-center gap-2 text-red-600 text-sm">
+                                    <TrendingUp className="h-4 w-4" />
+                                    Total Débit
+                                </div>
+                                <p className="font-mono font-bold text-lg text-red-700">{totalDebit.toFixed(3)} TND</p>
                             </div>
-                            <div className="bg-muted/30 px-4 py-2 rounded border">
-                                <span className="text-muted-foreground">BL:</span>
-                                <span className="font-mono font-bold ml-2">{totalBLs.toFixed(3)} TND</span>
-                            </div>
-                            <div className="bg-emerald-50 px-4 py-2 rounded border border-emerald-200">
-                                <span className="text-emerald-600">Paiements:</span>
-                                <span className="font-mono font-bold ml-2 text-emerald-700">{totalPaiements.toFixed(3)} TND</span>
+                            <div className="bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-lg">
+                                <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                                    <TrendingDown className="h-4 w-4" />
+                                    Total Crédit
+                                </div>
+                                <p className="font-mono font-bold text-lg text-emerald-700">{totalCredit.toFixed(3)} TND</p>
                             </div>
                             <div className={cn(
-                                "px-4 py-2 rounded border-2",
-                                (currentBalance || 0) > 0 ? "bg-orange-50 border-orange-300" : "bg-emerald-50 border-emerald-300"
+                                "px-4 py-3 rounded-lg border-2 col-span-2",
+                                currentBalance > 0 ? "bg-orange-50 border-orange-300" : "bg-emerald-50 border-emerald-300"
                             )}>
-                                <span className={(currentBalance || 0) > 0 ? "text-orange-600" : "text-emerald-600"}>Solde:</span>
-                                <span className={cn("font-mono font-bold ml-2", (currentBalance || 0) > 0 ? "text-orange-700" : "text-emerald-700")}>
-                                    {(currentBalance || 0).toFixed(3)} TND
-                                </span>
+                                <div className={cn("text-sm", currentBalance > 0 ? "text-orange-600" : "text-emerald-600")}>
+                                    Solde Actuel
+                                </div>
+                                <p className={cn("font-mono font-bold text-2xl", currentBalance > 0 ? "text-orange-700" : "text-emerald-700")}>
+                                    {currentBalance.toFixed(3)} TND
+                                </p>
                             </div>
                         </div>
 
-                        {/* Unified Table */}
+                        {/* Sort Toggle */}
+                        <div className="flex justify-end">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSortAscending(!sortAscending)}
+                            >
+                                <ArrowUpDown className="mr-2 h-4 w-4" />
+                                {sortAscending ? "Plus ancien → Plus récent" : "Plus récent → Plus ancien"}
+                            </Button>
+                        </div>
+
+                        {/* Movements Table */}
                         <Card>
                             <CardContent className="p-0">
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/50">
-                                            <TableHead className="w-[120px]">Date</TableHead>
+                                            <TableHead className="w-[100px]">Date</TableHead>
                                             <TableHead className="w-[100px]">Type</TableHead>
-                                            <TableHead>Référence</TableHead>
-                                            <TableHead className="text-right w-[150px]">Montant</TableHead>
-                                            <TableHead className="w-[100px] text-center">Actions</TableHead>
+                                            <TableHead>Libellé</TableHead>
+                                            <TableHead className="text-right w-[120px]">Débit</TableHead>
+                                            <TableHead className="text-right w-[120px]">Crédit</TableHead>
+                                            <TableHead className="text-right w-[130px]">Solde</TableHead>
+                                            <TableHead className="w-[80px]">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {isLoading ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                                     Chargement...
                                                 </TableCell>
                                             </TableRow>
-                                        ) : items.length === 0 ? (
+                                        ) : sortedMovementsWithBalance.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                                                    Aucune donnée
+                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground italic">
+                                                    Aucun mouvement
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            items.map((item) => (
-                                                <TableRow key={item.id} className="group">
+                                            sortedMovementsWithBalance.map((m: any) => (
+                                                <TableRow key={m.id}>
                                                     <TableCell className="font-medium">
-                                                        {format(new Date(item.date), "dd/MM/yyyy")}
+                                                        {format(new Date(m.date), "dd/MM/yyyy")}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge
                                                             variant="outline"
                                                             className={cn(
                                                                 "text-xs gap-1",
-                                                                item.type === 'PAIEMENT' && "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                                                m.type === 'PAIEMENT' && "border-emerald-300 bg-emerald-50 text-emerald-700",
+                                                                m.type === 'CREDIT' && "border-blue-300 bg-blue-50 text-blue-700",
+                                                                m.type === 'FACTURE' && "border-indigo-300 bg-indigo-50 text-indigo-700",
+                                                                m.type === 'BL' && "border-slate-300 bg-slate-50 text-slate-700",
+                                                                m.type === 'SOLDE_INITIAL' && "border-gray-300 bg-gray-100 text-gray-700"
                                                             )}
                                                         >
-                                                            {item.type === 'FACTURE' && <FileText className="h-3 w-3" />}
-                                                            {item.type === 'BL' && <Truck className="h-3 w-3" />}
-                                                            {item.type === 'PAIEMENT' && <CreditCard className="h-3 w-3" />}
-                                                            {item.type}
+                                                            {m.type === 'FACTURE' && <FileText className="h-3 w-3" />}
+                                                            {m.type === 'BL' && <Truck className="h-3 w-3" />}
+                                                            {m.type === 'PAIEMENT' && <CreditCard className="h-3 w-3" />}
+                                                            {m.type === 'CREDIT' && <CreditCard className="h-3 w-3" />}
+                                                            {m.type === 'SOLDE_INITIAL' ? 'INITIAL' : m.type}
                                                         </Badge>
                                                     </TableCell>
-                                                    <TableCell>{item.reference}</TableCell>
+                                                    <TableCell>{m.reference}</TableCell>
+                                                    <TableCell className="text-right font-mono text-red-600">
+                                                        {m.debit > 0 ? m.debit.toFixed(3) : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono text-emerald-600">
+                                                        {m.credit > 0 ? m.credit.toFixed(3) : '-'}
+                                                    </TableCell>
                                                     <TableCell className={cn(
                                                         "text-right font-mono font-bold",
-                                                        item.type === 'PAIEMENT' ? "text-emerald-600" : ""
+                                                        m.balance > 0 ? "text-orange-600" : "text-emerald-600"
                                                     )}>
-                                                        {item.type === 'PAIEMENT' ? '+' : ''}{item.amount.toFixed(3)}
+                                                        {m.balance.toFixed(3)}
                                                     </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {item.type === 'PAIEMENT' ? (
-                                                                <>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7"
-                                                                        onClick={() => openEditDialog(item)}
-                                                                        title="Modifier"
-                                                                    >
-                                                                        <Edit className="h-3.5 w-3.5" />
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7 text-destructive hover:text-destructive"
-                                                                        onClick={() => {
-                                                                            setItemToDelete(item)
-                                                                            setDeleteDialogOpen(true)
-                                                                        }}
-                                                                        title="Supprimer"
-                                                                    >
-                                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                                    </Button>
-                                                                </>
-                                                            ) : (
+                                                    <TableCell>
+                                                        {m.type === 'PAIEMENT' && (
+                                                            <div className="flex gap-1">
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="icon"
                                                                     className="h-7 w-7"
-                                                                    onClick={() => handleDocumentClick(item)}
-                                                                    title="Consulter"
+                                                                    onClick={() => {
+                                                                        const paymentId = m.id.replace('gpay-', '')
+                                                                        setEditingPayment({ id: paymentId, amount: m.credit, reference: m.reference })
+                                                                        setEditAmount(m.credit)
+                                                                        setEditDialogOpen(true)
+                                                                    }}
                                                                 >
-                                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                                    <Edit className="h-3.5 w-3.5" />
                                                                 </Button>
-                                                            )}
-                                                        </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                                                    onClick={() => {
+                                                                        const paymentId = m.id.replace('gpay-', '')
+                                                                        setDeletingPayment({ id: paymentId, amount: m.credit, reference: m.reference })
+                                                                        setDeleteDialogOpen(true)
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -631,93 +556,76 @@ export function GlobalCollectionsManager() {
                     <Card className="border-dashed">
                         <CardContent className="p-12 text-center text-muted-foreground">
                             <Banknote className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                            <p>Sélectionnez un client pour voir ses transactions</p>
+                            <p>Sélectionnez un client pour voir son relevé de compte</p>
                         </CardContent>
                     </Card>
                 )}
-
-                {/* Delete Confirmation Dialog */}
-                <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Supprimer ce paiement ?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Vous allez supprimer le paiement de <strong>{itemToDelete?.amount.toFixed(3)} TND</strong> du {itemToDelete && format(new Date(itemToDelete.date), "dd/MM/yyyy")}.
-                                Cette action est irréversible.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
-                            <AlertDialogAction
-                                onClick={handleDeletePayment}
-                                disabled={isDeleting}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Supprimer
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-
-                {/* Edit Payment Dialog */}
-                <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Modifier le paiement</DialogTitle>
-                            <DialogDescription>
-                                Modifiez les informations du paiement. L'allocation sera recalculée automatiquement.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="edit-amount">Montant (TND)</Label>
-                                <Input
-                                    id="edit-amount"
-                                    type="number"
-                                    step="0.001"
-                                    value={editAmount}
-                                    onChange={(e) => setEditAmount(parseFloat(e.target.value) || 0)}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="edit-date">Date</Label>
-                                <Input
-                                    id="edit-date"
-                                    type="date"
-                                    value={editDate}
-                                    onChange={(e) => setEditDate(e.target.value)}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>Mode de paiement</Label>
-                                <Select value={editMethod} onValueChange={setEditMethod}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="ESPECES">Espèces</SelectItem>
-                                        <SelectItem value="CHEQUE">Chèque</SelectItem>
-                                        <SelectItem value="VIREMENT">Virement</SelectItem>
-                                        <SelectItem value="TRAITE">Traite</SelectItem>
-                                        <SelectItem value="CARTE_BANCAIRE">Carte Bancaire</SelectItem>
-                                        <SelectItem value="AUTRE">Autre</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isEditing}>
-                                Annuler
-                            </Button>
-                            <Button onClick={handleEditPayment} disabled={isEditing || editAmount <= 0}>
-                                {isEditing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Enregistrer
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             </div>
+
+            {/* ==================== EDIT DIALOG ==================== */}
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Modifier le Paiement</DialogTitle>
+                        <DialogDescription>
+                            Modifiez le montant. L'allocation sera automatiquement recalculée.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Montant actuel</Label>
+                            <p className="text-sm text-muted-foreground">
+                                {editingPayment?.amount?.toFixed(3)} TND ({editingPayment?.reference})
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="editAmount">Nouveau montant (TND)</Label>
+                            <Input
+                                id="editAmount"
+                                type="number"
+                                step="0.001"
+                                value={editAmount}
+                                onChange={(e) => setEditAmount(parseFloat(e.target.value) || 0)}
+                                placeholder="Nouveau montant..."
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                            Annuler
+                        </Button>
+                        <Button onClick={handleEditPayment} disabled={isEditing || editAmount <= 0}>
+                            {isEditing ? "Modification..." : "Modifier"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ==================== DELETE DIALOG ==================== */}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Supprimer le Paiement</DialogTitle>
+                        <DialogDescription>
+                            Cette action est irréversible. Le solde du client sera restauré.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm">
+                            Êtes-vous sûr de vouloir supprimer le paiement de{" "}
+                            <strong>{deletingPayment?.amount?.toFixed(3)} TND</strong> ?
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                            Annuler
+                        </Button>
+                        <Button variant="destructive" onClick={handleDeletePayment} disabled={isDeleting}>
+                            {isDeleting ? "Suppression..." : "Supprimer"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     )
 }

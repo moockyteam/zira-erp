@@ -31,7 +31,9 @@ import {
   ChevronDown,
   PlusCircle,
   PackagePlus,
-  Plus
+  Plus,
+  Filter, // Added for type filter
+  Factory // Added for type badge
 } from "lucide-react"
 import { useCompany } from "@/components/providers/company-provider"
 import { ManageItemDialog, type Item } from "./manage-item-dialog"
@@ -45,12 +47,19 @@ import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/ui/page-header"
 import { KpiCard } from "@/components/ui/kpi-card"
 import { FilterToolbar } from "@/components/ui/filter-toolbar"
+import { Badge } from "@/components/ui/badge" // Added for type badge
 
 type Category = { id: string; name: string }
 type Supplier = { id: string; name: string }
 
+// Updated Item type to include 'type'
+type ItemWithCategoryName = Item & {
+  supplier_categories?: { name: string } | null;
+  type: 'product' | 'raw_material' | 'semi_finished' | 'consumable' | 'asset';
+}
+
 type SortConfig = {
-  key: keyof Item | "category_name"
+  key: keyof Item | "category_name" | "type"
   direction: "asc" | "desc"
 }
 
@@ -59,7 +68,7 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
   const { selectedCompany } = useCompany()
   const selectedCompanyId = selectedCompany?.id
 
-  const [items, setItems] = useState<Item[]>([])
+  const [items, setItems] = useState<ItemWithCategoryName[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -77,6 +86,7 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
   // Filters & Sort
   const [searchTerm, setSearchTerm] = useState("")
   const [filterCategoryId, setFilterCategoryId] = useState("all")
+  const [filterType, setFilterType] = useState("all") // New state for type filter
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" })
 
   useEffect(() => {
@@ -95,7 +105,7 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     const [itemsRes, catRes, supRes] = await Promise.all([
       supabase
         .from("items")
-        .select("*, supplier_categories!items_category_id_fkey(name)")
+        .select("*, supplier_categories!items_category_id_fkey(name)") // 'type' is included by '*'
         .eq("company_id", companyId)
         .eq("is_archived", false)
         .order("name"),
@@ -154,11 +164,15 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     if (filterCategoryId !== "all") {
       result = result.filter((i) => i.category_id === filterCategoryId)
     }
+    // New type filter
+    if (filterType !== "all") {
+      result = result.filter((i) => i.type === filterType)
+    }
 
     // 2. Sort
     result.sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof Item]
-      let bValue: any = b[sortConfig.key as keyof Item]
+      let aValue: any = a[sortConfig.key as keyof ItemWithCategoryName]
+      let bValue: any = b[sortConfig.key as keyof ItemWithCategoryName]
 
       if (sortConfig.key === "category_name") {
         // @ts-ignore - Supabase join data
@@ -179,9 +193,9 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     })
 
     return result
-  }, [items, searchTerm, filterCategoryId, sortConfig])
+  }, [items, searchTerm, filterCategoryId, filterType, sortConfig]) // Added filterType to dependencies
 
-  const requestSort = (key: keyof Item | "category_name") => {
+  const requestSort = (key: keyof Item | "category_name" | "type") => {
     let direction: "asc" | "desc" = "asc"
     if (sortConfig.key === key && sortConfig.direction === "asc") {
       direction = "desc"
@@ -189,7 +203,7 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     setSortConfig({ key, direction })
   }
 
-  const getSortIcon = (key: keyof Item | "category_name") => {
+  const getSortIcon = (key: keyof Item | "category_name" | "type") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-3 w-3 text-muted-foreground" />
     return sortConfig.direction === "asc"
       ? <ChevronUp className="ml-2 h-3 w-3 text-primary" />
@@ -203,11 +217,11 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
   }, [items])
 
   const handleExport = () => {
-    const headers = ["Référence", "Nom", "Catégorie", "Quantité", "Unité", "Prix Achat", "Prix Vente", "Valeur Stock", "Seuil Alerte"]
+    const headers = ["Référence", "Nom", "Catégorie", "Quantité", "Unité", "Prix Achat", "Prix Vente", "Valeur Stock", "Seuil Alerte", "Type"] // Added Type
     const csvContent = [
       headers.join(","),
       ...filteredItems.map(item => {
-        // @ts-ignore
+        // @ts-ignore - Supabase join data
         const categoryName = item.supplier_categories?.name || ""
         return [
           `"${(item.reference || "").replace(/"/g, '""')}"`,
@@ -218,7 +232,8 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
           item.default_purchase_price || 0,
           item.sale_price || 0,
           (item.quantity_on_hand * (item.default_purchase_price || 0)).toFixed(3),
-          item.alert_quantity
+          item.alert_quantity,
+          item.type // Added type
         ].join(",")
       })
     ].join("\n")
@@ -231,6 +246,17 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  // Helper for Type Badges
+  const getTypeBadge = (type: ItemWithCategoryName['type']) => {
+    switch (type) {
+      case 'raw_material': return <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-50"><Layers className="w-3 h-3 mr-1" /> MP</Badge>
+      case 'semi_finished': return <Badge variant="outline" className="border-purple-500 text-purple-600 bg-purple-50"><Factory className="w-3 h-3 mr-1" /> SF</Badge>
+      case 'asset': return <Badge variant="outline" className="border-slate-500 text-slate-600 bg-slate-50">IMMO</Badge>
+      case 'consumable': return <Badge variant="outline" className="border-blue-500 text-blue-600 bg-blue-50">CONS</Badge>
+      default: return <Badge variant="outline" className="border-gray-200 text-gray-600"><Package className="w-3 h-3 mr-1" /> Marchandise</Badge>
+    }
   }
 
   return (
@@ -327,9 +353,26 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
             searchPlaceholder="Rechercher un article (nom, réf)..."
             onSearchChange={setSearchTerm}
             resultCount={filteredItems.length}
-            showReset={searchTerm !== "" || filterCategoryId !== "all"}
-            onReset={() => { setSearchTerm(""); setFilterCategoryId("all"); }}
+            showReset={searchTerm !== "" || filterCategoryId !== "all" || filterType !== "all"}
+            onReset={() => { setSearchTerm(""); setFilterCategoryId("all"); setFilterType("all"); }}
           >
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[160px] h-9 bg-background">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-3 h-3 text-muted-foreground" />
+                  <SelectValue placeholder="Type" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les types</SelectItem>
+                <SelectItem value="product">Marchandises</SelectItem>
+                <SelectItem value="raw_material">Matières Premières</SelectItem>
+                <SelectItem value="semi_finished">Semi-Finis</SelectItem>
+                <SelectItem value="consumable">Consommables</SelectItem>
+                <SelectItem value="asset">Immobilisations</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
               <SelectTrigger className="w-[180px] h-9 bg-background">
                 <SelectValue placeholder="Toutes les catégories" />
@@ -355,6 +398,19 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                   >
                     <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Nom {getSortIcon("name")}
+                    </div>
+                  </TableHead>
+                  <TableHead className="h-11">
+                    <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Type
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer hover:text-primary transition-colors h-11"
+                    onClick={() => requestSort("category_name")}
+                  >
+                    <div className="flex items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Catégorie {getSortIcon("category_name")}
                     </div>
                   </TableHead>
                   <TableHead
@@ -387,7 +443,7 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                         Chargement...
@@ -408,6 +464,14 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                             )}
                             {item.name}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {getTypeBadge(item.type || 'product')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal text-xs">
+                            {item.supplier_categories?.name || "-"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground font-mono text-xs">
                           {item.reference || "-"}
@@ -464,12 +528,12 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-[300px] text-center">
-                      {searchTerm || filterCategoryId !== "all" ? (
+                    <TableCell colSpan={7} className="h-[300px] text-center">
+                      {searchTerm || filterCategoryId !== "all" || filterType !== "all" ? (
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Package className="h-10 w-10 text-muted-foreground/20" />
                           <p className="text-muted-foreground text-sm">Aucun article trouvé pour cette recherche.</p>
-                          <Button variant="link" onClick={() => { setSearchTerm(""); setFilterCategoryId("all") }}>Réinitialiser</Button>
+                          <Button variant="link" onClick={() => { setSearchTerm(""); setFilterCategoryId("all"); setFilterType("all"); }}>Réinitialiser</Button>
                         </div>
                       ) : (
                         <StockEmptyState onAddItemClick={() => handleOpenManageDialog(null)} />
