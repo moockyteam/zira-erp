@@ -143,6 +143,29 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                     })
                 })
 
+                // FETCH CREDITS (New V7 Feature)
+                const { data: credits } = await supabase.from('customer_credits')
+                    .select('*')
+                    .eq('customer_id', customerId)
+                    .order('payment_date', { ascending: false })
+                    .limit(50)
+
+                credits?.forEach((c: any) => {
+                    tempItems.push({
+                        id: `credit-${c.id}`,
+                        date: c.payment_date,
+                        type: 'PAYMENT',
+                        reference: `Avance ${c.payment_method || ''}`,
+                        description: c.notes || "Crédit / Avance sur paiement global",
+                        amount: c.amount,
+                        debit: 0,
+                        credit: c.amount,
+                        details: c.notes,
+                        isAvoir: false
+                    })
+                })
+
+
                 invPayments?.forEach((p: any) => {
                     const isAvoir = p.payment_method === 'AVOIR';
                     tempItems.push({

@@ -1,16 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { format } from "date-fns"
-import { fr } from "date-fns/locale"
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Loader2, CheckCircle2, DollarSign, Calendar, CreditCard, Info } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
     DialogContent,
@@ -51,6 +49,23 @@ export function GlobalPaymentDialog({
     const [notes, setNotes] = useState<string>("")
     const [result, setResult] = useState<any>(null)
 
+    // New features matching GlobalPaymentForm
+    const [transactionType, setTransactionType] = useState<"PAYMENT" | "AVOIR">("PAYMENT")
+    const [customerBalance, setCustomerBalance] = useState<number | null>(null)
+
+    // Fetch Balance when dialog opens or customer changes
+    useEffect(() => {
+        const fetchBalance = async () => {
+            if (!customerId || !open) {
+                setCustomerBalance(null)
+                return
+            }
+            const { data, error } = await supabase.rpc('calculate_customer_balance', { p_customer_id: customerId })
+            if (!error) setCustomerBalance(data)
+        }
+        fetchBalance()
+    }, [customerId, open, supabase])
+
     const handleSave = async () => {
         if (!amount || amount <= 0) {
             toast.error("Veuillez saisir un montant valide")
@@ -61,179 +76,317 @@ export function GlobalPaymentDialog({
         setResult(null)
 
         try {
-            // Call the RPC function (v2)
+            // If AVOIR, force method to 'AVOIR'
+            const finalMethod = transactionType === "AVOIR" ? "AVOIR" : method
+
             const { data, error } = await supabase.rpc('record_global_payment', {
                 p_customer_id: customerId,
                 p_amount: amount,
-                p_payment_method: method,
+                p_payment_method: finalMethod,
                 p_notes: notes,
                 p_date: date
             })
 
             if (error) throw error
 
-            console.log("Global Payment Result:", data)
             setResult(data)
-            toast.success("Paiement enregistré avec succès")
+            toast.success(transactionType === "AVOIR" ? "Avoir enregistré avec succès" : "Paiement enregistré avec succès")
             onPaymentComplete()
+
+            // Refresh balance
+            const { data: newBalance } = await supabase.rpc('calculate_customer_balance', { p_customer_id: customerId })
+            setCustomerBalance(newBalance)
 
         } catch (error: any) {
             console.error("Payment error:", error)
-            toast.error("Erreur lors de l'enregistrement: " + error.message)
+            toast.error("Erreur: " + error.message)
         } finally {
             setIsLoading(false)
         }
     }
 
+    const handleReset = () => {
+        setAmount(0)
+        setNotes("")
+        setResult(null)
+        // Keep dialog open for new entry
+    }
+
     const handleClose = () => {
         if (result) {
-            // Reset form on close if success
             setAmount(0)
             setNotes("")
             setResult(null)
         }
+        setTransactionType("PAYMENT")
         onOpenChange(false)
     }
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Paiement Global - Allocation Automatique</DialogTitle>
+            <DialogContent className="sm:max-w-[520px]">
+                <DialogHeader className="pb-4 border-b">
+                    <DialogTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                        {transactionType === "AVOIR" ? "Avoir / Avance" : "Paiement Global"} - {customerName}
+                    </DialogTitle>
                     <DialogDescription>
-                        Le montant saisi sera automatiquement affecté aux factures et BL impayés les plus anciens pour {customerName}.
+                        {transactionType === "AVOIR"
+                            ? "Ce montant sera déduit de la dette du client ou créera un crédit."
+                            : "Le montant sera automatiquement affecté aux documents impayés (FIFO)."}
                     </DialogDescription>
                 </DialogHeader>
 
                 {!result ? (
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="amount">Montant (TND)</Label>
-                            <Input
-                                id="amount"
-                                type="number"
-                                step="0.001"
-                                className="font-mono text-lg bg-green-50 text-green-700"
-                                value={amount}
-                                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                                autoFocus
-                            />
+                    <div className="space-y-5 py-4">
+                        {/* TYPE TOGGLE - Matching GlobalPaymentForm */}
+                        <div className="flex p-1 bg-muted rounded-lg">
+                            <button
+                                type="button"
+                                onClick={() => setTransactionType("PAYMENT")}
+                                className={cn(
+                                    "flex-1 text-sm font-medium py-2.5 rounded-md transition-all",
+                                    transactionType === "PAYMENT"
+                                        ? "bg-background text-primary shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground"
+                                )}
+                            >
+                                Encaissement
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTransactionType("AVOIR")}
+                                className={cn(
+                                    "flex-1 text-sm font-medium py-2.5 rounded-md transition-all",
+                                    transactionType === "AVOIR"
+                                        ? "bg-background text-emerald-600 shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground"
+                                )}
+                            >
+                                Avoir / Avance
+                            </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="date">Date</Label>
+
+                        {/* BALANCE DISPLAY - Matching GlobalPaymentForm */}
+                        {customerBalance !== null && (
+                            <div className={cn(
+                                "text-sm font-medium px-4 py-3 rounded-lg flex justify-between items-center border",
+                                customerBalance > 0
+                                    ? "bg-orange-50 text-orange-700 border-orange-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            )}>
+                                <span className="flex items-center gap-2">
+                                    <CreditCard className="h-4 w-4" />
+                                    Solde actuel :
+                                </span>
+                                <span className="text-lg font-bold">{customerBalance.toFixed(3)} TND</span>
+                            </div>
+                        )}
+
+                        {/* AMOUNT INPUT */}
+                        <div className="space-y-2">
+                            <Label>Montant (TND)</Label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                                 <Input
-                                    id="date"
-                                    type="date"
-                                    value={date}
-                                    onChange={(e) => setDate(e.target.value)}
+                                    type="number"
+                                    step="0.001"
+                                    className="pl-10 h-12 text-lg font-bold"
+                                    placeholder="0.000"
+                                    value={amount === 0 ? "" : amount}
+                                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                                    autoFocus
                                 />
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="method">Mode de paiement</Label>
-                                <Select value={method} onValueChange={setMethod}>
-                                    <SelectTrigger id="method">
-                                        <SelectValue placeholder="Sélectionner" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="ESPECES">Espèces</SelectItem>
-                                        <SelectItem value="CHEQUE">Chèque</SelectItem>
-                                        <SelectItem value="VIREMENT">Virement</SelectItem>
-                                        <SelectItem value="TRAITE">Traite</SelectItem>
-                                        <SelectItem value="CARTE_BANCAIRE">Carte Bancaire</SelectItem>
-                                        <SelectItem value="AUTRE">Autre</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                        </div>
+
+                        {/* DATE & METHOD */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Date</Label>
+                                <div className="relative">
+                                    <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                                    <Input
+                                        type="date"
+                                        className="pl-10 h-10"
+                                        value={date}
+                                        onChange={(e) => setDate(e.target.value)}
+                                    />
+                                </div>
                             </div>
+                            {transactionType === "PAYMENT" && (
+                                <div className="space-y-2">
+                                    <Label>Mode de Paiement</Label>
+                                    <Select value={method} onValueChange={setMethod}>
+                                        <SelectTrigger className="h-10">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ESPECES">Espèces</SelectItem>
+                                            <SelectItem value="CHEQUE">Chèque</SelectItem>
+                                            <SelectItem value="VIREMENT">Virement</SelectItem>
+                                            <SelectItem value="TRAITE">Traite</SelectItem>
+                                            <SelectItem value="CARTE_BANCAIRE">Carte Bancaire</SelectItem>
+                                            <SelectItem value="AUTRE">Autre</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                            {transactionType === "AVOIR" && (
+                                <div className="space-y-2">
+                                    <Label>Motif</Label>
+                                    <Input
+                                        placeholder="Ex: Retour, Geste..."
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        className="h-10 bg-emerald-50/50 border-emerald-100"
+                                    />
+                                </div>
+                            )}
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="notes">Notes / Référence</Label>
-                            <Textarea
-                                id="notes"
-                                placeholder="Ref. Chèque, N° Virement, etc."
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                            />
-                        </div>
-                        <Alert className="bg-blue-50 border-blue-100 mt-2">
-                            <AlertCircle className="h-4 w-4 text-blue-600" />
-                            <AlertTitle className="text-blue-800 text-xs">Information</AlertTitle>
-                            <AlertDescription className="text-blue-700 text-xs text-muted-foreground">
-                                L'algorithme FIFO (First-In First-Out) sera appliqué. Les documents les plus vieux seront soldés en priorité.
+
+                        {/* NOTES (for Payment mode only) */}
+                        {transactionType === "PAYMENT" && (
+                            <div className="space-y-2">
+                                <Label>Référence / Notes</Label>
+                                <Input
+                                    placeholder="Ex: Chèque n°123456"
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    className="h-10"
+                                />
+                            </div>
+                        )}
+
+                        {/* INFO ALERT - Matching GlobalPaymentForm */}
+                        <Alert className={cn(
+                            "border-l-4",
+                            transactionType === "AVOIR"
+                                ? "bg-emerald-50 border-emerald-500 text-emerald-800"
+                                : "bg-blue-50 border-blue-500 text-blue-800"
+                        )}>
+                            <Info className="h-4 w-4" />
+                            <AlertTitle className="text-xs font-bold uppercase mb-1">
+                                {transactionType === "AVOIR" ? "Mode Avoir Client" : "Mode Encaissement"}
+                            </AlertTitle>
+                            <AlertDescription className="text-xs opacity-90">
+                                {transactionType === "AVOIR"
+                                    ? "Ce montant sera déduit de la dette du client. S'il ne doit rien, cela créera un solde créditeur (avance) en sa faveur."
+                                    : "Ce paiement sera utilisé pour régler les factures et BL impayés les plus anciens (FIFO)."}
                             </AlertDescription>
                         </Alert>
                     </div>
                 ) : (
+                    /* SUCCESS VIEW - Matching GlobalPaymentForm */
                     <div className="py-4 space-y-4">
-                        <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-md border border-green-100">
-                            <CheckCircle2 className="h-6 w-6" />
-                            <div className="font-semibold px-2">Traitement effectué avec succès !</div>
+                        <div className="flex items-center gap-3 text-emerald-600 bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                            <CheckCircle2 className="h-7 w-7" />
+                            <div>
+                                <div className="font-bold text-lg">
+                                    {transactionType === "AVOIR" ? "Avoir Enregistré !" : "Paiement enregistré !"}
+                                </div>
+                                <div className="text-sm text-emerald-700/80">
+                                    {transactionType === "AVOIR" ? "L'avoir de" : "Le paiement de"} <strong>{amount.toFixed(3)} TND</strong> a été traité.
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="text-sm space-y-2 border rounded-md p-3">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Montant Total :</span>
-                                <span className="font-bold">{amount.toFixed(3)} TND</span>
+                        <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-4 rounded-lg">
+                            <div>
+                                <span className="text-muted-foreground block">Montant Saisi</span>
+                                <span className="font-bold text-lg">{(result.total_requested || amount).toFixed(3)} <span className="text-xs font-normal">TND</span></span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Alloué :</span>
-                                <span className="font-bold text-green-600">{result.total_paid.toFixed(3)} TND</span>
+                            <div>
+                                <span className="text-muted-foreground block text-right">Alloué aux Documents</span>
+                                <span className="font-bold text-lg text-emerald-600 block text-right">{(result.total_allocated || result.total_paid || 0).toFixed(3)} <span className="text-xs font-normal">TND</span></span>
                             </div>
-                            {result.remaining_unallocated > 0.001 && (
-                                <div className="flex justify-between border-t pt-2">
-                                    <span className="text-orange-600 font-medium">Non alloué (Reste) :</span>
-                                    <span className="font-bold text-orange-600">{result.remaining_unallocated.toFixed(3)} TND</span>
+                            {(result.total_credited > 0.001 || result.credited > 0.001 || result.remaining_unallocated > 0.001) && (
+                                <div className="col-span-2 pt-2 border-t mt-2 flex justify-between items-center">
+                                    <span className="text-blue-600 font-medium flex items-center gap-2">
+                                        <CreditCard className="h-4 w-4" />
+                                        {(result.total_credited > 0 || result.credited > 0) ? "Stocké en Crédit Client" : "Non alloué"}
+                                    </span>
+                                    <span className="font-bold text-blue-600">{(result.total_credited || result.credited || result.remaining_unallocated || 0).toFixed(3)} TND</span>
+                                </div>
+                            )}
+                            {(result.total_credited > 0.001 || result.credited > 0.001) && (
+                                <div className="col-span-2 bg-blue-50 border border-blue-200 text-blue-700 p-2 rounded text-xs">
+                                    ✓ Le crédit a été enregistré et sera déduit automatiquement du solde client.
                                 </div>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="text-xs font-semibold uppercase text-muted-foreground">Détail des affectations :</Label>
-                            <div className="max-h-[150px] overflow-y-auto border rounded-md">
+                            <h4 className="text-xs font-semibold uppercase text-muted-foreground">Affectations (FIFO)</h4>
+                            <div className="border rounded-md overflow-hidden bg-background max-h-[150px] overflow-y-auto">
                                 {result.allocations && result.allocations.length > 0 ? (
                                     <table className="w-full text-xs">
                                         <thead className="bg-muted sticky top-0">
                                             <tr>
-                                                <th className="text-left p-2">Type</th>
-                                                <th className="text-left p-2">Ref</th>
-                                                <th className="text-right p-2">Payé</th>
+                                                <th className="text-left p-2 font-medium">Type</th>
+                                                <th className="text-left p-2 font-medium">Référence</th>
+                                                <th className="text-right p-2 font-medium">Montant</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
+                                        <tbody className="divide-y">
                                             {result.allocations.map((alloc: any, i: number) => (
-                                                <tr key={i} className="border-t">
+                                                <tr key={i}>
                                                     <td className="p-2">{alloc.document_type === 'INVOICE' ? 'Facture' : 'BL'}</td>
                                                     <td className="p-2 font-medium">{alloc.reference}</td>
-                                                    <td className="p-2 text-right">{alloc.amount_paid.toFixed(3)}</td>
+                                                    <td className="p-2 text-right font-mono">{alloc.amount_paid.toFixed(3)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                 ) : (
-                                    <div className="p-4 text-center text-muted-foreground italic text-xs">
-                                        Aucun document n'était en attente de paiement.
+                                    <div className="p-6 text-center text-muted-foreground italic text-xs">
+                                        Le montant a été ajouté au solde créditeur du client (aucun document en attente).
                                     </div>
                                 )}
                             </div>
                         </div>
+
+                        {/* Updated Balance Display */}
+                        {customerBalance !== null && (
+                            <div className={cn(
+                                "text-sm font-medium px-4 py-3 rounded-lg flex justify-between items-center border",
+                                customerBalance > 0
+                                    ? "bg-orange-50 text-orange-700 border-orange-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            )}>
+                                <span>Nouveau solde :</span>
+                                <span className="text-lg font-bold">{customerBalance.toFixed(3)} TND</span>
+                            </div>
+                        )}
                     </div>
                 )}
 
-                <DialogFooter>
+                <DialogFooter className="border-t pt-4">
                     {!result ? (
                         <>
                             <Button variant="outline" onClick={handleClose} disabled={isLoading}>
                                 Annuler
                             </Button>
-                            <Button onClick={handleSave} disabled={isLoading || amount <= 0}>
+                            <Button
+                                onClick={handleSave}
+                                disabled={isLoading || amount <= 0}
+                                className={cn(
+                                    transactionType === "AVOIR" ? "bg-emerald-600 hover:bg-emerald-700" : ""
+                                )}
+                            >
                                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirmer et Allouer
+                                {transactionType === "AVOIR" ? "Enregistrer l'Avoir" : "Confirmer et Allouer"}
                             </Button>
                         </>
                     ) : (
-                        <Button onClick={handleClose}>
-                            Fermer
-                        </Button>
+                        <div className="flex gap-2 w-full">
+                            <Button variant="outline" onClick={handleClose} className="flex-1">
+                                Fermer
+                            </Button>
+                            <Button onClick={handleReset} className="flex-1">
+                                {transactionType === "AVOIR" ? "Nouvel Avoir" : "Nouveau Paiement"}
+                            </Button>
+                        </div>
                     )}
                 </DialogFooter>
             </DialogContent>
