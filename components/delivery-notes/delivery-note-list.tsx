@@ -449,7 +449,20 @@ export function DeliveryNoteList({ userCompanies }: { userCompanies: any[] }) {
                                 Facturer
                               </Button>
                             </Link>
-                            {/* Payment button removed to enforce Global Collections workflow */}
+                            {!dn.invoice_id && (dn as any).paymentStatus !== "PAYE" && (
+                              <DeliveryNotePaymentDialog
+                                deliveryNoteId={dn.id}
+                                deliveryNoteReference={dn.delivery_note_number}
+                                amountDue={(dn.total_ttc || 0) - ((dn as any).totalPaid || 0)}
+                                customerId={dn.customer_id}
+                                onPaymentSuccess={() => fetchDns(selectedCompanyId!)}
+                              >
+                                <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                  Paiement
+                                </Button>
+                              </DeliveryNotePaymentDialog>
+                            )}
                           </>
                         )}
                         <DnActions dn={dn} onActionSuccess={() => fetchDns(selectedCompanyId!)} />

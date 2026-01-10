@@ -76,6 +76,7 @@ const initialFormData = {
   default_purchase_price: "",
   sale_price: "",
   alert_quantity: "0",
+  initial_quantity: "", // NEW: For initial stock when creating
 }
 
 export function ManageItemDialog({
@@ -117,6 +118,7 @@ export function ManageItemDialog({
         default_purchase_price: currentItem.default_purchase_price?.toString() || "",
         sale_price: currentItem.sale_price?.toString() || "",
         alert_quantity: currentItem.alert_quantity?.toString() || "0",
+        initial_quantity: "", // Not applicable for existing items
       })
       fetchItemSuppliers(currentItem.id)
     } else {
@@ -148,8 +150,12 @@ export function ManageItemDialog({
 
   const handleSave = async () => {
     setIsSaving(true)
+
+    // Exclude initial_quantity from database save (it's not a column)
+    const { initial_quantity, ...formDataWithoutInitialQty } = formData
+
     const dataToSave = {
-      ...formData,
+      ...formDataWithoutInitialQty,
       company_id: companyId,
       default_purchase_price: Number.parseFloat(formData.default_purchase_price.replace(",", ".")) || null,
       sale_price: Number.parseFloat(formData.sale_price.replace(",", ".")) || null,
@@ -171,11 +177,32 @@ export function ManageItemDialog({
       if (error) {
         toast.error(error.message)
       } else {
-        toast.success("Article créé. Vous pouvez maintenant configurer la suite.")
+        // Check if we need to add initial stock for Marchandise
+        const initialQty = Number.parseFloat(initial_quantity.replace(",", ".")) || 0
+        if (initialQty > 0 && formData.type === 'product') {
+          // Add stock movement
+          const { error: stockError } = await supabase.rpc("add_stock_movement", {
+            p_company_id: companyId,
+            p_item_id: newItem.id,
+            p_movement_type: "ENTREE",
+            p_quantity: initialQty,
+            p_supplier_id: null,
+            p_notes: "Stock initial",
+            p_unit_price: Number.parseFloat(formData.default_purchase_price.replace(",", ".")) || null,
+            p_current_sale_price: Number.parseFloat(formData.sale_price.replace(",", ".")) || null,
+          })
+          if (stockError) {
+            console.error("Erreur ajout stock initial:", stockError)
+            toast.warning("Article créé mais erreur lors de l'ajout du stock initial.")
+          } else {
+            toast.success(`Article créé avec ${initialQty} unités en stock.`)
+          }
+        } else {
+          toast.success("Article créé.")
+        }
         setCurrentItem(newItem as Item)
         onSuccess()
-        // We do NOT close dialog immediately if created, to allow configured Suppliers/BOM
-        // onOpenChange(false) 
+        onOpenChange(false) // Close dialog after creation for Marchandise
       }
     }
     setIsSaving(false)
@@ -228,7 +255,8 @@ export function ManageItemDialog({
   }
 
   // --- Helpers for Type Logic ---
-  const isManufactured = formData.type === 'semi_finished' || formData.type === 'product'
+  // Composition/Recette only for semi_finished (NOT for product/Marchandise)
+  const isManufactured = formData.type === 'semi_finished'
   const isRawMaterial = formData.type === 'raw_material'
   const isAsset = formData.type === 'asset'
   // ------------------------------
@@ -478,6 +506,24 @@ export function ManageItemDialog({
                       onBlur={(e) => setFormData((p) => ({ ...p, alert_quantity: e.target.value.replace(",", ".") }))}
                     />
                   </div>
+
+                  {/* INITIAL QUANTITY: Only for new Marchandise items */}
+                  {isCreateMode && formData.type === 'product' && (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-primary" />
+                        Quantité initiale en stock
+                      </Label>
+                      <Input
+                        type="text"
+                        value={formData.initial_quantity}
+                        onChange={(e) => setFormData((p) => ({ ...p, initial_quantity: e.target.value.replace(",", ".") }))}
+                        placeholder="Ex: 100 (optionnel)"
+                        className="h-11 text-lg"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Si vous avez du stock existant, saisissez la quantité ici.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </TabsContent>

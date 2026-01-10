@@ -33,6 +33,8 @@ type Invoice = {
   total_paid: number
   amount_due: number
   currency: string
+  customer_id: string
+  company_id: string
 }
 
 export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[] }) { // Keep prop
@@ -88,7 +90,7 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
     const { data, error } = await supabase
       .from("invoices_with_totals")
       .select(
-        `id, invoice_number, customers ( name ), invoice_date, due_date, total_ttc, status, total_paid, amount_due, currency`,
+        `id, invoice_number, customers ( name ), invoice_date, due_date, total_ttc, status, total_paid, amount_due, currency, customer_id, company_id`,
       )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
