@@ -41,6 +41,7 @@ import { ReorderDialog } from "./reorder-dialog"
 import { StockHistoryDialog } from "./stock-history-dialog"
 import { StockImportDialog } from "./stock-import-dialog"
 import { StockEntryDialog } from "./stock-entry-dialog"
+import { ProductionDialog } from "./production-dialog"
 import { QuickAdjustDialog } from "./quick-adjust-dialog"
 import { StockEmptyState } from "./stock-empty-state"
 import { cn } from "@/lib/utils"
@@ -82,6 +83,9 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
   const [itemToEntry, setItemToEntry] = useState<Item | null>(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [itemToHistory, setItemToHistory] = useState<Item | null>(null)
+
+  const [isProduceOpen, setIsProduceOpen] = useState(false)
+  const [itemToProduce, setItemToProduce] = useState<Item | null>(null)
 
   // Filters & Sort
   const [searchTerm, setSearchTerm] = useState("")
@@ -509,6 +513,15 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                                 Historique
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
+                              {(item.type === 'semi_finished' || item.type === 'product') && (
+                                <DropdownMenuItem onClick={() => {
+                                  setItemToProduce(item)
+                                  setIsProduceOpen(true)
+                                }}>
+                                  <Factory className="h-4 w-4 mr-2" />
+                                  Produire
+                                </DropdownMenuItem>
+                              )}
                               {!isLowStock && (
                                 <DropdownMenuItem onClick={() => setItemToReorder(item)}>
                                   <ShoppingCart className="h-4 w-4 mr-2" />
@@ -595,6 +608,18 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
         itemId={itemToHistory?.id || null}
         companyId={selectedCompanyId!}
         itemName={itemToHistory?.name || ""}
+      />
+      <ProductionDialog
+        isOpen={isProduceOpen}
+        onOpenChange={(open) => {
+          setIsProduceOpen(open)
+          if (!open) setItemToProduce(null)
+        }}
+        companyId={selectedCompanyId!}
+        item={itemToProduce}
+        onSuccess={() => {
+          if (selectedCompanyId) fetchCompanyData(selectedCompanyId)
+        }}
       />
     </div >
   )

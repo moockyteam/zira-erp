@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { AddCategoryDialog } from "./add-category-dialog"
+import { AddSupplierDialog } from "./add-supplier-dialog"
 import { Trash2, Save, Package, DollarSign, Users, Info, Factory, Link as LinkIcon, Layers } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
@@ -46,10 +47,11 @@ export type Item = {
   alert_quantity: number
   is_archived: boolean
 }
-type Category = { id: string; name: string; parent_id: string | null }
+type Category = { id: string; name: string; parent_id: string | null; applicable_item_types?: string[] | null; company_id: string | null }
 type Supplier = { id: string; name: string }
 type ItemSupplier = {
   id: string
+  item_id: string
   supplier_id: string
   last_purchase_price: number | null
   supplier_item_reference: string | null
@@ -92,6 +94,7 @@ export function ManageItemDialog({
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [itemSuppliers, setItemSuppliers] = useState<ItemSupplier[]>([])
+  const [pendingSuppliers, setPendingSuppliers] = useState<ItemSupplier[]>([]) // Local state for creation mode
   const [isSaving, setIsSaving] = useState(false)
 
   const isCreateMode = !currentItem?.id
@@ -124,15 +127,37 @@ export function ManageItemDialog({
     } else {
       setFormData(initialFormData)
       setItemSuppliers([])
+      setPendingSuppliers([])
     }
   }, [isOpen, currentItem, companyId])
 
   const fetchInitialData = async () => {
     await Promise.all([fetchCategories(), fetchSuppliers()])
   }
+  // Fetch Categories including applicable logic
   const fetchCategories = async () => {
-    const { data } = await supabase.from("supplier_categories").select("id, name, parent_id").order("name")
-    if (data) setCategories(data)
+    const { data } = await supabase.from("supplier_categories").select("id, name, parent_id, applicable_item_types, company_id").order("name")
+    if (data) {
+      // De-duplicate categories by name
+      // Preference: Specific Company > Global (null)
+      const typedData = data as unknown as Category[]
+      const uniqueCategories = Object.values(
+        typedData.reduce((acc, cat) => {
+          if (!acc[cat.name]) {
+            acc[cat.name] = cat;
+          } else {
+            // If we already have one, check if the new one is "better" (i.e., matches companyId specifically)
+            if (cat.company_id === companyId) {
+              acc[cat.name] = cat;
+            }
+          }
+          return acc;
+        }, {} as Record<string, Category>)
+      )
+      // Sort again by name just in case
+      uniqueCategories.sort((a, b) => a.name.localeCompare(b.name))
+      setCategories(uniqueCategories)
+    }
   }
   const fetchSuppliers = async () => {
     const { data } = await supabase.from("suppliers").select("id, name").eq("company_id", companyId).order("name")
@@ -144,9 +169,11 @@ export function ManageItemDialog({
   }
 
   const availableSuppliers = useMemo(() => {
-    const linkedSupplierIds = new Set(itemSuppliers.map((is) => is.supplier_id))
+    // Combine DB suppliers (edit mode) and Pending suppliers (create mode)
+    const currentList = isCreateMode ? pendingSuppliers : itemSuppliers
+    const linkedSupplierIds = new Set(currentList.map((is) => is.supplier_id))
     return suppliers.filter((s) => !linkedSupplierIds.has(s.id))
-  }, [suppliers, itemSuppliers])
+  }, [suppliers, itemSuppliers, pendingSuppliers, isCreateMode])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -177,6 +204,25 @@ export function ManageItemDialog({
       if (error) {
         toast.error(error.message)
       } else {
+        // Save pending suppliers if any
+        if (pendingSuppliers.length > 0) {
+          const suppliersToInsert = pendingSuppliers.map(p => ({
+            item_id: newItem.id,
+            supplier_id: p.supplier_id,
+            last_purchase_price: p.last_purchase_price,
+            supplier_item_reference: p.supplier_item_reference
+          }));
+          const { error: suppError } = await supabase.from('item_suppliers').insert(suppliersToInsert);
+          if (suppError) {
+            console.error("Erreur sauvegarde fournisseurs:", suppError);
+            toast.warning("Article créé, mais erreur lors de l'association des fournisseurs.");
+          } else {
+            toast.success(`Article créé avec ${pendingSuppliers.length} fournisseur(s) associé(s).`);
+          }
+        } else {
+          toast.success("Article créé.");
+        }
+
         // Check if we need to add initial stock for Marchandise
         const initialQty = Number.parseFloat(initial_quantity.replace(",", ".")) || 0
         if (initialQty > 0 && formData.type === 'product') {
@@ -221,17 +267,40 @@ export function ManageItemDialog({
     }
   }
 
-  const addSupplierLink = async (supplierId: string) => {
-    if (!currentItem?.id || !supplierId) return
-    const { error } = await supabase.from("item_suppliers").insert({ item_id: currentItem.id, supplier_id: supplierId })
+  const addSupplierLink = async (supplierId: string, directSupplier?: Supplier) => {
+    if ((!currentItem?.id && !isCreateMode) || !supplierId) return
+
+    if (isCreateMode) {
+      // Use directSupplier if provided (freshly created), otherwise look in state
+      const supplier = directSupplier || suppliers.find(s => s.id === supplierId)
+
+      const newPending: ItemSupplier = {
+        id: `temp-${Date.now()}`,
+        item_id: '',
+        supplier_id: supplierId,
+        last_purchase_price: null,
+        supplier_item_reference: null,
+        suppliers: { name: supplier?.name || 'chargement...' }
+      }
+      setPendingSuppliers([...pendingSuppliers, newPending])
+      toast.success("Fournisseur ajouté (en attente de sauvegarde)")
+      return
+    }
+
+    const { error } = await supabase.from("item_suppliers").insert({ item_id: currentItem?.id, supplier_id: supplierId })
     if (error) toast.error("Une erreur est survenue.")
     else {
       toast.success("Fournisseur associé.")
-      fetchItemSuppliers(currentItem.id)
+      if (currentItem?.id) fetchItemSuppliers(currentItem.id)
     }
   }
 
   const removeSupplierLink = async (linkId: string) => {
+    if (linkId.startsWith('temp-')) {
+      setPendingSuppliers(pendingSuppliers.filter(p => p.id !== linkId))
+      return
+    }
+
     const { error } = await supabase.from("item_suppliers").delete().eq("id", linkId)
     if (error) toast.error(error.message)
     else {
@@ -241,6 +310,15 @@ export function ManageItemDialog({
   }
 
   const updateItemSupplier = async (linkId: string, price: string, reference: string) => {
+    if (linkId.startsWith('temp-')) {
+      setPendingSuppliers(pendingSuppliers.map(p => p.id === linkId ? {
+        ...p,
+        last_purchase_price: Number.parseFloat(price.replace(",", ".")) || null,
+        supplier_item_reference: reference
+      } : p))
+      return
+    }
+
     const { error } = await supabase
       .from("item_suppliers")
       .update({
@@ -345,7 +423,7 @@ export function ManageItemDialog({
               <TabsTrigger value="prices">
                 <DollarSign className="h-4 w-4 mr-2" /> Prix & Stock
               </TabsTrigger>
-              <TabsTrigger value="suppliers" disabled={isCreateMode || isManufactured}>
+              <TabsTrigger value="suppliers" disabled={isManufactured}>
                 <Users className="h-4 w-4 mr-2" /> Fournisseurs
               </TabsTrigger>
               {isManufactured && (
@@ -397,9 +475,18 @@ export function ManageItemDialog({
                           <SelectValue placeholder="Choisir une catégorie..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {categories.filter(c => !c.parent_id).map((c) => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                          ))}
+                          {categories
+                            .filter(c => !c.parent_id) // Parents
+                            .filter(c =>
+                              // Show if applicable_item_types includes current type OR if it's null (generic behavior, can be adjusted)
+                              // Based on plan: "Strict filtering" -> Show only if included.
+                              // If array is null, we assume it's NOT specific, so maybe we hide it if we want rigorous stock control.
+                              // BUT for "Commerce & Distribution" we set it explicitly.
+                              c.applicable_item_types ? c.applicable_item_types.includes(formData.type) : false
+                            )
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -414,9 +501,15 @@ export function ManageItemDialog({
                           <SelectValue placeholder="Choisir une sous-catégorie..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {formData.category_id && categories.filter(c => c.parent_id === formData.category_id).map((c) => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                          ))}
+                          {formData.category_id && categories
+                            .filter(c => c.parent_id === formData.category_id)
+                            .filter(c =>
+                              // Same filtering for subcategories
+                              c.applicable_item_types ? c.applicable_item_types.includes(formData.type) : false
+                            )
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -533,10 +626,10 @@ export function ManageItemDialog({
               <div className="py-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-medium">Fournisseurs référencés</h4>
-                  <div className="w-[300px]">
+                  <div className="w-[300px] flex gap-2">
                     <Select onValueChange={addSupplierLink} value="">
-                      <SelectTrigger>
-                        <SelectValue placeholder="+ Associer un fournisseur" />
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="+ Associer..." />
                       </SelectTrigger>
                       <SelectContent>
                         {availableSuppliers.map((s) => (
@@ -544,15 +637,22 @@ export function ManageItemDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    <AddSupplierDialog
+                      companyId={companyId}
+                      onSupplierAdded={(newSupplier) => {
+                        fetchSuppliers()
+                        addSupplierLink(newSupplier.id, newSupplier)
+                      }}
+                    />
                   </div>
                 </div>
                 {/* ... (Existing supplier list logic reused) ... */}
                 <div className="border rounded-md divide-y">
-                  {itemSuppliers.length === 0 ? (
+                  {(isCreateMode ? pendingSuppliers : itemSuppliers).length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">
                       Aucun fournisseur associé.
                     </div>
-                  ) : itemSuppliers.map((is) => (
+                  ) : (isCreateMode ? pendingSuppliers : itemSuppliers).map((is) => (
                     <div key={is.id} className="grid grid-cols-12 gap-4 p-4 items-center">
                       <div className="col-span-4 font-medium flex items-center gap-2">
                         <Users className="h-4 w-4 opacity-50" /> {is.suppliers.name}
