@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Building, LayoutDashboard, Users, Boxes, ChevronLeft, ChevronRight, FileText,
   Contact, Receipt, Truck, CornerUpLeft, Package, ShoppingCart,
-  TrendingDown, Briefcase, Check, ChevronsUpDown, PlusCircle, Banknote
+  TrendingDown, Briefcase, Check, ChevronsUpDown, PlusCircle, Banknote, Factory
 } from "lucide-react"
 import LogoutButton from "@/components/logout-button"
 import { cn } from "@/lib/utils"
@@ -77,6 +77,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
       title: "Logistique",
       links: [
         { href: "/dashboard/stock", label: "Stock", icon: Boxes },
+        { href: "/dashboard/production", label: "Production", icon: Factory },
         { href: "/dashboard/delivery-notes", label: "Bons de Livraison", icon: Truck },
         { href: "/dashboard/returns", label: "Bons de Retour", icon: CornerUpLeft },
         { href: "/dashboard/stock-issues", label: "Bons de Sortie", icon: Package },

@@ -20,13 +20,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { AddCategoryDialog } from "./add-category-dialog"
 import { AddSupplierDialog } from "./add-supplier-dialog"
-import { Trash2, Save, Package, DollarSign, Users, Info, Factory, Link as LinkIcon, Layers } from "lucide-react"
+import { Trash2, Save, Package, DollarSign, Users, Info, Factory, Link as LinkIcon, Layers, ShoppingCart } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 // Import BOM Manager
-import { BomManager } from "./bom-manager"
+import { BomManager, PendingBomItem } from "./bom-manager"
 
 // Types
 export type ItemType = 'product' | 'raw_material' | 'semi_finished' | 'consumable' | 'asset'
@@ -78,7 +78,8 @@ const initialFormData = {
   default_purchase_price: "",
   sale_price: "",
   alert_quantity: "0",
-  initial_quantity: "", // NEW: For initial stock when creating
+  initial_quantity: "",
+  is_manufactured: false,
 }
 
 export function ManageItemDialog({
@@ -95,6 +96,7 @@ export function ManageItemDialog({
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [itemSuppliers, setItemSuppliers] = useState<ItemSupplier[]>([])
   const [pendingSuppliers, setPendingSuppliers] = useState<ItemSupplier[]>([]) // Local state for creation mode
+  const [pendingBom, setPendingBom] = useState<PendingBomItem[]>([]) // Pending BOM for creation mode
   const [isSaving, setIsSaving] = useState(false)
 
   const isCreateMode = !currentItem?.id
@@ -121,7 +123,8 @@ export function ManageItemDialog({
         default_purchase_price: currentItem.default_purchase_price?.toString() || "",
         sale_price: currentItem.sale_price?.toString() || "",
         alert_quantity: currentItem.alert_quantity?.toString() || "0",
-        initial_quantity: "", // Not applicable for existing items
+        initial_quantity: "",
+        is_manufactured: currentItem.type === 'product' || currentItem.type === 'semi_finished',
       })
       fetchItemSuppliers(currentItem.id)
     } else {
@@ -178,11 +181,11 @@ export function ManageItemDialog({
   const handleSave = async () => {
     setIsSaving(true)
 
-    // Exclude initial_quantity from database save (it's not a column)
-    const { initial_quantity, ...formDataWithoutInitialQty } = formData
+    // Exclude initial_quantity and is_manufactured from database save (they are not DB columns)
+    const { initial_quantity, is_manufactured, ...formDataWithoutUiFields } = formData
 
     const dataToSave = {
-      ...formDataWithoutInitialQty,
+      ...formDataWithoutUiFields,
       company_id: companyId,
       default_purchase_price: Number.parseFloat(formData.default_purchase_price.replace(",", ".")) || null,
       sale_price: Number.parseFloat(formData.sale_price.replace(",", ".")) || null,
@@ -243,9 +246,24 @@ export function ManageItemDialog({
           } else {
             toast.success(`Article créé avec ${initialQty} unités en stock.`)
           }
-        } else {
-          toast.success("Article créé.")
         }
+
+        // Save pending BOM if any
+        if (pendingBom.length > 0) {
+          const bomToInsert = pendingBom.map(b => ({
+            parent_item_id: newItem.id,
+            child_item_id: b.child_item_id,
+            quantity: b.quantity
+          }))
+          const { error: bomError } = await supabase.from('bill_of_materials').insert(bomToInsert)
+          if (bomError) {
+            console.error("Erreur sauvegarde recette:", bomError)
+            toast.warning("Article créé, mais erreur lors de l'enregistrement de la recette.")
+          } else {
+            toast.success(`Recette enregistrée avec ${pendingBom.length} ingrédient(s).`)
+          }
+        }
+
         setCurrentItem(newItem as Item)
         onSuccess()
         onOpenChange(false) // Close dialog after creation for Marchandise
@@ -333,8 +351,8 @@ export function ManageItemDialog({
   }
 
   // --- Helpers for Type Logic ---
-  // Composition/Recette only for semi_finished (NOT for product/Marchandise)
-  const isManufactured = formData.type === 'semi_finished'
+  // Recipe tab: for semi_finished OR (product with is_manufactured)
+  const isManufactured = formData.type === 'semi_finished' || (formData.type === 'product' && formData.is_manufactured)
   const isRawMaterial = formData.type === 'raw_material'
   const isAsset = formData.type === 'asset'
   // ------------------------------
@@ -360,57 +378,93 @@ export function ManageItemDialog({
 
         <div className="flex-1 overflow-y-auto px-1">
           {/* TYPE SELECTION (Only in Create Mode for simplicity, or if type is missing) */}
+          {/* TYPE SELECTION */}
           {(isCreateMode || !formData.type) && (
-            <div className="mb-6 p-4 border rounded-lg bg-muted/20">
-              <Label className="mb-3 block text-sm font-medium">Quel type d'article créez-vous ?</Label>
-              <RadioGroup
-                value={formData.type}
-                onValueChange={(val: ItemType) => setFormData(p => ({ ...p, type: val }))}
-                className="grid grid-cols-1 md:grid-cols-3 gap-4"
-              >
-                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'product' && "border-primary bg-primary/5")}>
-                  <RadioGroupItem value="product" id="t-product" className="sr-only" />
-                  <Package className="h-6 w-6 mb-2 text-blue-600" />
-                  <div className="text-center">
-                    <div className="font-semibold text-sm">Marchandise</div>
-                    <div className="text-[10px] text-muted-foreground">Achat & Vente standard</div>
-                  </div>
-                </label>
-
-                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'raw_material' && "border-primary bg-primary/5")}>
-                  <RadioGroupItem value="raw_material" id="t-raw" className="sr-only" />
-                  <Layers className="h-6 w-6 mb-2 text-amber-600" />
-                  <div className="text-center">
-                    <div className="font-semibold text-sm">Matière Première</div>
-                    <div className="text-[10px] text-muted-foreground">Achat & Transformation</div>
-                  </div>
-                </label>
-
-                <label className={cn("flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all", formData.type === 'semi_finished' && "border-primary bg-primary/5")}>
-                  <RadioGroupItem value="semi_finished" id="t-semi" className="sr-only" />
-                  <Factory className="h-6 w-6 mb-2 text-purple-600" />
-                  <div className="text-center">
-                    <div className="font-semibold text-sm">Semi-Fini</div>
-                    <div className="text-[10px] text-muted-foreground">Fabriqué & Consommé</div>
-                  </div>
-                </label>
-
-                {/* Plus discret pour Consommable/Asset si besoin, ajoutons-les en simple dropdown ou bouton toggle ?
-                      Pour l'instant on garde les 3 principaux en evidence. */}
-              </RadioGroup>
-              <div className="mt-2 flex gap-4 justify-center">
-                <div className="flex items-center space-x-2">
-                  <RadioGroup value={formData.type} onValueChange={(val: ItemType) => setFormData(p => ({ ...p, type: val }))} className="flex gap-4">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="consumable" id="t-cons" />
-                      <Label htmlFor="t-cons" className="text-xs text-muted-foreground">Consommable</Label>
+            <div className="mb-6 space-y-4">
+              <div className="p-4 border rounded-lg bg-muted/20">
+                <Label className="mb-3 block text-sm font-medium">Quel type d'article créez-vous ?</Label>
+                <RadioGroup
+                  value={formData.type}
+                  onValueChange={(val: ItemType) => {
+                    setFormData(p => ({ ...p, type: val }))
+                  }}
+                  className="grid grid-cols-2 md:grid-cols-5 gap-3"
+                >
+                  {/* MARCHANDISE (Trading - product type, NO recipe) */}
+                  <label className={cn(
+                    "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all",
+                    formData.type === 'product' && !formData.is_manufactured && "border-blue-500 bg-blue-50"
+                  )}
+                    onClick={() => setFormData(p => ({ ...p, type: 'product', is_manufactured: false }))}
+                  >
+                    <RadioGroupItem value="product_trading" id="t-marchandise" className="sr-only" />
+                    <Package className={cn("h-6 w-6 mb-2", formData.type === 'product' && !formData.is_manufactured ? "text-blue-600" : "text-muted-foreground")} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">Marchandise</div>
+                      <div className="text-[10px] text-muted-foreground">Achat & Revente</div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="asset" id="t-asset" />
-                      <Label htmlFor="t-asset" className="text-xs text-muted-foreground">Immobilisation</Label>
+                  </label>
+
+                  {/* PRODUIT FINI (Finished Product - HAS recipe) */}
+                  <label className={cn(
+                    "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all",
+                    formData.type === 'product' && formData.is_manufactured && "border-purple-500 bg-purple-50"
+                  )}
+                    onClick={() => setFormData(p => ({ ...p, type: 'product', is_manufactured: true }))}
+                  >
+                    <RadioGroupItem value="product_manufacturing" id="t-product" className="sr-only" />
+                    <Factory className={cn("h-6 w-6 mb-2", formData.type === 'product' && formData.is_manufactured ? "text-purple-600" : "text-muted-foreground")} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">Produit Fini</div>
+                      <div className="text-[10px] text-muted-foreground">Fabrication & Vente</div>
                     </div>
-                  </RadioGroup>
-                </div>
+                  </label>
+
+                  {/* SEMI-FINI */}
+                  <label className={cn(
+                    "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all",
+                    formData.type === 'semi_finished' && "border-indigo-500 bg-indigo-50"
+                  )}
+                    onClick={() => setFormData(p => ({ ...p, type: 'semi_finished' }))}
+                  >
+                    <RadioGroupItem value="semi_finished" id="t-semi" className="sr-only" />
+                    <Layers className={cn("h-6 w-6 mb-2", formData.type === 'semi_finished' ? "text-indigo-600" : "text-muted-foreground")} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">Semi-Fini</div>
+                      <div className="text-[10px] text-muted-foreground">Composant Fabriqué</div>
+                    </div>
+                  </label>
+
+                  {/* MATIERE PREMIERE */}
+                  <label className={cn(
+                    "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all",
+                    formData.type === 'raw_material' && "border-amber-500 bg-amber-50"
+                  )}
+                    onClick={() => setFormData(p => ({ ...p, type: 'raw_material' }))}
+                  >
+                    <RadioGroupItem value="raw_material" id="t-raw" className="sr-only" />
+                    <ShoppingCart className={cn("h-6 w-6 mb-2", formData.type === 'raw_material' ? "text-amber-600" : "text-muted-foreground")} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">Matière Première</div>
+                      <div className="text-[10px] text-muted-foreground">Achat & Utilisation</div>
+                    </div>
+                  </label>
+
+                  {/* CONSOMMABLE */}
+                  <label className={cn(
+                    "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-all",
+                    formData.type === 'consumable' && "border-slate-500 bg-slate-50"
+                  )}
+                    onClick={() => setFormData(p => ({ ...p, type: 'consumable' }))}
+                  >
+                    <RadioGroupItem value="consumable" id="t-cons" className="sr-only" />
+                    <Package className={cn("h-6 w-6 mb-2", formData.type === 'consumable' ? "text-slate-600" : "text-muted-foreground")} />
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">Consommable</div>
+                      <div className="text-[10px] text-muted-foreground">Usage Interne</div>
+                    </div>
+                  </label>
+                </RadioGroup>
               </div>
             </div>
           )}
@@ -427,7 +481,7 @@ export function ManageItemDialog({
                 <Users className="h-4 w-4 mr-2" /> Fournisseurs
               </TabsTrigger>
               {isManufactured && (
-                <TabsTrigger value="composition" disabled={isCreateMode}>
+                <TabsTrigger value="composition">
                   <LinkIcon className="h-4 w-4 mr-2" /> Composition / Recette
                 </TabsTrigger>
               )}
@@ -679,19 +733,13 @@ export function ManageItemDialog({
             {/* TAB 4: COMPOSITION (Machines / Recettes) */}
             {isManufactured && (
               <TabsContent value="composition">
-                {/* Only works if item is saved first */}
-                {!isCreateMode && currentItem?.id ? (
-                  <BomManager parentItemId={currentItem.id} companyId={companyId} />
-                ) : (
-                  <div className="p-8 text-center border-dashed border rounded-lg bg-muted/10">
-                    <p className="text-muted-foreground mb-4">
-                      Veuillez d'abord sauvegarder les informations de base de l'article pour pouvoir définir sa composition.
-                    </p>
-                    <Button onClick={handleSave} disabled={isSaving}>
-                      <Save className="mr-2 h-4 w-4" /> Sauvegarder maintenant
-                    </Button>
-                  </div>
-                )}
+                <BomManager
+                  parentItemId={currentItem?.id}
+                  companyId={companyId}
+                  isCreateMode={isCreateMode}
+                  pendingItems={pendingBom}
+                  onPendingChange={setPendingBom}
+                />
               </TabsContent>
             )}
 

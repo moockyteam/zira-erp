@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Loader2, Plus, Trash2, Search, AlertCircle, Info } from "lucide-react"
 import {
     Table,
     TableBody,
@@ -14,12 +15,28 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Plus, Trash2, Search, Loader2, AlertCircle } from "lucide-react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Badge } from "@/components/ui/badge"
 
-// Types
+// Type for pending BOM items (used in create mode)
+export type PendingBomItem = {
+    tempId: string
+    child_item_id: string
+    quantity: number
+    child_item: {
+        name: string
+        unit_of_measure: string | null
+        default_purchase_price: number | null
+    }
+}
+
+type BomManagerProps = {
+    parentItemId?: string  // Optional for create mode
+    companyId: string
+    // Pending mode props
+    pendingItems?: PendingBomItem[]
+    onPendingChange?: (items: PendingBomItem[]) => void
+    isCreateMode?: boolean
+}
+
 type BomItem = {
     id: string
     child_item_id: string
@@ -27,263 +44,289 @@ type BomItem = {
     child_item: {
         name: string
         unit_of_measure: string | null
-        type: string
-        consumption_unit: string | null
+        default_purchase_price: number | null
     }
 }
 
-type SearchItem = {
+type SearchResult = {
     id: string
     name: string
+    quantity_on_hand: number
     unit_of_measure: string | null
-    type: string
+    default_purchase_price: number | null
 }
 
-interface BomManagerProps {
-    parentItemId: string
-    companyId: string
-}
-
-export function BomManager({ parentItemId, companyId }: BomManagerProps) {
+export function BomManager({ parentItemId, companyId, pendingItems = [], onPendingChange, isCreateMode = false }: BomManagerProps) {
     const supabase = createClient()
-    const [ingredients, setIngredients] = useState<BomItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [searchQuery, setSearchQuery] = useState("")
-    const [searchResults, setSearchResults] = useState<SearchItem[]>([])
+    const [bomItems, setBomItems] = useState<BomItem[]>([])
+    const [isLoading, setIsLoading] = useState(!isCreateMode)
+
+    // Add Item State
+    const [searchTerm, setSearchTerm] = useState("")
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([])
     const [isSearching, setIsSearching] = useState(false)
-    const [openCombobox, setOpenCombobox] = useState(false)
+    const [selectedItem, setSelectedItem] = useState<SearchResult | null>(null)
+    const [qtyToAdd, setQtyToAdd] = useState("")
 
     useEffect(() => {
-        if (parentItemId) {
+        if (!isCreateMode && parentItemId) {
             fetchBom()
         }
-    }, [parentItemId])
+    }, [parentItemId, isCreateMode])
 
     const fetchBom = async () => {
+        if (!parentItemId) return
         setIsLoading(true)
         const { data, error } = await supabase
             .from("bill_of_materials")
             .select(`
-                id, 
-                child_item_id, 
-                quantity, 
-                child_item:items!child_item_id (name, unit_of_measure, type, consumption_unit)
+                id,
+                child_item_id,
+                quantity,
+                child_item:items!child_item_id (name, unit_of_measure, default_purchase_price)
             `)
             .eq("parent_item_id", parentItemId)
 
         if (error) {
-            console.error("Error fetching BOM:", error)
-            toast.error("Erreur chiffrement recette")
+            console.error(error)
+            toast.error("Erreur chargement recette")
         } else {
-            setIngredients(data as any || [])
+            setBomItems(data as any || [])
         }
         setIsLoading(false)
     }
 
-    const searchItems = async (query: string) => {
-        if (!query || query.length < 2) return
+    const handleSearch = async (val: string) => {
+        setSearchTerm(val)
+        if (val.length < 2) {
+            setSearchResults([])
+            return
+        }
         setIsSearching(true)
 
-        const { data, error } = await supabase
+        let query = supabase
             .from("items")
-            .select("id, name, unit_of_measure, type")
+            .select("id, name, quantity_on_hand, unit_of_measure, default_purchase_price")
             .eq("company_id", companyId)
-            // Prevent selecting itself or already added items (optional, but good UX)
-            .neq("id", parentItemId)
-            .ilike("name", `%${query}%`)
-            .limit(10)
+            .ilike("name", `%${val}%`)
+            .limit(5)
 
-        if (!error && data) {
-            setSearchResults(data)
+        // Prevent self-reference only in edit mode
+        if (parentItemId) {
+            query = query.neq("id", parentItemId)
         }
+
+        const { data } = await query
+        setSearchResults(data as any || [])
         setIsSearching(false)
     }
 
-    const addIngredient = async (item: SearchItem) => {
-        // Check if already exists locally
-        if (ingredients.some(i => i.child_item_id === item.id)) {
-            toast.warning("Cet article est déjà dans la recette.")
+    const selectResult = (item: SearchResult) => {
+        setSelectedItem(item)
+        setSearchTerm(item.name)
+        setSearchResults([])
+    }
+
+    // Get the active items list (pending or from DB)
+    const activeItems = isCreateMode ? pendingItems : bomItems
+
+    const addIngredient = async () => {
+        if (!selectedItem || !qtyToAdd) return
+
+        const qty = parseFloat(qtyToAdd.replace(',', '.'))
+        if (!qty || qty <= 0) {
+            toast.error("Quantité invalide")
             return
         }
 
-        const { data, error } = await supabase
-            .from("bill_of_materials")
-            .insert({
-                parent_item_id: parentItemId,
-                child_item_id: item.id,
-                quantity: 1 // Default qty
-            })
-            .select(`
-                id, 
-                child_item_id, 
-                quantity, 
-                child_item:items!child_item_id (name, unit_of_measure, type, consumption_unit)
-            `)
-            .single()
-
-        if (error) {
-            toast.error("Erreur lors de l'ajout : " + error.message)
-        } else {
-            setIngredients([...ingredients, data as any])
-            toast.success("Ingrédient ajouté")
-            setOpenCombobox(false)
+        // Check for duplicates
+        if (activeItems.some(b => b.child_item_id === selectedItem.id)) {
+            toast.error("Cet ingrédient est déjà dans la recette")
+            return
         }
+
+        if (isCreateMode) {
+            // Add to pending items
+            const newItem: PendingBomItem = {
+                tempId: `temp-${Date.now()}`,
+                child_item_id: selectedItem.id,
+                quantity: qty,
+                child_item: {
+                    name: selectedItem.name,
+                    unit_of_measure: selectedItem.unit_of_measure,
+                    default_purchase_price: selectedItem.default_purchase_price
+                }
+            }
+            onPendingChange?.([...pendingItems, newItem])
+            toast.success("Ingrédient ajouté (sera sauvegardé avec l'article)")
+        } else {
+            // Save to database
+            const { error } = await supabase
+                .from("bill_of_materials")
+                .insert({
+                    parent_item_id: parentItemId,
+                    child_item_id: selectedItem.id,
+                    quantity: qty
+                })
+
+            if (error) {
+                toast.error(error.message)
+                return
+            } else {
+                toast.success("Ingrédient ajouté")
+                fetchBom()
+            }
+        }
+
+        setSelectedItem(null)
+        setSearchTerm("")
+        setQtyToAdd("")
     }
 
-    const updateQuantity = async (bomId: string, newQty: number) => {
-        // Optimistic update
-        const oldIngredients = [...ingredients]
-        setIngredients(ingredients.map(i => i.id === bomId ? { ...i, quantity: newQty } : i))
-
-        const { error } = await supabase
-            .from("bill_of_materials")
-            .update({ quantity: newQty })
-            .eq("id", bomId)
-
-        if (error) {
-            toast.error("Erreur maj quantité")
-            setIngredients(oldIngredients) // Rollback
-        }
-    }
-
-    const removeIngredient = async (bomId: string) => {
-        const { error } = await supabase
-            .from("bill_of_materials")
-            .delete()
-            .eq("id", bomId)
-
-        if (error) {
-            toast.error("Erreur suppression")
-        } else {
-            setIngredients(ingredients.filter(i => i.id !== bomId))
+    const removeIngredient = async (id: string) => {
+        if (isCreateMode || id.startsWith('temp-')) {
+            // Remove from pending
+            onPendingChange?.(pendingItems.filter(p => p.tempId !== id))
             toast.success("Ingrédient retiré")
+        } else {
+            // Delete from database
+            const { error } = await supabase.from("bill_of_materials").delete().eq("id", id)
+            if (error) toast.error("Erreur suppression")
+            else {
+                toast.success("Ingrédient retiré")
+                fetchBom()
+            }
         }
     }
+
+    // Calculate cost
+    const totalCost = activeItems.reduce((acc, item) => {
+        const price = item.child_item.default_purchase_price || 0
+        return acc + (price * item.quantity)
+    }, 0)
+
+    if (isLoading) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="space-y-4 py-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-sm font-medium">Composition (Recette)</h3>
-                    <p className="text-xs text-muted-foreground">
-                        Liste des articles consommés pour fabriquer 1 unité de ce produit.
-                    </p>
+        <div className="space-y-6 p-1">
+            {isCreateMode && (
+                <div className="text-xs text-blue-700 flex gap-2 items-center p-2 bg-blue-50 rounded border border-blue-100">
+                    <Info className="h-4 w-4" />
+                    Les ingrédients seront sauvegardés automatiquement lors de la création de l'article.
                 </div>
+            )}
 
-                <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 border-dashed">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Ajouter un composant
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[300px]" align="end">
-                        <Command shouldFilter={false}>
-                            <CommandInput
-                                placeholder="Rechercher (ex: Farine)..."
-                                value={searchQuery}
-                                onValueChange={(val) => {
-                                    setSearchQuery(val)
-                                    searchItems(val)
-                                }}
+            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-dashed">
+                <div className="space-y-1">
+                    <h4 className="font-semibold text-sm">Ajouter un ingrédient</h4>
+                    <p className="text-xs text-muted-foreground">Recherchez une matière première ou un composant.</p>
+                </div>
+                <div className="flex items-end gap-2 w-2/3">
+                    <div className="flex-1 relative">
+                        <Label className="text-xs mb-1 block">Article</Label>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Rechercher..."
+                                value={searchTerm}
+                                onChange={e => handleSearch(e.target.value)}
+                                className="pl-9 h-9"
                             />
-                            <CommandList>
-                                <CommandEmpty>
-                                    {isSearching ? (
-                                        <div className="flex items-center justify-center p-2 text-xs">
-                                            <Loader2 className="h-4 w-4 animate-spin mr-2" /> Recherche...
-                                        </div>
-                                    ) : (
-                                        "Aucun article trouvé."
-                                    )}
-                                </CommandEmpty>
-                                <CommandGroup>
-                                    {searchResults.map((item) => (
-                                        <CommandItem
-                                            key={item.id}
-                                            value={item.name}
-                                            onSelect={() => addIngredient(item)}
-                                        >
-                                            <div className="flex flex-col">
-                                                <span>{item.name}</span>
-                                                <span className="text-[10px] text-muted-foreground">
-                                                    {item.type === 'raw_material' ? 'Matière Première' :
-                                                        item.type === 'semi_finished' ? 'Semi-Fini' : 'Autre'}
-                                                </span>
-                                            </div>
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                            </CommandList>
-                        </Command>
-                    </PopoverContent>
-                </Popover>
+                        </div>
+                        {searchResults.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 bg-popover border shadow-md rounded-md mt-1 z-50 overflow-hidden">
+                                {searchResults.map(res => (
+                                    <div
+                                        key={res.id}
+                                        className="p-2 text-sm hover:bg-accent cursor-pointer px-3"
+                                        onClick={() => selectResult(res)}
+                                    >
+                                        <span className="font-medium">{res.name}</span>
+                                        <span className="text-xs text-muted-foreground ml-2">Stock: {res.quantity_on_hand} {res.unit_of_measure}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="w-24">
+                        <Label className="text-xs mb-1 block">Quantité</Label>
+                        <Input
+                            placeholder="0.00"
+                            value={qtyToAdd}
+                            onChange={e => setQtyToAdd(e.target.value)}
+                            className="h-9"
+                            type="number"
+                        />
+                    </div>
+                    {selectedItem && (
+                        <div className="pb-2 text-xs font-medium text-muted-foreground">
+                            {selectedItem.unit_of_measure || 'unité'}
+                        </div>
+                    )}
+                    <Button onClick={addIngredient} disabled={!selectedItem || !qtyToAdd} className="h-9" size="sm">
+                        <Plus className="h-4 w-4 mr-1" /> Ajouter
+                    </Button>
+                </div>
             </div>
 
             <div className="border rounded-md">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-muted/50">
-                            <TableHead className="h-9">Article</TableHead>
-                            <TableHead className="h-9">Type</TableHead>
-                            <TableHead className="h-9 w-[120px] text-right">Qté Requise</TableHead>
-                            <TableHead className="h-9 w-[50px]"></TableHead>
+                        <TableRow>
+                            <TableHead>Ingrédient</TableHead>
+                            <TableHead className="text-right">Quantité Requise</TableHead>
+                            <TableHead className="text-right">Coût Unitaire (Est.)</TableHead>
+                            <TableHead className="text-right">Coût Total</TableHead>
+                            <TableHead></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {ingredients.length === 0 ? (
+                        {activeItems.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground text-sm">
-                                    <div className="flex flex-col items-center gap-1">
-                                        <AlertCircle className="h-5 w-5 opacity-20" />
-                                        Aucun ingrédient défini.
-                                    </div>
+                                <TableCell colSpan={5} className="text-center h-24 text-muted-foreground italic">
+                                    Aucun ingrédient défini pour cette recette.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            ingredients.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">
-                                        {item.child_item.name}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="text-[10px] font-normal">
-                                            {item.child_item.type === 'raw_material' ? 'MP' :
-                                                item.child_item.type === 'semi_finished' ? 'SF' : 'Autre'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <Input
-                                                type="number"
-                                                className="h-7 w-20 text-right pr-1"
-                                                value={item.quantity}
-                                                onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
-                                            />
-                                            <span className="text-xs text-muted-foreground w-8 text-left">
-                                                {item.child_item.consumption_unit || item.child_item.unit_of_measure || "unité"}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                            onClick={() => removeIngredient(item.id)}
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                            activeItems.map(item => {
+                                const itemId = isCreateMode ? (item as PendingBomItem).tempId : (item as BomItem).id
+                                return (
+                                    <TableRow key={itemId}>
+                                        <TableCell className="font-medium">
+                                            {item.child_item.name}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            {item.quantity} <span className="text-muted-foreground text-xs">{item.child_item.unit_of_measure}</span>
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                            {item.child_item.default_purchase_price ? item.child_item.default_purchase_price.toFixed(3) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            {item.child_item.default_purchase_price ? (item.child_item.default_purchase_price * item.quantity).toFixed(3) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeIngredient(itemId)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
+                        )}
+                        {activeItems.length > 0 && (
+                            <TableRow className="bg-muted/50 font-medium">
+                                <TableCell colSpan={3} className="text-right">Coût de revient matière théorique :</TableCell>
+                                <TableCell className="text-right text-emerald-600">{totalCost.toFixed(3)} TND</TableCell>
+                                <TableCell></TableCell>
+                            </TableRow>
                         )}
                     </TableBody>
                 </Table>
             </div>
 
-            <div className="bg-blue-50 text-blue-800 p-3 rounded-md text-xs">
-                <strong>Note :</strong> Lors de la fabrication d'une unité de ce produit, les stocks des ingrédients listés ci-dessus seront automatiquement déduits.
+            <div className="text-xs text-muted-foreground flex gap-2 items-center p-2 bg-blue-50 text-blue-700 rounded border border-blue-100">
+                <AlertCircle className="h-4 w-4" />
+                Cette recette sera utilisée pour déduire automatiquement les stocks lors de chaque production.
             </div>
         </div>
     )
