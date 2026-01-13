@@ -210,8 +210,8 @@ export function InvoiceList({ userCompanies }: { userCompanies: CompanyForList[]
               status={statusFilter}
             />
             <Link href={`/dashboard/invoices/new?companyId=${selectedCompanyId}`} passHref>
-              <Button size="default">
-                <PlusCircle className="h-4 w-4 mr-2" />
+              <Button size="lg" className="shadow-sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
                 Créer une facture
               </Button>
             </Link>

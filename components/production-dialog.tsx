@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -34,11 +34,17 @@ type BomItem = {
     }
 }
 
+// MODULE-LEVEL LOCK - persists across component instances
+let globalProductionLock = false
+
 export function ProductionDialog({ isOpen, onOpenChange, companyId, item, onSuccess }: ProductionDialogProps) {
     const supabase = createClient()
     const [quantity, setQuantity] = useState<string>("1")
     const [isLoading, setIsLoading] = useState(false)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+    // REF to prevent double-submit (more reliable than state)
+    const isProducingRef = useRef(false)
 
     // Selection Logic
     const [selectedItem, setSelectedItem] = useState<{ id: string; name: string; quantity_on_hand: number } | null>(item)
@@ -111,15 +117,32 @@ export function ProductionDialog({ isOpen, onOpenChange, companyId, item, onSucc
     }
 
     const handleProduce = async () => {
+        // CRITICAL: Prevent double-submit with GLOBAL LOCK (persists across instances)
+        if (globalProductionLock) {
+            console.log('[Production] BLOCKED BY GLOBAL LOCK - Already producing')
+            return
+        }
+
         if (!selectedItem || !quantity) return
+        if (isLoading) return
+
         const qtyToProduce = parseFloat(quantity)
         if (isNaN(qtyToProduce) || qtyToProduce <= 0) {
             setError("Quantité invalide")
             return
         }
 
+        // Lock production GLOBALLY
+        globalProductionLock = true
+        isProducingRef.current = true
         setIsLoading(true)
         setError(null)
+
+        console.log('[Production] Calling RPC with:', {
+            p_company_id: companyId,
+            p_item_id: selectedItem.id,
+            p_quantity_to_produce: qtyToProduce
+        })
 
         try {
             const { data, error } = await supabase.rpc('perform_product_assembly', {
@@ -127,6 +150,8 @@ export function ProductionDialog({ isOpen, onOpenChange, companyId, item, onSucc
                 p_item_id: selectedItem.id,
                 p_quantity_to_produce: qtyToProduce
             })
+
+            console.log('[Production] RPC Response:', { data, error })
 
             if (error) throw error
 
@@ -143,6 +168,8 @@ export function ProductionDialog({ isOpen, onOpenChange, companyId, item, onSucc
             setError(err.message || "Une erreur est survenue lors de la production.")
         } finally {
             setIsLoading(false)
+            isProducingRef.current = false
+            globalProductionLock = false // Unlock globally
         }
     }
 
@@ -301,9 +328,14 @@ export function ProductionDialog({ isOpen, onOpenChange, companyId, item, onSucc
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+                    <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Annuler</Button>
                     <Button
-                        onClick={handleProduce}
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleProduce()
+                        }}
                         disabled={isLoading || isBlocking || bom.length === 0 || !selectedItem}
                         className="bg-purple-600 hover:bg-purple-700 text-white"
                     >

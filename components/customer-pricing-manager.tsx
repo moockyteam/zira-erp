@@ -70,6 +70,19 @@ const priceRuleSchema = z.object({
     renewalDate: z.date().optional(),
 })
 
+type PendingPriceRule = {
+    tempId: string
+    type: 'service' | 'item'
+    itemId: string
+    itemName: string
+    itemReference?: string
+    specialPrice: number
+    specialVatRate: number | null
+    overrideVat: boolean
+    startDate?: Date
+    renewalDate?: Date
+}
+
 type CustomerItem = {
     id: string
     item_id: string | null
@@ -82,7 +95,19 @@ type CustomerItem = {
     services?: { name: string; price: number; vat_rate?: number }
 }
 
-export function CustomerPricingManager({ customerId, companyId }: { customerId: string, companyId: string }) {
+export function CustomerPricingManager({
+    customerId,
+    companyId,
+    pendingRules = [],
+    onPendingRulesChange,
+    isCreateMode = false
+}: {
+    customerId?: string
+    companyId: string
+    pendingRules?: PendingPriceRule[]
+    onPendingRulesChange?: (rules: PendingPriceRule[]) => void
+    isCreateMode?: boolean
+}) {
     const supabase = createClient()
     const [rules, setRules] = useState<CustomerItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -121,7 +146,7 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     useEffect(() => {
         fetchRules()
         fetchOptions()
-    }, [customerId, companyId])
+    }, [customerId, companyId, isCreateMode])
 
     useEffect(() => {
         if (!itemId) {
@@ -170,6 +195,14 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     }, [localVAT])
 
     const fetchRules = async () => {
+        if (isCreateMode) {
+            setLoading(false)
+            return
+        }
+        if (!customerId) {
+            setLoading(false)
+            return
+        }
         setLoading(true)
         const { data, error } = await supabase
             .from("customer_items")
@@ -230,6 +263,48 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     }
 
     const onSubmit = async (values: z.infer<typeof priceRuleSchema>) => {
+        if (isCreateMode) {
+            // Create mode: add to pending rules
+            const found = selectedType === 'service'
+                ? services.find(s => s.id === values.itemId)
+                : items.find(i => i.id === values.itemId)
+
+            if (!found) {
+                toast.error("Élément introuvable")
+                return
+            }
+
+            const newPendingRule: PendingPriceRule = {
+                tempId: `temp-${Date.now()}-${Math.random()}`,
+                type: values.type,
+                itemId: values.itemId,
+                itemName: found.name,
+                itemReference: found.reference,
+                specialPrice: values.specialPrice,
+                specialVatRate: values.overrideVat ? (values.specialVatRate ?? null) : null,
+                overrideVat: values.overrideVat,
+                startDate: values.startDate,
+                renewalDate: values.renewalDate
+            }
+
+            if (onPendingRulesChange) {
+                onPendingRulesChange([...pendingRules, newPendingRule])
+            }
+
+            toast.success("Tarif ajouté (sera sauvegardé à l'enregistrement du client)")
+            setIsFormOpen(false)
+            form.reset({
+                type: selectedType,
+                itemId: "",
+                specialPrice: 0,
+                specialVatRate: 19,
+                overrideVat: false
+            })
+            setPriceTTC("")
+            return
+        }
+
+        // Edit mode: save directly to database
         const payload: any = {
             customer_id: customerId,
             special_price: values.specialPrice,
@@ -267,6 +342,17 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
     }
 
     const handleDelete = async (id: string) => {
+        if (isCreateMode) {
+            // Create mode: remove from pending rules
+            if (!confirm("Retirer ce tarif ?")) return
+            if (onPendingRulesChange) {
+                onPendingRulesChange(pendingRules.filter(r => r.tempId !== id))
+            }
+            toast.success("Tarif retiré")
+            return
+        }
+
+        // Edit mode: delete from database
         if (!confirm("Supprimer ce tarif ?")) return
         const { error } = await supabase.from("customer_items").delete().eq("id", id)
         if (!error) {
@@ -281,23 +367,38 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
         setPriceTTC("")
     }
 
-    // Filter Logic
-    const filteredRules = useMemo(() => {
-        let res = rules
+    // Filter Logic - Use pending rules in create mode, database rules in edit mode
+    const displayRules: any[] = isCreateMode ? pendingRules : rules
+
+    const filteredRules: any[] = useMemo(() => {
+        let res = displayRules
         if (searchTerm) {
             const lowerInfo = searchTerm.toLowerCase()
-            res = res.filter(r =>
-                (r.services?.name || "").toLowerCase().includes(lowerInfo) ||
-                (r.items?.name || "").toLowerCase().includes(lowerInfo) ||
-                (r.items?.reference || "").toLowerCase().includes(lowerInfo)
-            )
+            if (isCreateMode) {
+                // Pending rules filtering
+                res = res.filter((r: any) =>
+                    r.itemName?.toLowerCase().includes(lowerInfo) ||
+                    r.itemReference?.toLowerCase().includes(lowerInfo)
+                )
+            } else {
+                // Database rules filtering  
+                res = res.filter((r: any) =>
+                    (r.services?.name || "").toLowerCase().includes(lowerInfo) ||
+                    (r.items?.name || "").toLowerCase().includes(lowerInfo) ||
+                    (r.items?.reference || "").toLowerCase().includes(lowerInfo)
+                )
+            }
         }
         if (typeFilter !== "all") {
-            if (typeFilter === "service") res = res.filter(r => r.service_id)
-            if (typeFilter === "item") res = res.filter(r => r.item_id)
+            if (isCreateMode) {
+                res = res.filter((r: any) => r.type === typeFilter)
+            } else {
+                if (typeFilter === "service") res = res.filter((r: any) => r.service_id)
+                if (typeFilter === "item") res = res.filter((r: any) => r.item_id)
+            }
         }
         return res
-    }, [rules, searchTerm, typeFilter])
+    }, [displayRules, searchTerm, typeFilter, isCreateMode])
 
     return (
         <div className="space-y-6">
@@ -610,48 +711,65 @@ export function CustomerPricingManager({ customerId, companyId }: { customerId: 
                                 <TableRow><TableCell colSpan={6} className="h-32 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-primary/50" /></TableCell></TableRow>
                             ) : filteredRules.length === 0 ? (
                                 <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
-                                    {searchTerm ? "Aucun tarif trouvé pour cette recherche." : "Aucun tarif spécial configuré pour ce client."}
+                                    {searchTerm ? "Aucun tarif trouvé pour cette recherche." : (isCreateMode ? "Aucun tarif configuré. Ajoutez-en un ci-dessus." : "Aucun tarif spécial configuré pour ce client.")}
                                 </TableCell></TableRow>
-                            ) : filteredRules.map(rule => (
-                                <TableRow key={rule.id} className="hover:bg-slate-50/50">
-                                    <TableCell>
-                                        <span className={cn(
-                                            "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
-                                            rule.service_id ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-                                        )}>
-                                            {rule.service_id ? "Service" : "Article"}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        <div className="flex flex-col">
-                                            <span className="text-sm text-slate-900">{rule.service_id ? rule.services?.name : rule.items?.name}</span>
-                                            {rule.items?.reference && <span className="text-xs text-slate-500">Ref: {rule.items.reference}</span>}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <span className="font-mono font-bold text-slate-900 text-base">{rule.special_price?.toFixed(3)}</span>
-                                        <span className="text-xs text-muted-foreground ml-1">TND</span>
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm">
-                                        {rule.special_vat_rate
-                                            ? <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{rule.special_vat_rate}%</span>
-                                            : <span className="text-slate-500">Standard</span>}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap text-sm text-slate-600">
-                                        {rule.subscription_renewal_date ? (
+                            ) : filteredRules.map((rule: any) => {
+                                const ruleId = isCreateMode ? rule.tempId : rule.id
+                                const isService = isCreateMode ? rule.type === 'service' : !!rule.service_id
+                                const itemName = isCreateMode ? rule.itemName : (isService ? rule.services?.name : rule.items?.name)
+                                const itemReference = isCreateMode ? rule.itemReference : rule.items?.reference
+                                const price = isCreateMode ? rule.specialPrice : rule.special_price
+                                const vatRate = isCreateMode ? rule.specialVatRate : rule.special_vat_rate
+                                const renewalDate = isCreateMode ? rule.renewalDate : rule.subscription_renewal_date
+
+                                return (
+                                    <TableRow key={ruleId} className="hover:bg-slate-50/50">
+                                        <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <CalendarIcon className="h-3.5 w-3.5 text-primary/70" />
-                                                {format(new Date(rule.subscription_renewal_date), "dd/MM/yyyy")}
+                                                <span className={cn(
+                                                    "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
+                                                    isService ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                                                )}>
+                                                    {isService ? "Service" : "Article"}
+                                                </span>
+                                                {isCreateMode && (
+                                                    <span className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 border border-yellow-200">
+                                                        En attente
+                                                    </span>
+                                                )}
                                             </div>
-                                        ) : "-"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(rule.id)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell className="font-medium">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm text-slate-900">{itemName}</span>
+                                                {itemReference && <span className="text-xs text-slate-500">Ref: {itemReference}</span>}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <span className="font-mono font-bold text-slate-900 text-base">{price?.toFixed(3)}</span>
+                                            <span className="text-xs text-muted-foreground ml-1">TND</span>
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm">
+                                            {vatRate
+                                                ? <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{vatRate}%</span>
+                                                : <span className="text-slate-500">Standard</span>}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                                            {renewalDate ? (
+                                                <div className="flex items-center gap-2">
+                                                    <CalendarIcon className="h-3.5 w-3.5 text-primary/70" />
+                                                    {format(new Date(renewalDate), "dd/MM/yyyy")}
+                                                </div>
+                                            ) : "-"}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(ruleId)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
                         </TableBody>
                     </Table>
                 </CardContent>

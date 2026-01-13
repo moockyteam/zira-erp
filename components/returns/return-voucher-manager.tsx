@@ -183,7 +183,7 @@ export function ReturnVoucherManager({ userCompanies }: { userCompanies: any[] }
             description="Gérez les retours de marchandises clients."
             icon={TrendingDown}
           >
-            <Button onClick={() => handleOpenForm(null)}>
+            <Button size="lg" className="shadow-sm" onClick={() => handleOpenForm(null)}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Nouveau Bon de Retour
             </Button>

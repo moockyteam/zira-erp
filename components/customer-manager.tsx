@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Trash2, Info, ArrowUpDown, ChevronUp, ChevronDown, CreditCard, History, Users } from "lucide-react"
+import { Trash2, Info, ArrowUpDown, ChevronUp, ChevronDown, CreditCard, History, Users, PlusCircle, Download, Upload } from "lucide-react"
+import * as XLSX from "xlsx"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FilterToolbar } from "@/components/ui/filter-toolbar"
 import { GlobalPaymentDialog } from "./customers/global-payment-dialog"
 import { PageHeader } from "@/components/ui/page-header"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 type Customer = {
   id: string
@@ -164,6 +166,24 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
     }
   }
 
+  const handleExport = () => {
+    const exportData = filteredAndSortedCustomers.map(c => ({
+      "Nom": c.name,
+      "Type": c.customer_type,
+      "Contact": c.contact_person,
+      "Email": c.email,
+      "Téléphone": c.phone_number,
+      "Matricule Fiscal": c.matricule_fiscal,
+      "Solde": c.balance,
+      "Identifiant": c.id
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Clients")
+    XLSX.writeFile(wb, "liste_clients.xlsx")
+  }
+
   return (
     <div className="space-y-6">
       {!selectedCompanyId && userCompanies.length > 1 && (
@@ -180,8 +200,26 @@ export function CustomerManager({ userCompanies }: { userCompanies: any[] }) {
             icon={Users}
           >
             <div className="flex items-center gap-2">
-              <CustomerImportDialog companyId={selectedCompanyId} onImportSuccess={() => fetchCustomers(selectedCompanyId!)} />
-              <Button onClick={handleAddNewClick}>Ajouter un client</Button>
+              <Button variant="outline" size="sm" onClick={handleExport} className="h-9">
+                <Download className="mr-2 h-4 w-4" />
+                Exporter
+              </Button>
+
+              <CustomerImportDialog
+                companyId={selectedCompanyId}
+                onImportSuccess={() => fetchCustomers(selectedCompanyId!)}
+                trigger={
+                  <Button variant="outline" size="sm" className="h-9">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Importer
+                  </Button>
+                }
+              />
+
+              <Button size="lg" className="shadow-sm" onClick={handleAddNewClick}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Ajouter un client
+              </Button>
             </div>
           </PageHeader>
 

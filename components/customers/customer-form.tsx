@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { format } from "date-fns"
 import { ArrowLeft, Loader2, Plus, Trash2, MapPin, Check, CreditCard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,19 @@ type Customer = {
     balance_start_date?: string | null
 }
 
+type PendingPriceRule = {
+    tempId: string
+    type: 'service' | 'item'
+    itemId: string
+    itemName: string
+    itemReference?: string
+    specialPrice: number
+    specialVatRate: number | null
+    overrideVat: boolean
+    startDate?: Date
+    renewalDate?: Date
+}
+
 const initialAddress: Address = {
     type: "LIVRAISON",
     address_line1: "",
@@ -79,8 +93,6 @@ const initialCustomer: Customer = {
     balance: 0,
     initial_balance: 0,
     is_subject_to_vat: true,
-    initial_balance: 0,
-    balance: 0,
     balance_start_date: null,
     addresses: []
 }
@@ -107,6 +119,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
     const [isSaving, setIsSaving] = useState(false)
     const [activeTab, setActiveTab] = useState(safeInitialTab)
     const [isGlobalPaymentOpen, setIsGlobalPaymentOpen] = useState(false)
+    const [pendingPricingRules, setPendingPricingRules] = useState<PendingPriceRule[]>([])
 
     const [formData, setFormData] = useState<Customer>({
         ...initialCustomer,
@@ -300,6 +313,29 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 }
             }
 
+            // 3. Handle Pending Pricing Rules (if creating new customer)
+            if (savedCustomerId && !customerId && pendingPricingRules.length > 0) {
+                console.log("Saving pending pricing rules...", pendingPricingRules)
+
+                const pricingRulesPayload = pendingPricingRules.map(rule => ({
+                    customer_id: savedCustomerId,
+                    service_id: rule.type === 'service' ? rule.itemId : null,
+                    item_id: rule.type === 'item' ? rule.itemId : null,
+                    special_price: rule.specialPrice,
+                    special_vat_rate: rule.overrideVat ? rule.specialVatRate : null,
+                    subscription_start_date: rule.startDate ? format(rule.startDate, "yyyy-MM-dd") : null,
+                    subscription_renewal_date: rule.renewalDate ? format(rule.renewalDate, "yyyy-MM-dd") : null
+                }))
+
+                const { error: pricingError } = await supabase.from("customer_items").insert(pricingRulesPayload)
+                if (pricingError) {
+                    console.error("Pricing rules save error:", pricingError)
+                    toast.error("Erreur lors de la sauvegarde des tarifs spéciaux")
+                } else {
+                    console.log(`${pendingPricingRules.length} tarif(s) spécial(s) sauvegardé(s)`)
+                }
+            }
+
             router.push("/dashboard/customers")
             router.refresh()
 
@@ -337,9 +373,11 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                             Recevoir Paiement Global
                         </Button>
                     )}
-                    <Button variant="outline" type="button" onClick={() => router.back()}>Annuler</Button>
-                    <Button type="submit" disabled={isSaving}>
-                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button variant="outline" size="sm" type="button" onClick={() => router.back()} className="h-9">
+                        Annuler
+                    </Button>
+                    <Button type="submit" disabled={isSaving} size="sm" className="h-9 shadow-sm">
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                         Enregistrer
                     </Button>
                 </div>
@@ -349,7 +387,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 <TabsList className="grid w-full grid-cols-4 lg:w-[800px] mb-8">
                     <TabsTrigger value="infogenerale">Informations Générales</TabsTrigger>
                     <TabsTrigger value="addresses">Adresses de Livraison</TabsTrigger>
-                    <TabsTrigger value="tarifs" disabled={!customerId}>Tarifs & Abonnements</TabsTrigger>
+                    <TabsTrigger value="tarifs">Tarifs & Abonnements{!customerId && pendingPricingRules.length > 0 && ` (${pendingPricingRules.length})`}</TabsTrigger>
                     <TabsTrigger value="history" disabled={!customerId}>Historique</TabsTrigger>
                 </TabsList>
 
@@ -588,23 +626,13 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                 </TabsContent>
 
                 <TabsContent value="tarifs" className="mt-6">
-                    {customerId ? (
-                        <CustomerPricingManager customerId={customerId} companyId={companyId} />
-                    ) : (
-                        <Card className="bg-muted/50 border-dashed">
-                            <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-3">
-                                <div className="p-3 bg-background rounded-full shadow-sm">
-                                    <Loader2 className="h-6 w-6 text-muted-foreground animate-spin-slow" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-medium">Configuration indisponible</h3>
-                                    <p className="text-muted-foreground max-w-sm mx-auto">
-                                        Veuillez d'abord enregistrer la fiche client pour pouvoir configurer ses tarifs spécifiques et ses abonnements.
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                    <CustomerPricingManager
+                        customerId={customerId}
+                        companyId={companyId}
+                        pendingRules={customerId ? undefined : pendingPricingRules}
+                        onPendingRulesChange={customerId ? undefined : setPendingPricingRules}
+                        isCreateMode={!customerId}
+                    />
                 </TabsContent>
 
                 <TabsContent value="history" className="mt-6">

@@ -212,7 +212,7 @@ export function QuoteList({ userCompanies }: { userCompanies: CompanyForList[] }
         icon={FileText}
       >
         <Link href={`/dashboard/quotes/new?companyId=${selectedCompanyId}`}>
-          <Button>
+          <Button size="lg" className="shadow-sm">
             <PlusCircle className="mr-2 h-4 w-4" />
             Nouveau Devis
           </Button>

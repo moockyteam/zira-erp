@@ -1,8 +1,5 @@
--- Function to perform product assembly (Production)
--- 1. Verifies sufficient stock for all components
--- 2. Deducts components from stock
--- 3. Adds finished product to stock
--- 4. Records all movements
+-- FIXED: Remove direct quantity updates - let the trigger handle it
+-- The trigger on_stock_movement_insert already updates quantity_on_hand
 
 CREATE OR REPLACE FUNCTION perform_product_assembly(
     p_company_id UUID,
@@ -49,7 +46,7 @@ BEGIN
 
     -- 3. If we are here, stock is sufficient. Proceed with updates.
     
-    -- A. Deduct Components
+    -- A. Deduct Components - ONLY INSERT MOVEMENTS, trigger will update quantity_on_hand
     FOR v_bom_record IN 
         SELECT b.child_item_id, b.quantity, i.default_purchase_price
         FROM bill_of_materials b
@@ -58,12 +55,12 @@ BEGIN
     LOOP
         v_required_qty := v_bom_record.quantity * p_quantity_to_produce;
 
-        -- Update Item Stock
-        UPDATE items 
-        SET quantity_on_hand = quantity_on_hand - v_required_qty
-        WHERE id = v_bom_record.child_item_id;
+        -- REMOVED: Direct update of quantity_on_hand (trigger handles this)
+        -- UPDATE items 
+        -- SET quantity_on_hand = quantity_on_hand - v_required_qty
+        -- WHERE id = v_bom_record.child_item_id;
 
-        -- Insert SORTIE movement
+        -- Insert SORTIE movement - trigger will deduct stock
         INSERT INTO stock_movements (
             company_id, 
             item_id, 
@@ -77,19 +74,19 @@ BEGIN
             v_bom_record.child_item_id,
             'SORTIE',
             v_required_qty,
-            v_bom_record.default_purchase_price, -- Cost of this consumption
+            v_bom_record.default_purchase_price,
             format('Production de %s x %s', p_quantity_to_produce, v_item_name),
             NOW()
         );
     END LOOP;
 
-    -- B. Add Finished Product (ENTREE)
-    UPDATE items
-    SET quantity_on_hand = quantity_on_hand + p_quantity_to_produce
-    WHERE id = p_item_id;
+    -- B. Add Finished Product - ONLY INSERT MOVEMENT, trigger will update quantity_on_hand
+    -- REMOVED: Direct update of quantity_on_hand (trigger handles this)
+    -- UPDATE items
+    -- SET quantity_on_hand = quantity_on_hand + p_quantity_to_produce
+    -- WHERE id = p_item_id;
 
     -- Calculate unit cost for the finished product based on components
-    -- (v_total_cost is total for the batch, so divide by qty produced)
     DECLARE
         v_unit_production_cost NUMERIC := 0;
     BEGIN
@@ -97,6 +94,7 @@ BEGIN
             v_unit_production_cost := v_total_cost / p_quantity_to_produce;
         END IF;
 
+        -- Insert ENTREE movement - trigger will add stock
         INSERT INTO stock_movements (
             company_id, 
             item_id, 
@@ -110,7 +108,7 @@ BEGIN
             p_item_id,
             'ENTREE',
             p_quantity_to_produce,
-            v_unit_production_cost, -- We record the calculated production cost
+            v_unit_production_cost,
             'Sortie de Production',
             NOW()
         );

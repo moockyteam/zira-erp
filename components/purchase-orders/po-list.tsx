@@ -167,7 +167,7 @@ export function PurchaseOrderList({ userCompanies }: { userCompanies: any[] }) {
         icon={ShoppingCart}
       >
         <Link href={`/dashboard/purchase-orders/new?companyId=${selectedCompanyId}`} passHref>
-          <Button>
+          <Button size="lg" className="shadow-sm">
             <PlusCircle className="mr-2 h-4 w-4" />
             Nouveau Bon de Commande
           </Button>

@@ -14,9 +14,10 @@ import { Download, UploadCloud } from 'lucide-react'
 interface CustomerImportDialogProps {
   companyId: string;
   onImportSuccess: () => void;
+  trigger?: React.ReactNode;
 }
 
-// <-- MODIFIÉ: Structure de l'Excel avec les nouvelles colonnes
+// Structure de l'Excel avec les nouvelles colonnes
 type ExcelRow = {
   'Nom': string;
   'Type (ENTREPRISE/PARTICULIER)': 'ENTREPRISE' | 'PARTICULIER';
@@ -30,7 +31,7 @@ type ExcelRow = {
   'Pays': string;
 }
 
-export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImportDialogProps) {
+export function CustomerImportDialog({ companyId, onImportSuccess, trigger }: CustomerImportDialogProps) {
   const supabase = createClient()
   const [file, setFile] = useState<File | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -53,7 +54,7 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
     }
   }
 
-  // <-- NOUVEAU: Fonction pour générer et télécharger le modèle Excel
+  // Fonction pour générer et télécharger le modèle Excel
   const downloadTemplate = () => {
     const headers = [
       ['Nom', 'Type (ENTREPRISE/PARTICULIER)', 'Contact', 'Email', 'Telephone', 'Matricule Fiscal', 'Rue', 'Delegation', 'Gouvernorat', 'Pays']
@@ -89,7 +90,7 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
 
         if (json.length === 0) throw new Error("Le fichier Excel est vide ou mal formaté.")
 
-        // <-- MODIFIÉ: Mapping des nouvelles colonnes
+        // Mapping des nouvelles colonnes
         const customersToInsert = json.map(row => {
           if (!row['Nom'] || String(row['Nom']).trim() === '') return null; // Ignore les lignes sans nom
 
@@ -135,7 +136,7 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
   return (
     <Dialog onOpenChange={() => { setFile(null); setError(null); setSuccessMessage(null); }}>
       <DialogTrigger asChild>
-        <Button variant="outline"><UploadCloud className="h-4 w-4 mr-2" /> Importer</Button>
+        {trigger ? trigger : <Button variant="outline"><UploadCloud className="h-4 w-4 mr-2" /> Importer</Button>}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -150,7 +151,7 @@ export function CustomerImportDialog({ companyId, onImportSuccess }: CustomerImp
             <p className="text-sm text-blue-700 mb-3">
               1. Téléchargez notre modèle pour vous assurer que vos colonnes sont correctement formatées.
             </p>
-            {/* <-- NOUVEAU: Bouton pour télécharger le modèle --> */}
+            {/* Bouton pour télécharger le modèle */}
             <Button onClick={downloadTemplate} variant="secondary" size="sm">
               <Download className="h-4 w-4 mr-2" />
               Télécharger le modèle

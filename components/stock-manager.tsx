@@ -282,49 +282,31 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
             description="Suivez vos articles, valorisation de stock et mouvements en temps réel."
             icon={Package}
           >
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setItemToEntry(null)
-                  setIsEntryOpen(true)
-                }}
-                title="Entrée Stock (F7)"
-              >
-                <PackagePlus className="h-5 w-5 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleExport} className="h-9">
+                <FileDown className="mr-2 h-4 w-4" />
+                Exporter
               </Button>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleOpenManageDialog(null)}
-                title="Nouvel Article (N)"
-              >
-                <Plus className="h-5 w-5 text-muted-foreground" />
-              </Button>
-
-              <div className="h-6 w-px bg-border mx-2" />
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" title="Options">
-                    <MoreVertical className="h-5 w-5 text-muted-foreground" />
+              <StockImportDialog
+                companyId={selectedCompanyId}
+                onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
+                trigger={
+                  <Button variant="outline" size="sm" className="h-9">
+                    <PackagePlus className="mr-2 h-4 w-4" />
+                    Importer
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => document.getElementById("stock-import-trigger")?.click()}>
-                    <StockImportDialog
-                      companyId={selectedCompanyId}
-                      onImportSuccess={() => fetchCompanyData(selectedCompanyId)}
-                    />
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExport}>
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Exporter vers Excel
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                }
+              />
+
+              <Button
+                size="lg"
+                className="shadow-sm"
+                onClick={() => handleOpenManageDialog(null)}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nouvel Article
+              </Button>
             </div>
           </PageHeader>
 
@@ -489,52 +471,67 @@ export function StockManager({ userCompanies }: { userCompanies: { id: string; n
                         <TableCell className="text-right text-muted-foreground">
                           {item.sale_price ? `${item.sale_price.toFixed(3)} TND` : "-"}
                         </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="group-hover:opacity-100 opacity-0 transition-opacity">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleOpenManageDialog(item)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Modifier
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setItemToAdjust(item)}>
-                                <SlidersHorizontal className="h-4 w-4 mr-2" />
-                                Ajuster
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setItemToHistory(item)
-                                setIsHistoryOpen(true)
-                              }}>
-                                <HistoryIcon className="h-4 w-4 mr-2" />
-                                Historique
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {(item.type === 'semi_finished' || item.type === 'product') && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setItemToEntry(item)
+                                setIsEntryOpen(true)
+                              }}
+                              title="Entrée Stock Rapide"
+                              className="text-muted-foreground hover:text-emerald-600"
+                            >
+                              <PackagePlus className="h-4 w-4" />
+                            </Button>
+
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleOpenManageDialog(item)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setItemToAdjust(item)}>
+                                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                                  Ajuster
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
-                                  setItemToProduce(item)
-                                  setIsProduceOpen(true)
+                                  setItemToHistory(item)
+                                  setIsHistoryOpen(true)
                                 }}>
-                                  <Factory className="h-4 w-4 mr-2" />
-                                  Produire
+                                  <HistoryIcon className="h-4 w-4 mr-2" />
+                                  Historique
                                 </DropdownMenuItem>
-                              )}
-                              {!isLowStock && (
-                                <DropdownMenuItem onClick={() => setItemToReorder(item)}>
-                                  <ShoppingCart className="h-4 w-4 mr-2" />
-                                  Commander
+                                <DropdownMenuSeparator />
+                                {(item.type === 'semi_finished' || item.type === 'product') && (
+                                  <DropdownMenuItem onClick={() => {
+                                    setItemToProduce(item)
+                                    setIsProduceOpen(true)
+                                  }}>
+                                    <Factory className="h-4 w-4 mr-2" />
+                                    Produire
+                                  </DropdownMenuItem>
+                                )}
+                                {!isLowStock && (
+                                  <DropdownMenuItem onClick={() => setItemToReorder(item)}>
+                                    <ShoppingCart className="h-4 w-4 mr-2" />
+                                    Commander
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive focus:text-destructive">
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Supprimer
                                 </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive focus:text-destructive">
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Supprimer
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )

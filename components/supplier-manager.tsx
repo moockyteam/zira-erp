@@ -5,7 +5,7 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Trash2, Truck, Download, Check, ChevronsUpDown, Building2, User, Wallet, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
+import { Trash2, Truck, Download, Check, ChevronsUpDown, Building2, User, Wallet, MapPin, ChevronLeft, ChevronRight, PlusCircle } from "lucide-react"
 
 // Importations des composants UI
 import { Card, CardContent } from "@/components/ui/card"
@@ -258,7 +258,7 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
             icon={Truck}
           >
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleExportTemplate}>
+              <Button variant="outline" size="sm" onClick={handleExportTemplate}>
                 <Download className="h-4 w-4 mr-2" /> Modèle Excel
               </Button>
               <SupplierImportDialog
@@ -266,7 +266,10 @@ export function SupplierManager({ userCompanies }: { userCompanies: Company[] })
                 onImportSuccess={() => fetchSuppliers(selectedCompanyId!)}
                 categories={categories}
               />
-              <Button onClick={handleAddNewClick}>Ajouter</Button>
+              <Button size="lg" className="shadow-sm" onClick={handleAddNewClick}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nouveau fournisseur
+              </Button>
             </div>
           </PageHeader>
 

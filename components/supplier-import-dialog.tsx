@@ -115,7 +115,7 @@ export function SupplierImportDialog({ companyId, onImportSuccess, categories }:
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Importer</Button>
+        <Button variant="outline" size="sm">Importer</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
