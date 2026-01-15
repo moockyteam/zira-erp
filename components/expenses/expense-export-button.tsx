@@ -156,9 +156,9 @@ export function ExpenseExportButton() {
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" size="sm" className="h-9 gap-2">
                     <Download className="h-4 w-4" />
-                    Export
+                    Exporter
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-4" align="end">

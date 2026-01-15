@@ -121,8 +121,8 @@ export function ExpenseManager({ userCompanies }: { userCompanies: any[] }) {
         </Button>
         <ExpenseExportButton />
         <Link href={`/dashboard/expenses/new?companyId=${selectedCompanyId}`}>
-          <Button>
-            <PlusCircle className="h-4 w-4 mr-2" />
+          <Button size="lg" className="shadow-sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
             Nouvelle Dépense
           </Button>
         </Link>
