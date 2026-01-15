@@ -74,8 +74,24 @@ export function CustomerPaymentOverview({ customerId, refreshTrigger, company }:
                 // ... (rest of fetch logic remains same until render) ...
 
                 // 2. Fetch Docs & Payments (Limit 50 for performance)
-                const { data: invoices } = await supabase.from('invoices').select('*').eq('customer_id', customerId).order('invoice_date', { ascending: false }).limit(50)
-                const { data: bls } = await supabase.from('delivery_notes').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(50)
+                // FIX: Exclude draft and cancelled invoices from balance calculation
+                const { data: invoices } = await supabase
+                    .from('invoices')
+                    .select('*')
+                    .eq('customer_id', customerId)
+                    .not('status', 'in', '("BROUILLON","ANNULEE")')
+                    .order('invoice_date', { ascending: false })
+                    .limit(50)
+                // FIX: Only include BLs that are delivered AND not yet converted to an invoice
+                // This prevents double-counting when a BL is transformed into an invoice
+                const { data: bls } = await supabase
+                    .from('delivery_notes')
+                    .select('*')
+                    .eq('customer_id', customerId)
+                    .eq('status', 'LIVRE')
+                    .is('invoice_id', null)
+                    .order('created_at', { ascending: false })
+                    .limit(50)
 
                 // 3. Fetch Linked Payments for these documents (for Details View)
                 let invoicePayments: any[] = []

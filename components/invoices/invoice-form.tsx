@@ -326,6 +326,56 @@ export function InvoiceForm({
         if (invoiceError) throw new Error(invoiceError.message)
 
         targetInvoiceId = newInvoice.id
+
+        // If invoice is created from a Delivery Note, transfer payments and link
+        if (sourceDeliveryNoteId && targetInvoiceId) {
+          // 1. Fetch existing BL payments
+          const { data: blPayments } = await supabase
+            .from('delivery_note_payments')
+            .select('*')
+            .eq('delivery_note_id', sourceDeliveryNoteId)
+
+          // 2. Transfer payments to invoice_payments
+          if (blPayments && blPayments.length > 0) {
+            const invoicePaymentsPayload = blPayments.map(p => ({
+              invoice_id: targetInvoiceId,
+              amount: p.amount,
+              payment_date: p.payment_date,
+              payment_method: p.payment_method,
+              notes: `Transféré du BL - ${p.notes || ''}`.trim(),
+              bank_name: p.bank_name,
+              check_number: p.check_number,
+              check_date: p.check_date,
+            }))
+
+            await supabase.from('invoice_payments').insert(invoicePaymentsPayload)
+
+            // 3. Calculate total paid and update invoice status
+            const totalPaid = blPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+            const invoiceTotal = totals.total_ttc
+
+            let newStatus = 'ENVOYE'
+            if (totalPaid >= invoiceTotal) {
+              newStatus = 'PAYEE'
+            } else if (totalPaid > 0) {
+              newStatus = 'PARTIELLEMENT_PAYEE'
+            }
+
+            await supabase
+              .from('invoices')
+              .update({ status: newStatus })
+              .eq('id', targetInvoiceId)
+
+            toast.info(`Paiements transférés du BL - Statut: ${newStatus}`)
+          }
+
+          // 4. Link the BL to this invoice
+          await supabase
+            .from('delivery_notes')
+            .update({ invoice_id: targetInvoiceId })
+            .eq('id', sourceDeliveryNoteId)
+        }
+
         toast.success("Facture créée avec succès")
       } else {
         const { error: invoiceUpdateError } = await supabase

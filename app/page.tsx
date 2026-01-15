@@ -142,7 +142,7 @@ export default function LandingPage() {
             {/* Tunisia Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 text-red-600 text-sm font-medium mb-6 border border-red-500/20">
               <Building2 className="w-4 h-4" />
-              Built for Tunisian businesses
+              Built for Tunisian businesses • <span className="font-bold">100% Free in 2026</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6">
@@ -274,39 +274,44 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Simple, transparent pricing
+              Special Offer 2026
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              One plan, all features included. Choose monthly or annual billing.
+              Access the full power of ZIRA completely free in 2026, or upgrade for enterprise controls.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Monthly Plan */}
-            <div className="relative p-8 rounded-3xl bg-card border border-border/50 hover:border-primary/30 transition-all duration-300">
-              <div className="mb-6">
-                <h3 className="text-xl font-bold mb-2">Monthly</h3>
-                <p className="text-sm text-muted-foreground">Perfect to get started</p>
+            {/* Free Plan */}
+            <div className="relative p-8 rounded-3xl bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/30 hover:border-primary/50 transition-all duration-300">
+              {/* Popular Badge */}
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold shadow-lg">
+                Special Offer 2026
+              </div>
+
+              <div className="mb-6 mt-2">
+                <h3 className="text-xl font-bold mb-2">Cloud Edition</h3>
+                <p className="text-sm text-muted-foreground">Full access, zero cost</p>
               </div>
 
               <div className="mb-6">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-bold">25</span>
+                  <span className="text-5xl font-bold">0</span>
                   <span className="text-xl font-semibold text-muted-foreground">DT</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">excl. tax</p>
+                <p className="text-sm text-muted-foreground mt-1">100% Free during 2026</p>
               </div>
 
               <ul className="space-y-3 mb-8">
                 {[
-                  "All features included",
                   "Unlimited invoices & quotes",
-                  "Multilingual documents",
-                  "Inventory management",
-                  "Customer & supplier management",
+                  "Inventory & Stock Management",
                   "Accounting & FEC export",
-                  "Email support"
+                  "Multi-user access",
+                  "Cloud hosting included",
+                  "Automatic updates",
+                  "Community support"
                 ].map((feature, i) => (
                   <li key={i} className="flex items-center gap-3 text-sm">
                     <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
@@ -316,69 +321,47 @@ export default function LandingPage() {
               </ul>
 
               <Link href="/signup" className="block">
-                <Button variant="outline" size="lg" className="w-full">
-                  Get started
+                <Button size="lg" className="w-full shadow-lg shadow-primary/20">
+                  Start for Free
+                  <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
             </div>
 
-            {/* Annual Plan */}
-            <div className="relative p-8 rounded-3xl bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/30 hover:border-primary/50 transition-all duration-300">
-              {/* Popular Badge */}
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold shadow-lg">
-                Best Value
-              </div>
-
-              <div className="mb-6 mt-2">
-                <h3 className="text-xl font-bold mb-2">Annual</h3>
-                <p className="text-sm text-muted-foreground">Save 2 months</p>
+            {/* Enterprise Plan */}
+            <div className="relative p-8 rounded-3xl bg-card border border-border/50 hover:border-primary/30 transition-all duration-300">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold mb-2">Enterprise</h3>
+                <p className="text-sm text-muted-foreground">For custom needs & independence</p>
               </div>
 
               <div className="mb-6">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-bold">250</span>
-                  <span className="text-xl font-semibold text-muted-foreground">DT</span>
-                  <span className="text-muted-foreground">/year</span>
+                  <span className="text-4xl font-bold">Custom</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">excl. tax • <span className="text-green-600 font-medium">~21 DT/month</span></p>
+                <p className="text-sm text-muted-foreground mt-1">Contact us for a quote</p>
               </div>
 
-              <ul className="space-y-3 mb-6">
+              <ul className="space-y-3 mb-8">
                 {[
-                  "Everything in Monthly",
-                  "2 months free",
-                  "Priority support",
+                  "Dedicated environment deployment",
+                  "Custom domain name",
+                  "White-label options",
+                  "Custom feature development",
+                  "Priority support SLA",
+                  "Data sovereignty",
+                  "On-premise options available"
                 ].map((feature, i) => (
                   <li key={i} className="flex items-center gap-3 text-sm">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
                     <span>{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              {/* Showcase Website Addon */}
-              <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 mb-8">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Globe className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm mb-1">🎁 Showcase Website</h4>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Professional website for your business
-                    </p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="font-bold text-primary">+500 DT</span>
-                      <span className="text-xs text-muted-foreground">one-time payment</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Link href="/signup" className="block">
-                <Button size="lg" className="w-full shadow-lg shadow-primary/20">
-                  Get started
-                  <ArrowRight className="w-5 h-5 ml-2" />
+              <Link href="/contact" className="block">
+                <Button variant="outline" size="lg" className="w-full">
+                  Contact Sales
                 </Button>
               </Link>
             </div>
