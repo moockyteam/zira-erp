@@ -102,10 +102,12 @@ export function ManageItemDialog({
   const isRawMaterial = formData.type === 'raw_material'
   const isManufactured = (formData.type === 'product' && formData.is_manufactured) || formData.type === 'semi_finished'
 
-  // Sync prop with internal state
+  // Sync prop with internal state - reset on dialog open to handle stale state
   useEffect(() => {
-    setCurrentItem(initialItem)
-  }, [initialItem])
+    if (isOpen) {
+      setCurrentItem(initialItem)
+    }
+  }, [isOpen, initialItem])
 
   useEffect(() => {
     if (isOpen && companyId) {
@@ -254,9 +256,9 @@ export function ManageItemDialog({
       if (error) {
         toast.error(error.message)
       } else {
-        // Handle initial stock if provided
+        // Handle initial stock if provided - works for all item types
         const initialQty = Number.parseFloat(initial_quantity.replace(",", ".")) || 0
-        if (initialQty > 0 && formData.type === 'product' && !is_manufactured) {
+        if (initialQty > 0) {
           const { error: stockError } = await supabase.rpc("add_stock_movement", {
             p_company_id: companyId,
             p_item_id: newItem.id,
@@ -541,8 +543,8 @@ export function ManageItemDialog({
               </div>
             )}
 
-            {/* Initial quantity for Marchandise and Finished Product creation */}
-            {isCreateMode && formData.type === 'product' && (
+            {/* Initial quantity for all item types in creation mode */}
+            {isCreateMode && (
               <div className="space-y-2 p-4 border rounded-lg bg-blue-50/50 border-blue-100">
                 <Label className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-blue-600" />
@@ -556,9 +558,11 @@ export function ManageItemDialog({
                   className="h-11 text-lg max-w-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {formData.is_manufactured
-                    ? "Stock de produit fini déjà fabriqué à intégrer"
-                    : "Stock de marchandise à enregistrer"}
+                  {formData.type === 'raw_material' ? "Stock de matière première disponible" :
+                    formData.type === 'semi_finished' ? "Stock de semi-fini existant" :
+                      formData.type === 'consumable' ? "Stock de consommables" :
+                        formData.is_manufactured ? "Stock de produit fini déjà fabriqué" :
+                          "Stock de marchandise à enregistrer"}
                 </p>
               </div>
             )}

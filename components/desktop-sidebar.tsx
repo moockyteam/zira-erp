@@ -187,7 +187,7 @@ export function DesktopSidebar({ userEmail }: DesktopSidebarProps) {
         )}
       </div>
 
-      <nav className="flex flex-col space-y-1 flex-1 overflow-y-auto scrollbar-hide -mx-2 px-2">
+      <nav className="flex flex-col space-y-1 flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-2 px-2">
         <TooltipProvider delayDuration={0}>
           {navSections.map((section) => (
             <div key={section.title} className={!collapsed ? "space-y-2" : "space-y-1"}>
