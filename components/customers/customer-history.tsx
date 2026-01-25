@@ -20,7 +20,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import {
     Table,
     TableBody,
@@ -36,12 +35,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type HistoryItem = {
     id: string
     date: string
-    type: 'INVOICE' | 'DELIVERY_NOTE' | 'PAYMENT'
+    type: 'INVOICE' | 'DELIVERY_NOTE' | 'PAYMENT' | 'CREDIT'
     reference: string
     amount: number
     status?: string
@@ -58,142 +56,118 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
     const [initialBalance, setInitialBalance] = useState(0)
 
-    // LOG ON RENDER
-    console.log("RENDER CustomerHistory. ID:", customerId)
-
     useEffect(() => {
-        console.log("MOUNT CustomerHistory. ID:", customerId)
         if (customerId) {
             fetchHistory()
-        } else {
-            console.error("NO CUSTOMER ID provided to CustomerHistory!")
         }
     }, [customerId])
 
     const fetchHistory = async () => {
         setIsLoading(true)
-        console.log("DEBUG: fetching history for", customerId)
         try {
             // 0. Fetch Customer Details (Initial Balance)
-            const { data: customer, error: custError } = await supabase
+            const { data: customer } = await supabase
                 .from('customers')
                 .select('initial_balance')
                 .eq('id', customerId)
                 .single()
 
-            if (custError) {
-                console.error("Error fetching customer balance:", custError)
-            } else {
-                setInitialBalance(customer?.initial_balance || 0)
-            }
+            setInitialBalance(customer?.initial_balance || 0)
 
-            // 1. Fetch Invoices (Main)
-            const { data: invoices, error: invError } = await supabase
+            // 1. Fetch Invoices
+            const { data: invoices } = await supabase
                 .from('invoices')
                 .select('*')
                 .eq('customer_id', customerId)
-
-            console.log("DEBUG: Invoices:", invoices, "Error:", invError)
-            if (invError) throw invError
-
-            // remaining fetch logic...
-
-            // ... (keep existing fetch logic for lines 84-232, I will assume the user applies this carefully or I need to be more specific. 
-            // Actually, replace_file_content replaces a block. I need to be careful to not cut off the middle of fetchHistory.
-            // I will use a larger block or multiple chunks if needed, but here simple insertion is better.
-
-            // Wait, I can't easily insert into the middle of a function with replace_file_content if I don't reproduce the whole function body or use unique context.
-            // Let's use the start of fetchHistory.
-
+                .not('status', 'in', '("BROUILLON","ANNULEE")') // Filter out Drafts/Cancelled to avoid noise
 
             // 1.1 Fetch Invoice Lines
             let invoiceLines: any[] = []
             if (invoices && invoices.length > 0) {
                 const invIds = invoices.map(i => i.id)
-                const { data: lines, error: linesError } = await supabase
+                const { data: lines } = await supabase
                     .from('invoice_lines')
                     .select('*')
                     .in('invoice_id', invIds)
-
-                console.log("DEBUG: Invoice Lines:", lines, "Error:", linesError)
-                if (!linesError && lines) invoiceLines = lines
+                if (lines) invoiceLines = lines
             }
 
-            // 2. Fetch Delivery Notes (Main)
-            const { data: bls, error: blError } = await supabase
+            // 2. Fetch Delivery Notes (LIVRE only or all? Let's take filtered)
+            // Usually history shows everything, but for balance check we focus on 'LIVRE' for Unbilled.
+            // But History should show ALL valid docs.
+            const { data: bls } = await supabase
                 .from('delivery_notes')
                 .select('*')
                 .eq('customer_id', customerId)
+                .neq('status', 'BROUILLON')
 
-            console.log("DEBUG: BLs:", bls, "Error:", blError)
-            if (blError) throw blError
-
-            // 2.1 Fetch Delivery Note Lines
+            // 2.1 Fetch BL Lines
             let blLines: any[] = []
             if (bls && bls.length > 0) {
                 const blIds = bls.map(b => b.id)
-                const { data: lines, error: linesError } = await supabase
+                const { data: lines } = await supabase
                     .from('delivery_note_lines')
                     .select('*')
                     .in('delivery_note_id', blIds)
-
-                if (!linesError && lines) blLines = lines
+                if (lines) blLines = lines
             }
 
             // 3. Fetch Payments (INVOICES)
             let payments: any[] = []
             if (invoices && invoices.length > 0) {
                 const invIds = invoices.map(i => i.id)
-                const { data: payData, error: payError } = await supabase
+                const { data: payData } = await supabase
                     .from('invoice_payments')
                     .select('*, invoice:invoices(invoice_number)')
                     .in('invoice_id', invIds)
-
-                if (!payError && payData) payments = payData
+                if (payData) payments = payData
             }
 
             // 3.1 Fetch Payments (DELIVERY NOTES)
             let blPayments: any[] = []
             if (bls && bls.length > 0) {
                 const blIds = bls.map(b => b.id)
-                const { data: blPayData, error: blPayError } = await supabase
+                const { data: blPayData } = await supabase
                     .from('delivery_note_payments')
                     .select('*, delivery_note:delivery_notes(delivery_note_number)')
                     .in('delivery_note_id', blIds)
-
-                if (!blPayError && blPayData) blPayments = blPayData
+                if (blPayData) blPayments = blPayData
             }
 
-            // 4. Combine and Normalize
+            // 3.2 Fetch Customer Credits
+            const { data: credits } = await supabase
+                .from('customer_credits')
+                .select('*')
+                .eq('customer_id', customerId)
+
+            // 4. Combine
             const historyItems: HistoryItem[] = []
 
             invoices?.forEach((inv: any) => {
                 const myLines = invoiceLines.filter(l => l.invoice_id === inv.id)
-                // Do NOT filter payments here for local linking only, we will also create separate items
-                // But we keep them linked for the 'details' view of the invoice
                 const myPayments = payments.filter(p => p.invoice_id === inv.id)
 
                 historyItems.push({
                     id: inv.id,
-                    date: inv.invoice_date,
+                    date: inv.invoice_date || inv.created_at, // Fallback
                     type: 'INVOICE',
-                    reference: inv.invoice_number,
-                    amount: inv.total_ttc,
+                    reference: inv.invoice_number || 'N/A',
+                    amount: Number(inv.total_ttc) || 0,
                     status: inv.status,
                     details: myLines,
                     linkedPayments: myPayments
                 })
 
-                // Create standalone Payment items
+                // Separate Payment Items
                 myPayments.forEach((pay: any) => {
                     historyItems.push({
                         id: `PAY-INV-${pay.id}`,
-                        date: pay.payment_date,
+                        date: pay.payment_date || pay.created_at,
                         type: 'PAYMENT',
-                        reference: `P-${inv.invoice_number}`, // Indicate which docs it paid
-                        amount: pay.amount,
+                        reference: `Paie ${inv.invoice_number}`,
+                        amount: Number(pay.amount) || 0,
                         status: pay.payment_method,
-                        details: [{ description: `Paiement pour facture ${inv.invoice_number}`, quantity: 1, unit_price_ht: pay.amount }],
+                        details: [{ description: `Règlement Facture ${inv.invoice_number}`, quantity: 1, unit_price_ht: pay.amount }],
                         linkedPayments: []
                     })
                 })
@@ -207,30 +181,46 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                     id: bl.id,
                     date: bl.delivery_date || bl.created_at,
                     type: 'DELIVERY_NOTE',
-                    reference: bl.delivery_note_number,
+                    reference: bl.delivery_note_number || 'N/A',
                     amount: Number(bl.total_ttc) || 0,
                     status: bl.status,
                     details: myLines,
                     linkedPayments: myPayments
                 })
 
-                // Create standalone Payment items for BLs
                 myPayments.forEach((pay: any) => {
                     historyItems.push({
                         id: `PAY-BL-${pay.id}`,
-                        date: pay.payment_date,
+                        date: pay.payment_date || pay.created_at,
                         type: 'PAYMENT',
-                        reference: `P-${bl.delivery_note_number}`,
-                        amount: pay.amount,
+                        reference: `Paie ${bl.delivery_note_number}`,
+                        amount: Number(pay.amount) || 0,
                         status: pay.payment_method,
-                        details: [{ description: `Paiement pour BL ${bl.delivery_note_number}`, quantity: 1, unit_price_ht: pay.amount }],
+                        details: [{ description: `Règlement BL ${bl.delivery_note_number}`, quantity: 1, unit_price_ht: pay.amount }],
                         linkedPayments: []
                     })
                 })
             })
 
-            // Sort by date desc
-            historyItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            credits?.forEach((credit: any) => {
+                historyItems.push({
+                    id: `CREDIT-${credit.id}`,
+                    date: credit.payment_date || credit.created_at,
+                    type: 'CREDIT',
+                    reference: `Avance ${credit.payment_method || ''}`,
+                    amount: Number(credit.amount) || 0,
+                    status: 'ENCAISSE',
+                    details: [{ description: credit.notes || "Avance / Crédit Client", quantity: 1, unit_price_ht: credit.amount }],
+                    linkedPayments: []
+                })
+            })
+
+            // SAFE SORT
+            historyItems.sort((a, b) => {
+                const dateA = new Date(a.date).getTime()
+                const dateB = new Date(b.date).getTime()
+                return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA) // Handle invalid dates safely
+            })
 
             setHistory(historyItems)
 
@@ -243,11 +233,8 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
 
     const toggleRow = (id: string) => {
         const newSet = new Set(expandedRows)
-        if (newSet.has(id)) {
-            newSet.delete(id)
-        } else {
-            newSet.add(id)
-        }
+        if (newSet.has(id)) newSet.delete(id)
+        else newSet.add(id)
         setExpandedRows(newSet)
     }
 
@@ -256,21 +243,13 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
         return item.type === filterType
     })
 
-    // Calculations for KPI
-    // We only sum INVOICE and DELIVERY_NOTE for the "Billed/Due" parts
-    // We sum PAYMENT items for the "Paid" part
-    const totalInvoiced = history.filter(h => h.type === 'INVOICE' && h.status !== 'BROUILLON' && h.status !== 'ANNULEE').reduce((sum, h) => sum + h.amount, 0)
+    // Totals Calculation
+    const totalInvoiced = history.filter(h => h.type === 'INVOICE').reduce((sum, h) => sum + (h.amount || 0), 0)
+    const totalBlValued = history.filter(h => h.type === 'DELIVERY_NOTE' && h.status === 'LIVRE').reduce((sum, h) => sum + (h.amount || 0), 0)
+    const totalPaid = history.filter(h => h.type === 'PAYMENT').reduce((sum, h) => sum + (h.amount || 0), 0)
+    const totalCredits = history.filter(h => h.type === 'CREDIT').reduce((sum, h) => sum + (h.amount || 0), 0)
 
-    // Add Valued BLs (LIVRE) to the total obligation context
-    // IMPORTANT: Make sure we don't double count if BL was converted to Invoice (but here we fetch pure tables)
-    // Assuming for now BLs here are unconverted or we accept the sum.
-    const totalBlValued = history.filter(h => h.type === 'DELIVERY_NOTE' && h.status === 'LIVRE').reduce((sum, h) => sum + h.amount, 0)
-
-    const totalPaid = history.filter(h => h.type === 'PAYMENT').reduce((sum, h) => sum + h.amount, 0)
-    // Updated formula: Initial Balance + Invoiced + BLs - Paid
-    const totalDue = (initialBalance + totalInvoiced + totalBlValued) - totalPaid
-
-    console.log("DEBUG TOTALS:", { initialBalance, totalInvoiced, totalPaid, totalDue })
+    const totalDue = (initialBalance + totalInvoiced + totalBlValued) - (totalPaid + totalCredits)
 
     const handlePrint = () => {
         const printContent = document.getElementById("history-print-area")
@@ -279,15 +258,20 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
             document.body.innerHTML = printContent.innerHTML
             window.print()
             document.body.innerHTML = originalContents
-            window.location.reload() // Reload to restore state listeners
+            window.location.reload()
         }
+    }
+
+    // Helper for safe Date formatting
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return "-"
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return "-"
+        return format(d, "dd/MM/yyyy")
     }
 
     return (
         <div className="space-y-6">
-            {/* DEBUG SECTION - TO BE REMOVED */}
-            {/* ... */}
-
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
@@ -311,7 +295,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                         <CardTitle className="text-sm font-medium text-muted-foreground">Total Payé</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-emerald-600">{totalPaid.toFixed(3)} <span className="text-xs font-normal text-muted-foreground">TND</span></div>
+                        <div className="text-2xl font-bold text-emerald-600">{(totalPaid + totalCredits).toFixed(3)} <span className="text-xs font-normal text-muted-foreground">TND</span></div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -335,6 +319,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                             <SelectItem value="INVOICE">Factures</SelectItem>
                             <SelectItem value="DELIVERY_NOTE">Bons de Livraison</SelectItem>
                             <SelectItem value="PAYMENT">Paiements</SelectItem>
+                            <SelectItem value="CREDIT">Avances / Crédits</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -365,7 +350,7 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                             {filteredHistory.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                        Aucune opération trouvée.
+                                        {isLoading ? "Chargement..." : "Aucune opération trouvée."}
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -378,21 +363,22 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                             <TableCell>
                                                 {expandedRows.has(item.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                             </TableCell>
-                                            <TableCell>{format(new Date(item.date), "dd/MM/yyyy")}</TableCell>
+                                            <TableCell>{formatDate(item.date)}</TableCell>
                                             <TableCell>
                                                 {item.type === 'INVOICE' && <Badge variant="outline" className="border-indigo-500 text-indigo-500"><FileText className="mr-1 h-3 w-3" /> Facture</Badge>}
                                                 {item.type === 'DELIVERY_NOTE' && <Badge variant="outline" className="border-blue-500 text-blue-500"><Truck className="mr-1 h-3 w-3" /> BL</Badge>}
                                                 {item.type === 'PAYMENT' && <Badge variant="outline" className="border-emerald-500 text-emerald-500"><CreditCard className="mr-1 h-3 w-3" /> Paiement</Badge>}
+                                                {item.type === 'CREDIT' && <Badge variant="outline" className="border-teal-500 text-teal-500 bg-teal-50"><CreditCard className="mr-1 h-3 w-3" /> Avance</Badge>}
                                             </TableCell>
                                             <TableCell className="font-medium">{item.reference}</TableCell>
                                             <TableCell className="text-right font-mono">
                                                 <span className="flex items-center justify-end gap-1">
                                                     <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
-                                                    {item.amount.toFixed(3)}
+                                                    {item.amount?.toFixed(3)}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <Badge variant="secondary">{item.status}</Badge>
+                                                <Badge variant="secondary">{item.status || '-'}</Badge>
                                             </TableCell>
                                         </TableRow>
                                         {expandedRows.has(item.id) && (
@@ -400,94 +386,97 @@ export function CustomerHistory({ customerId }: { customerId: string }) {
                                                 <TableCell colSpan={6} className="p-4">
                                                     <div className="pl-8 text-sm space-y-6">
                                                         {/* Articles Section */}
-                                                        <div>
-                                                            <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                                                Détails des Articles
-                                                            </h4>
-                                                            <div className="border rounded-md overflow-hidden bg-background">
-                                                                <Table>
-                                                                    <TableHeader>
-                                                                        <TableRow className="h-8 bg-muted/50">
-                                                                            <TableHead className="py-1">Article / Description</TableHead>
-                                                                            <TableHead className="py-1 text-right">Qté</TableHead>
-                                                                            <TableHead className="py-1 text-right">Prix U.</TableHead>
-                                                                            <TableHead className="py-1 text-right">Total HT</TableHead>
-                                                                        </TableRow>
-                                                                    </TableHeader>
-                                                                    <TableBody>
-                                                                        {item.details?.map((line: any, idx: number) => (
-                                                                            <TableRow key={idx} className="h-8 border-none hover:bg-transparent">
-                                                                                <TableCell className="py-1">{line.description}</TableCell>
-                                                                                <TableCell className="py-1 text-right">{line.quantity}</TableCell>
-                                                                                <TableCell className="py-1 text-right">{line.unit_price_ht?.toFixed(3)}</TableCell>
-                                                                                <TableCell className="py-1 text-right">{(line.quantity * line.unit_price_ht).toFixed(3)}</TableCell>
-                                                                            </TableRow>
-                                                                        ))}
-                                                                    </TableBody>
-                                                                </Table>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Payments Section */}
-                                                        <div>
-                                                            <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                                                <CreditCard className="h-4 w-4 text-emerald-600" />
-                                                                Historique des Paiements
-                                                            </h4>
-                                                            {item.linkedPayments && item.linkedPayments.length > 0 ? (
-                                                                <div className="border rounded-md overflow-hidden bg-emerald-50/30 border-emerald-100">
+                                                        {item.details && item.details.length > 0 && (
+                                                            <div>
+                                                                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                                    <FileText className="h-4 w-4 text-muted-foreground" />
+                                                                    Détails des Articles
+                                                                </h4>
+                                                                <div className="border rounded-md overflow-hidden bg-background">
                                                                     <Table>
                                                                         <TableHeader>
-                                                                            <TableRow className="h-8 bg-emerald-100/50">
-                                                                                <TableHead className="py-1 text-xs">Date</TableHead>
-                                                                                <TableHead className="py-1 text-xs">Méthode</TableHead>
-                                                                                <TableHead className="py-1 text-xs">Notes/Ref</TableHead>
-                                                                                <TableHead className="py-1 text-right text-xs">Montant</TableHead>
+                                                                            <TableRow className="h-8 bg-muted/50">
+                                                                                <TableHead className="py-1">Article / Description</TableHead>
+                                                                                <TableHead className="py-1 text-right">Qté</TableHead>
+                                                                                <TableHead className="py-1 text-right">Prix U.</TableHead>
+                                                                                <TableHead className="py-1 text-right">Total HT</TableHead>
                                                                             </TableRow>
                                                                         </TableHeader>
                                                                         <TableBody>
-                                                                            {item.linkedPayments.map((pay: any) => (
-                                                                                <TableRow key={pay.id} className="h-8 hover:bg-transparent">
-                                                                                    <TableCell className="py-1 text-xs">{format(new Date(pay.payment_date), "dd/MM/yyyy")}</TableCell>
-                                                                                    <TableCell className="py-1 text-xs">{pay.payment_method}</TableCell>
-                                                                                    <TableCell className="py-1 text-xs max-w-[200px] truncate" title={pay.notes}>
-                                                                                        {pay.notes || "-"}
-                                                                                    </TableCell>
-                                                                                    <TableCell className="py-1 text-right text-xs font-mono font-bold text-emerald-700">
-                                                                                        {pay.amount.toFixed(3)} TND
-                                                                                    </TableCell>
+                                                                            {item.details.map((line: any, idx: number) => (
+                                                                                <TableRow key={idx} className="h-8 border-none hover:bg-transparent">
+                                                                                    <TableCell className="py-1">{line.description}</TableCell>
+                                                                                    <TableCell className="py-1 text-right">{line.quantity}</TableCell>
+                                                                                    <TableCell className="py-1 text-right">{line.unit_price_ht?.toFixed(3)}</TableCell>
+                                                                                    <TableCell className="py-1 text-right">{(line.quantity * line.unit_price_ht).toFixed(3)}</TableCell>
                                                                                 </TableRow>
                                                                             ))}
-                                                                            {/* Total Row */}
-                                                                            <TableRow className="h-9 bg-emerald-100/30 font-medium">
-                                                                                <TableCell colSpan={3} className="py-1 text-xs text-right text-emerald-900">Total Payé :</TableCell>
-                                                                                <TableCell className="py-1 text-right text-xs font-mono text-emerald-700">
-                                                                                    {item.linkedPayments.reduce((acc: number, p: any) => acc + p.amount, 0).toFixed(3)} TND
-                                                                                </TableCell>
-                                                                            </TableRow>
                                                                         </TableBody>
                                                                     </Table>
                                                                 </div>
-                                                            ) : (
-                                                                <div className="text-sm text-muted-foreground italic pl-2 border-l-2 border-muted">
-                                                                    Aucun paiement enregistré pour ce document.
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        )}
 
-                                                        {/* Summary Footer */}
-                                                        <div className="flex justify-end pt-2 border-t">
-                                                            <div className="text-right">
-                                                                <div className="text-xs text-muted-foreground">Reste à payer sur ce document</div>
-                                                                <div className={`text-lg font-bold font-mono ${(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0)) > 0.001
-                                                                    ? "text-orange-600"
-                                                                    : "text-emerald-600"
-                                                                    }`}>
-                                                                    {(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0)).toFixed(3)} TND
+                                                        {/* Payments Section */}
+                                                        {item.type !== 'PAYMENT' && item.type !== 'CREDIT' && (
+                                                            <div>
+                                                                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                                    <CreditCard className="h-4 w-4 text-emerald-600" />
+                                                                    Historique des Paiements
+                                                                </h4>
+                                                                {item.linkedPayments && item.linkedPayments.length > 0 ? (
+                                                                    <div className="border rounded-md overflow-hidden bg-emerald-50/30 border-emerald-100">
+                                                                        <Table>
+                                                                            <TableHeader>
+                                                                                <TableRow className="h-8 bg-emerald-100/50">
+                                                                                    <TableHead className="py-1 text-xs">Date</TableHead>
+                                                                                    <TableHead className="py-1 text-xs">Méthode</TableHead>
+                                                                                    <TableHead className="py-1 text-xs">Notes/Ref</TableHead>
+                                                                                    <TableHead className="py-1 text-right text-xs">Montant</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {item.linkedPayments.map((pay: any) => (
+                                                                                    <TableRow key={pay.id} className="h-8 hover:bg-transparent">
+                                                                                        <TableCell className="py-1 text-xs">{formatDate(pay.payment_date)}</TableCell>
+                                                                                        <TableCell className="py-1 text-xs">{pay.payment_method}</TableCell>
+                                                                                        <TableCell className="py-1 text-xs max-w-[200px] truncate" title={pay.notes}>
+                                                                                            {pay.notes || "-"}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="py-1 text-right text-xs font-mono font-bold text-emerald-700">
+                                                                                            {pay.amount?.toFixed(3)} TND
+                                                                                        </TableCell>
+                                                                                    </TableRow>
+                                                                                ))}
+                                                                                <TableRow className="h-9 bg-emerald-100/30 font-medium">
+                                                                                    <TableCell colSpan={3} className="py-1 text-xs text-right text-emerald-900">Total Payé :</TableCell>
+                                                                                    <TableCell className="py-1 text-right text-xs font-mono text-emerald-700">
+                                                                                        {item.linkedPayments.reduce((acc: number, p: any) => acc + (p.amount || 0), 0).toFixed(3)} TND
+                                                                                    </TableCell>
+                                                                                </TableRow>
+                                                                            </TableBody>
+                                                                        </Table>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-sm text-muted-foreground italic pl-2 border-l-2 border-muted">
+                                                                        Aucun paiement enregistré pour ce document.
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Reste à payer */}
+                                                                <div className="flex justify-end pt-2 border-t mt-4">
+                                                                    <div className="text-right">
+                                                                        <div className="text-xs text-muted-foreground">Reste à payer sur ce document</div>
+                                                                        <div className={`text-lg font-bold font-mono ${(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0)) > 0.001
+                                                                            ? "text-orange-600"
+                                                                            : "text-emerald-600"
+                                                                            }`}>
+                                                                            {(item.amount - (item.linkedPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0)).toFixed(3)} TND
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

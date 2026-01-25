@@ -142,8 +142,18 @@ export function GlobalCollectionsManager() {
                     .from('invoices')
                     .select('id, invoice_number, invoice_date, total_ttc')
                     .eq('customer_id', selectedCustomerId)
+                    .select('id, invoice_number, invoice_date, total_ttc')
+                    .eq('customer_id', selectedCustomerId)
                     .not('status', 'in', '("BROUILLON","ANNULEE")')
 
+                // Fetch linked payments for invoices (Directly by Customer ID)
+                const { data: invoicePayments } = await supabase
+                    .from('invoice_payments')
+                    .select('*, invoice:invoices!inner(customer_id, invoice_number)')
+                    .eq('invoice.customer_id', selectedCustomerId)
+                    .order('payment_date', { ascending: true })
+
+                // Loop Invoices
                 invoices?.forEach((inv: any) => {
                     allMovements.push({
                         id: `inv-${inv.id}`,
@@ -163,6 +173,14 @@ export function GlobalCollectionsManager() {
                     .eq('status', 'LIVRE')
                     .is('invoice_id', null)
 
+                // Fetch linked payments for BLs (Directly by Customer ID)
+                const { data: blPayments } = await supabase
+                    .from('delivery_note_payments')
+                    .select('*, delivery_note:delivery_notes!inner(customer_id, delivery_note_number)')
+                    .eq('delivery_note.customer_id', selectedCustomerId)
+                    .order('payment_date', { ascending: true })
+
+                // Loop BLs
                 bls?.forEach((bl: any) => {
                     if (bl.total_ttc > 0) {
                         allMovements.push({
@@ -176,18 +194,27 @@ export function GlobalCollectionsManager() {
                     }
                 })
 
-                // 5. Paiements Globaux (diminuent la dette)
-                const { data: globalPayments } = await supabase
-                    .from('global_payment_entries')
-                    .select('id, payment_date, amount, payment_method, notes')
-                    .eq('customer_id', selectedCustomerId)
+                // 5. PAIEMENTS (Factures et BLs uniquement - Alignement avec Paiements)
 
-                globalPayments?.forEach((p: any) => {
+                // 5.1 PAIEMENTS LIES AUX FACTURES
+                invoicePayments?.forEach((p: any) => {
                     allMovements.push({
-                        id: `gpay-${p.id}`,
+                        id: `pay-inv-${p.id}`,
                         date: p.payment_date,
                         type: 'PAIEMENT',
-                        reference: `Paiement ${p.payment_method}`,
+                        reference: `Paiement ${p.invoice?.invoice_number || ''}`,
+                        debit: 0,
+                        credit: p.amount
+                    })
+                })
+
+                // 5.2 PAIEMENTS LIES AUX BLs
+                blPayments?.forEach((p: any) => {
+                    allMovements.push({
+                        id: `pay-bl-${p.id}`,
+                        date: p.payment_date,
+                        type: 'PAIEMENT',
+                        reference: `Paiement ${p.delivery_note?.delivery_note_number || ''}`,
                         debit: 0,
                         credit: p.amount
                     })
