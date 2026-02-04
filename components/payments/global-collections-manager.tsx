@@ -379,9 +379,9 @@ export function GlobalCollectionsManager() {
                         <tr className="border-b-2 border-black">
                             <th className="text-left py-2">Date</th>
                             <th className="text-left py-2">Libellé</th>
-                            <th className="text-right py-2">Débit</th>
-                            <th className="text-right py-2">Crédit</th>
-                            <th className="text-right py-2">Solde</th>
+                            <th className="text-right py-2">Facturé</th>
+                            <th className="text-right py-2">Payé</th>
+                            <th className="text-right py-2">Reste à Payer</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -479,14 +479,14 @@ export function GlobalCollectionsManager() {
                             <div className="bg-red-50 border border-red-200 px-4 py-3 rounded-lg">
                                 <div className="flex items-center gap-2 text-red-600 text-sm">
                                     <TrendingUp className="h-4 w-4" />
-                                    Total Débit
+                                    Total Facturé
                                 </div>
                                 <p className="font-mono font-bold text-lg text-red-700">{totalDebit.toFixed(3)} TND</p>
                             </div>
                             <div className="bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-lg">
                                 <div className="flex items-center gap-2 text-emerald-600 text-sm">
                                     <TrendingDown className="h-4 w-4" />
-                                    Total Crédit
+                                    Total Payé
                                 </div>
                                 <p className="font-mono font-bold text-lg text-emerald-700">{totalCredit.toFixed(3)} TND</p>
                             </div>
@@ -495,7 +495,7 @@ export function GlobalCollectionsManager() {
                                 currentBalance > 0 ? "bg-orange-50 border-orange-300" : "bg-emerald-50 border-emerald-300"
                             )}>
                                 <div className={cn("text-sm", currentBalance > 0 ? "text-orange-600" : "text-emerald-600")}>
-                                    Solde Actuel
+                                    Reste à Payer
                                 </div>
                                 <p className={cn("font-mono font-bold text-2xl", currentBalance > 0 ? "text-orange-700" : "text-emerald-700")}>
                                     {currentBalance.toFixed(3)} TND
@@ -523,9 +523,9 @@ export function GlobalCollectionsManager() {
                                         <TableRow className="bg-muted/50">
                                             <TableHead className="w-[120px]">Date</TableHead>
                                             <TableHead className="w-[140px]">Mouvements</TableHead>
-                                            <TableHead className="text-right w-[130px]">Débit Total</TableHead>
-                                            <TableHead className="text-right w-[130px]">Crédit Total</TableHead>
-                                            <TableHead className="text-right w-[130px]">Solde</TableHead>
+                                            <TableHead className="text-right w-[130px]">Montant Facturé</TableHead>
+                                            <TableHead className="text-right w-[130px]">Montant Payé</TableHead>
+                                            <TableHead className="text-right w-[130px]">Reste à Payer</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -554,12 +554,12 @@ export function GlobalCollectionsManager() {
                                                                     <div className="flex gap-2 text-xs cursor-help">
                                                                         {group.debitDetails.length > 0 && (
                                                                             <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-                                                                                {group.debitDetails.length} Débit{group.debitDetails.length > 1 ? 's' : ''}
+                                                                                {group.debitDetails.length} Facture{group.debitDetails.length > 1 ? 's' : ''}
                                                                             </Badge>
                                                                         )}
                                                                         {group.creditDetails.length > 0 && (
                                                                             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                                                                                {group.creditDetails.length} Crédit{group.creditDetails.length > 1 ? 's' : ''}
+                                                                                {group.creditDetails.length} Paiement{group.creditDetails.length > 1 ? 's' : ''}
                                                                             </Badge>
                                                                         )}
                                                                     </div>
@@ -568,7 +568,7 @@ export function GlobalCollectionsManager() {
                                                                     <div className="space-y-2">
                                                                         {group.debitDetails.length > 0 && (
                                                                             <div>
-                                                                                <p className="font-semibold text-red-600 mb-1">Débits:</p>
+                                                                                <p className="font-semibold text-red-600 mb-1">Facturé:</p>
                                                                                 <ul className="text-xs space-y-0.5">
                                                                                     {group.debitDetails.map((d: string, i: number) => (
                                                                                         <li key={i}>• {d}</li>
@@ -578,7 +578,7 @@ export function GlobalCollectionsManager() {
                                                                         )}
                                                                         {group.creditDetails.length > 0 && (
                                                                             <div>
-                                                                                <p className="font-semibold text-emerald-600 mb-1">Crédits:</p>
+                                                                                <p className="font-semibold text-emerald-600 mb-1">Payé:</p>
                                                                                 <ul className="text-xs space-y-0.5">
                                                                                     {group.creditDetails.map((c: string, i: number) => (
                                                                                         <li key={i}>• {c}</li>
