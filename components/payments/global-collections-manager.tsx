@@ -30,6 +30,12 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
     Command,
     CommandEmpty,
     CommandGroup,
@@ -249,22 +255,56 @@ export function GlobalCollectionsManager() {
         fetchMovements()
     }, [selectedCustomerId, supabase, refreshTrigger])
 
-    // Calculer les mouvements triés avec solde courant
-    const sortedMovementsWithBalance = useMemo(() => {
-        // Toujours trier chronologiquement pour calculer le solde courant
+    // Grouper les mouvements par date
+    const groupedMovementsByDate = useMemo(() => {
+        // Trier chronologiquement d'abord
         const chronological = [...movements].sort((a, b) =>
             new Date(a.date).getTime() - new Date(b.date).getTime()
         )
 
-        // Calculer le solde courant cumulatif
+        // Grouper par date
+        const grouped = new Map<string, {
+            date: string
+            debitTotal: number
+            creditTotal: number
+            debitDetails: string[]
+            creditDetails: string[]
+        }>()
+
+        chronological.forEach(m => {
+            const dateKey = m.date
+            if (!grouped.has(dateKey)) {
+                grouped.set(dateKey, {
+                    date: dateKey,
+                    debitTotal: 0,
+                    creditTotal: 0,
+                    debitDetails: [],
+                    creditDetails: []
+                })
+            }
+
+            const group = grouped.get(dateKey)!
+
+            if (m.debit > 0) {
+                group.debitTotal += m.debit
+                group.debitDetails.push(`${m.reference}: ${m.debit.toFixed(3)} TND`)
+            }
+
+            if (m.credit > 0) {
+                group.creditTotal += m.credit
+                group.creditDetails.push(`${m.reference}: ${m.credit.toFixed(3)} TND`)
+            }
+        })
+
+        // Calculer le solde courant pour chaque groupe de date
         let runningBalance = 0
-        const withBalance = chronological.map(m => {
-            runningBalance = runningBalance + m.debit - m.credit
-            return { ...m, balance: runningBalance }
+        const groupsWithBalance = Array.from(grouped.values()).map(group => {
+            runningBalance = runningBalance + group.debitTotal - group.creditTotal
+            return { ...group, balance: runningBalance }
         })
 
         // Appliquer le tri choisi par l'utilisateur
-        return sortAscending ? withBalance : [...withBalance].reverse()
+        return sortAscending ? groupsWithBalance : [...groupsWithBalance].reverse()
     }, [movements, sortAscending])
 
     // Totaux
@@ -345,13 +385,16 @@ export function GlobalCollectionsManager() {
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedMovementsWithBalance.map((m: any) => (
-                            <tr key={m.id} className="border-b border-gray-200">
-                                <td className="py-1">{format(new Date(m.date), "dd/MM/yy")}</td>
-                                <td className="py-1">{m.reference}</td>
-                                <td className="py-1 text-right">{m.debit > 0 ? m.debit.toFixed(3) : '-'}</td>
-                                <td className="py-1 text-right">{m.credit > 0 ? m.credit.toFixed(3) : '-'}</td>
-                                <td className="py-1 text-right font-bold">{m.balance.toFixed(3)}</td>
+                        {groupedMovementsByDate.map((group: any, idx: number) => (
+                            <tr key={idx} className="border-b border-gray-200">
+                                <td className="py-1">{format(new Date(group.date), "dd/MM/yy")}</td>
+                                <td className="py-1">
+                                    {group.debitDetails.length > 0 && <div className="text-xs">{group.debitDetails.join(', ')}</div>}
+                                    {group.creditDetails.length > 0 && <div className="text-xs">{group.creditDetails.join(', ')}</div>}
+                                </td>
+                                <td className="py-1 text-right">{group.debitTotal > 0 ? group.debitTotal.toFixed(3) : '-'}</td>
+                                <td className="py-1 text-right">{group.creditTotal > 0 ? group.creditTotal.toFixed(3) : '-'}</td>
+                                <td className="py-1 text-right font-bold">{group.balance.toFixed(3)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -370,7 +413,7 @@ export function GlobalCollectionsManager() {
             <div className="space-y-6 print:hidden">
                 <PageHeader
                     title="Relevé de Compte Client"
-                    description="Vue consolidée des mouvements : factures, BL, paiements et solde courant."
+                    description="Vue simplifiée des mouvements groupés par date pour une revue rapide des débits et crédits."
                     icon={Banknote}
                 >
                     {selectedCustomerId && (
@@ -478,96 +521,87 @@ export function GlobalCollectionsManager() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/50">
-                                            <TableHead className="w-[100px]">Date</TableHead>
-                                            <TableHead className="w-[100px]">Type</TableHead>
-                                            <TableHead>Libellé</TableHead>
-                                            <TableHead className="text-right w-[120px]">Débit</TableHead>
-                                            <TableHead className="text-right w-[120px]">Crédit</TableHead>
+                                            <TableHead className="w-[120px]">Date</TableHead>
+                                            <TableHead className="w-[140px]">Mouvements</TableHead>
+                                            <TableHead className="text-right w-[130px]">Débit Total</TableHead>
+                                            <TableHead className="text-right w-[130px]">Crédit Total</TableHead>
                                             <TableHead className="text-right w-[130px]">Solde</TableHead>
-                                            <TableHead className="w-[80px]">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {isLoading ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                                                     Chargement...
                                                 </TableCell>
                                             </TableRow>
-                                        ) : sortedMovementsWithBalance.length === 0 ? (
+                                        ) : groupedMovementsByDate.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground italic">
+                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
                                                     Aucun mouvement
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            sortedMovementsWithBalance.map((m: any) => (
-                                                <TableRow key={m.id}>
+                                            groupedMovementsByDate.map((group: any, idx: number) => (
+                                                <TableRow key={idx} className="hover:bg-muted/30">
                                                     <TableCell className="font-medium">
-                                                        {format(new Date(m.date), "dd/MM/yyyy")}
+                                                        {format(new Date(group.date), "dd/MM/yyyy")}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={cn(
-                                                                "text-xs gap-1",
-                                                                m.type === 'PAIEMENT' && "border-emerald-300 bg-emerald-50 text-emerald-700",
-                                                                m.type === 'CREDIT' && "border-blue-300 bg-blue-50 text-blue-700",
-                                                                m.type === 'FACTURE' && "border-indigo-300 bg-indigo-50 text-indigo-700",
-                                                                m.type === 'BL' && "border-slate-300 bg-slate-50 text-slate-700",
-                                                                m.type === 'SOLDE_INITIAL' && "border-gray-300 bg-gray-100 text-gray-700"
-                                                            )}
-                                                        >
-                                                            {m.type === 'FACTURE' && <FileText className="h-3 w-3" />}
-                                                            {m.type === 'BL' && <Truck className="h-3 w-3" />}
-                                                            {m.type === 'PAIEMENT' && <CreditCard className="h-3 w-3" />}
-                                                            {m.type === 'CREDIT' && <CreditCard className="h-3 w-3" />}
-                                                            {m.type === 'SOLDE_INITIAL' ? 'INITIAL' : m.type}
-                                                        </Badge>
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className="flex gap-2 text-xs cursor-help">
+                                                                        {group.debitDetails.length > 0 && (
+                                                                            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+                                                                                {group.debitDetails.length} Débit{group.debitDetails.length > 1 ? 's' : ''}
+                                                                            </Badge>
+                                                                        )}
+                                                                        {group.creditDetails.length > 0 && (
+                                                                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                                                                {group.creditDetails.length} Crédit{group.creditDetails.length > 1 ? 's' : ''}
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="right" className="max-w-md">
+                                                                    <div className="space-y-2">
+                                                                        {group.debitDetails.length > 0 && (
+                                                                            <div>
+                                                                                <p className="font-semibold text-red-600 mb-1">Débits:</p>
+                                                                                <ul className="text-xs space-y-0.5">
+                                                                                    {group.debitDetails.map((d: string, i: number) => (
+                                                                                        <li key={i}>• {d}</li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            </div>
+                                                                        )}
+                                                                        {group.creditDetails.length > 0 && (
+                                                                            <div>
+                                                                                <p className="font-semibold text-emerald-600 mb-1">Crédits:</p>
+                                                                                <ul className="text-xs space-y-0.5">
+                                                                                    {group.creditDetails.map((c: string, i: number) => (
+                                                                                        <li key={i}>• {c}</li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
                                                     </TableCell>
-                                                    <TableCell>{m.reference}</TableCell>
-                                                    <TableCell className="text-right font-mono text-red-600">
-                                                        {m.debit > 0 ? m.debit.toFixed(3) : '-'}
+                                                    <TableCell className="text-right font-mono font-semibold text-red-600">
+                                                        {group.debitTotal > 0 ? group.debitTotal.toFixed(3) : '-'}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-mono text-emerald-600">
-                                                        {m.credit > 0 ? m.credit.toFixed(3) : '-'}
+                                                    <TableCell className="text-right font-mono font-semibold text-emerald-600">
+                                                        {group.creditTotal > 0 ? group.creditTotal.toFixed(3) : '-'}
                                                     </TableCell>
                                                     <TableCell className={cn(
-                                                        "text-right font-mono font-bold",
-                                                        m.balance > 0 ? "text-orange-600" : "text-emerald-600"
+                                                        "text-right font-mono font-bold text-lg",
+                                                        group.balance > 0 ? "text-orange-600" : "text-emerald-600"
                                                     )}>
-                                                        {m.balance.toFixed(3)}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {m.type === 'PAIEMENT' && (
-                                                            <div className="flex gap-1">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-7 w-7"
-                                                                    onClick={() => {
-                                                                        const paymentId = m.id.replace('gpay-', '')
-                                                                        setEditingPayment({ id: paymentId, amount: m.credit, reference: m.reference })
-                                                                        setEditAmount(m.credit)
-                                                                        setEditDialogOpen(true)
-                                                                    }}
-                                                                >
-                                                                    <Edit className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-7 w-7 text-destructive hover:text-destructive"
-                                                                    onClick={() => {
-                                                                        const paymentId = m.id.replace('gpay-', '')
-                                                                        setDeletingPayment({ id: paymentId, amount: m.credit, reference: m.reference })
-                                                                        setDeleteDialogOpen(true)
-                                                                    }}
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            </div>
-                                                        )}
+                                                        {group.balance.toFixed(3)}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
