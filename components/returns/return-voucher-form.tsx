@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { PlusCircle, Trash2, Save } from "lucide-react"
+import { PlusCircle, Trash2, Save, Check, ChevronsUpDown } from "lucide-react"
 import { CustomerHistoryDialog } from "./customer-history-dialog"
+import { cn } from "@/lib/utils"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 
 type ReturnLine = { local_id: string; item_id: string | null; quantity: number; reason: string }
 
@@ -26,7 +29,7 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
 
   const [customers, setCustomers] = useState<any[]>([])
   const [items, setItems] = useState<any[]>([])
-  
+
   // Initialisation des champs simples via useState (ne change que si le composant est remonté)
   const [customerId, setCustomerId] = useState(initialData?.customer_id || "")
   const [returnDate, setReturnDate] = useState(initialData?.return_date || format(new Date(), "yyyy-MM-dd"))
@@ -34,15 +37,16 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
   const [notes, setNotes] = useState(initialData?.notes || "")
   const [driverName, setDriverName] = useState(initialData?.driver_name || "")
   const [vehicleReg, setVehicleReg] = useState(initialData?.vehicle_registration || "")
-  
+
   // Modification ici : lines démarre vide, sera rempli par le useEffect
   const [lines, setLines] = useState<ReturnLine[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [openCombobox, setOpenCombobox] = useState(false)
 
   useEffect(() => {
     console.log("--- [FORMULAIRE] useEffect se déclenche ---");
     console.log("--- [FORMULAIRE] initialData dans useEffect:", JSON.stringify(initialData, null, 2));
-    
+
     // 1. Gestion des lignes depuis initialData
     if (initialData && initialData.return_voucher_lines) {
       console.log("--- [FORMULAIRE] LIGNES TROUVÉES dans initialData. Nombre de lignes:", initialData.return_voucher_lines.length);
@@ -83,23 +87,23 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
       return
     }
     setIsSaving(true)
-    
+
     const payload = {
-      company_id: companyId, 
-      customer_id: customerId, 
+      company_id: companyId,
+      customer_id: customerId,
       return_date: returnDate,
-      source_document_ref: sourceDocRef, 
-      notes: notes, 
+      source_document_ref: sourceDocRef,
+      notes: notes,
       status: initialData?.status || "BROUILLON",
-      driver_name: driverName, 
+      driver_name: driverName,
       vehicle_registration: vehicleReg,
     }
-    
+
     // On prépare les lignes en retirant l'ID local qui n'est pas dans la DB
-    const linesPayload = lines.map(l => ({ 
-      item_id: l.item_id, 
-      quantity: l.quantity, 
-      reason: l.reason 
+    const linesPayload = lines.map(l => ({
+      item_id: l.item_id,
+      quantity: l.quantity,
+      reason: l.reason
     }))
 
     if (isNew) {
@@ -113,7 +117,7 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
 
       const { data: newReturn, error: returnError } = await supabase.from("return_vouchers").insert({ ...payload, return_voucher_number: numberData }).select().single()
       if (returnError) { toast.error(returnError.message); setIsSaving(false); return }
-      
+
       // Étape 2: Insérer les lignes en les liant au nouveau bon de retour
       if (linesPayload.length > 0) {
         const linesToInsert = linesPayload.map(line => ({ ...line, return_voucher_id: newReturn.id }))
@@ -159,14 +163,53 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
             <div>
               <Label>Client *</Label>
               <div className="flex items-center gap-2">
-                <Select value={customerId} onValueChange={setCustomerId}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un client..."/></SelectTrigger>
-                  <SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openCombobox}
+                      className="w-full justify-between"
+                    >
+                      {customerId
+                        ? customers.find((c) => c.id === customerId)?.name
+                        : "Sélectionner un client..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Rechercher un client..." />
+                      <CommandList>
+                        <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+                        <CommandGroup>
+                          {customers.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={(currentValue) => {
+                                setCustomerId(c.id === customerId ? "" : c.id)
+                                setOpenCombobox(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  customerId === c.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {customerId && (
-                  <CustomerHistoryDialog 
-                    customerId={customerId} 
-                    onSelect={(docNumber) => setSourceDocRef(docNumber)} 
+                  <CustomerHistoryDialog
+                    customerId={customerId}
+                    onSelect={(docNumber) => setSourceDocRef(docNumber)}
                   />
                 )}
               </div>
@@ -182,19 +225,19 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
             <div className="space-y-2">
               {lines.map(line => (
                 <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5"><Select value={line.item_id || ''} onValueChange={v => updateLine(line.local_id, { item_id: v })}><SelectTrigger><SelectValue placeholder="Article..."/></SelectTrigger><SelectContent>{items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="col-span-5"><Select value={line.item_id || ''} onValueChange={v => updateLine(line.local_id, { item_id: v })}><SelectTrigger><SelectValue placeholder="Article..." /></SelectTrigger><SelectContent>{items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent></Select></div>
                   <div className="col-span-2"><Input type="number" placeholder="Qté" value={line.quantity} onChange={e => updateLine(line.local_id, { quantity: parseFloat(e.target.value) || 1 })} /></div>
                   <div className="col-span-4"><Input placeholder="Raison du retour..." value={line.reason} onChange={e => updateLine(line.local_id, { reason: e.target.value })} /></div>
-                  <div className="col-span-1"><Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}><Trash2 className="h-4 w-4 text-red-500"/></Button></div>
+                  <div className="col-span-1"><Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button></div>
                 </div>
               ))}
             </div>
-            <Button variant="outline" onClick={addLine} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4"/>Ajouter un article</Button>
+            <Button variant="outline" onClick={addLine} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4" />Ajouter un article</Button>
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={handleSave} disabled={isSaving}><Save className="mr-2 h-4 w-4"/>Sauvegarder</Button>
+          <Button onClick={handleSave} disabled={isSaving}><Save className="mr-2 h-4 w-4" />Sauvegarder</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

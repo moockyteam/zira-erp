@@ -255,6 +255,104 @@ export function GlobalCollectionsManager() {
         fetchMovements()
     }, [selectedCustomerId, supabase, refreshTrigger])
 
+    // ========== PAYMENT MANAGEMENT HANDLERS ==========
+
+    const openEditDialog = (movement: AccountMovement) => {
+        setEditingPayment(movement)
+        setEditAmount(movement.credit) // credit est le montant du paiement
+        setEditDialogOpen(true)
+    }
+
+    const handleEditPayment = async () => {
+        if (!editingPayment || editAmount <= 0) return
+
+        setIsEditing(true)
+        try {
+            // Déterminer le type de paiement depuis l'ID
+            let paymentType = ''
+            let actualId = ''
+
+            if (editingPayment.id.startsWith('pay-inv-')) {
+                paymentType = 'INVOICE'
+                actualId = editingPayment.id.replace('pay-inv-', '')
+            } else if (editingPayment.id.startsWith('pay-bl-')) {
+                paymentType = 'DELIVERY_NOTE'
+                actualId = editingPayment.id.replace('pay-bl-', '')
+            } else if (editingPayment.id.startsWith('credit-')) {
+                paymentType = 'CREDIT'
+                actualId = editingPayment.id.replace('credit-', '')
+            } else {
+                throw new Error('Type de paiement non reconnu')
+            }
+
+            const { data, error } = await supabase.rpc('update_global_payment_amount', {
+                p_payment_type: paymentType,
+                p_payment_id: actualId,
+                p_new_amount: editAmount
+            })
+
+            if (error) throw error
+
+            toast.success(
+                `Paiement modifié: ${editAmount.toFixed(3)} TND (${data.difference > 0 ? '+' : ''}${data.difference.toFixed(3)} TND)`
+            )
+            setEditDialogOpen(false)
+            setRefreshTrigger(r => r + 1) // Refresh data
+        } catch (err: any) {
+            console.error('Error editing payment:', err)
+            toast.error("Erreur: " + (err.message || 'Impossible de modifier le paiement'))
+        } finally {
+            setIsEditing(false)
+        }
+    }
+
+    const openDeleteDialog = (movement: AccountMovement) => {
+        setDeletingPayment(movement)
+        setDeleteDialogOpen(true)
+    }
+
+    const handleDeletePayment = async () => {
+        if (!deletingPayment) return
+
+        setIsDeleting(true)
+        try {
+            // Déterminer le type de paiement depuis l'ID
+            let paymentType = ''
+            let actualId = ''
+
+            if (deletingPayment.id.startsWith('pay-inv-')) {
+                paymentType = 'INVOICE'
+                actualId = deletingPayment.id.replace('pay-inv-', '')
+            } else if (deletingPayment.id.startsWith('pay-bl-')) {
+                paymentType = 'DELIVERY_NOTE'
+                actualId = deletingPayment.id.replace('pay-bl-', '')
+            } else if (deletingPayment.id.startsWith('credit-')) {
+                paymentType = 'CREDIT'
+                actualId = deletingPayment.id.replace('credit-', '')
+            } else {
+                throw new Error('Type de paiement non reconnu')
+            }
+
+            const { data, error } = await supabase.rpc('delete_global_payment_allocation', {
+                p_payment_type: paymentType,
+                p_payment_id: actualId
+            })
+
+            if (error) throw error
+
+            toast.success(
+                `Paiement supprimé: ${deletingPayment.credit.toFixed(3)} TND`
+            )
+            setDeleteDialogOpen(false)
+            setRefreshTrigger(r => r + 1) // Refresh data
+        } catch (err: any) {
+            console.error('Error deleting payment:', err)
+            toast.error("Erreur: " + (err.message || 'Impossible de supprimer le paiement'))
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
     // Grouper les mouvements par date
     const groupedMovementsByDate = useMemo(() => {
         // Trier chronologiquement d'abord
@@ -605,6 +703,94 @@ export function GlobalCollectionsManager() {
                                                     </TableCell>
                                                 </TableRow>
                                             ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+
+                        {/* ==================== DETAILED MOVEMENTS WITH ACTIONS ==================== */}
+                        <Card className="mt-6">
+                            <CardContent className="p-0">
+                                <div className="p-4 bg-muted/30 border-b">
+                                    <h4 className="font-semibold"><CreditCard className="inline h-4 w-4 mr-2" />Détail des Paiements</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">Gérer les paiements individuellement</p>
+                                </div>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50">
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Référence</TableHead>
+                                            <TableHead className="text-right">Montant</TableHead>
+                                            <TableHead className="text-right w-[100px]">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {movements
+                                            .filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT')
+                                            .map((movement) => (
+                                                <TableRow key={movement.id}>
+                                                    <TableCell className="text-sm">
+                                                        {format(new Date(movement.date), "dd/MM/yyyy")}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {movement.type === 'PAIEMENT' ? (
+                                                                <><CreditCard className="h-3 w-3 mr-1 inline" />Paiement</>
+                                                            ) : (
+                                                                <><Banknote className="h-3 w-3 mr-1 inline" />Avance</>
+                                                            )}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {movement.reference}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono font-semibold text-emerald-600">
+                                                        {movement.credit.toFixed(3)} TND
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex gap-1 justify-end">
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7"
+                                                                            onClick={() => openEditDialog(movement)}
+                                                                        >
+                                                                            <Edit className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>Modifier le montant</TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
+                                                                            onClick={() => openDeleteDialog(movement)}
+                                                                        >
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>Supprimer le paiement</TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        {movements.filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT').length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
+                                                    Aucun paiement à afficher
+                                                </TableCell>
+                                            </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
