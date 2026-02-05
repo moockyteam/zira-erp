@@ -414,44 +414,7 @@ export function GlobalCollectionsManager() {
         window.print()
     }
 
-    // Handle Edit Payment
-    const handleEditPayment = async () => {
-        if (!editingPayment || editAmount <= 0) return
-        setIsEditing(true)
-        try {
-            const { data, error } = await supabase.rpc('update_global_payment', {
-                p_entry_id: editingPayment.id,
-                p_new_amount: editAmount
-            })
-            if (error) throw error
-            toast.success(`Paiement modifié : ${editAmount.toFixed(3)} TND`)
-            setEditDialogOpen(false)
-            setRefreshTrigger(r => r + 1)
-        } catch (err: any) {
-            toast.error("Erreur: " + err.message)
-        } finally {
-            setIsEditing(false)
-        }
-    }
 
-    // Handle Delete Payment
-    const handleDeletePayment = async () => {
-        if (!deletingPayment) return
-        setIsDeleting(true)
-        try {
-            const { error } = await supabase.rpc('delete_global_payment', {
-                p_entry_id: deletingPayment.id
-            })
-            if (error) throw error
-            toast.success(`Paiement supprimé`)
-            setDeleteDialogOpen(false)
-            setRefreshTrigger(r => r + 1)
-        } catch (err: any) {
-            toast.error("Erreur: " + err.message)
-        } finally {
-            setIsDeleting(false)
-        }
-    }
 
     if (!companyId) {
         return <div className="p-8 text-center bg-muted/20 rounded-lg">Veuillez sélectionner une entreprise.</div>
@@ -822,7 +785,7 @@ export function GlobalCollectionsManager() {
                         <div className="space-y-2">
                             <Label>Montant actuel</Label>
                             <p className="text-sm text-muted-foreground">
-                                {editingPayment?.amount?.toFixed(3)} TND ({editingPayment?.reference})
+                                {editingPayment?.credit?.toFixed(3)} TND ({editingPayment?.reference})
                             </p>
                         </div>
                         <div className="space-y-2">
@@ -860,7 +823,7 @@ export function GlobalCollectionsManager() {
                     <div className="py-4">
                         <p className="text-sm">
                             Êtes-vous sûr de vouloir supprimer le paiement de{" "}
-                            <strong>{deletingPayment?.amount?.toFixed(3)} TND</strong> ?
+                            <strong>{deletingPayment?.credit?.toFixed(3)} TND</strong> ?
                         </p>
                     </div>
                     <DialogFooter>
