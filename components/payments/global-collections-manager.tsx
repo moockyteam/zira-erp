@@ -18,6 +18,10 @@ import {
     Trash2,
     AlertCircle,
     Wallet,
+    Calendar,
+    ArrowRightCircle,
+    Copy,
+    ListFilter
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -57,7 +61,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
-// Type pour les mouvements du relevé de compte
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+// Type pour les paiements globaux
+type GlobalPayment = {
+    id: string
+    amount: number
+    payment_date: string
+    payment_method: string
+    notes: string
+    created_at: string
+    allocations: {
+        invoices: { invoice_number: string, amount: number }[]
+        bls: { delivery_note_number: string, amount: number }[]
+        credits: number
+    }
+}
 type AccountMovement = {
     id: string
     date: string
@@ -77,7 +97,9 @@ export function GlobalCollectionsManager() {
     const [customerName, setCustomerName] = useState("")
     const [customerDetails, setCustomerDetails] = useState<any>(null)
     const [movements, setMovements] = useState<AccountMovement[]>([])
+    const [globalPayments, setGlobalPayments] = useState<GlobalPayment[]>([])
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [activeTab, setActiveTab] = useState("movements")
 
     // Tri: true = chronologique (ancien→récent), false = anti-chronologique
     const [sortAscending, setSortAscending] = useState(true)
@@ -88,10 +110,19 @@ export function GlobalCollectionsManager() {
     const [editAmount, setEditAmount] = useState(0)
     const [isEditing, setIsEditing] = useState(false)
 
+    // Edit Global Payment Dialog
+    const [editGlobalDialogOpen, setEditGlobalDialogOpen] = useState(false)
+    const [editingGlobalPayment, setEditingGlobalPayment] = useState<GlobalPayment | null>(null)
+    const [editGlobalAmount, setEditGlobalAmount] = useState(0)
+
     // Delete dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [deletingPayment, setDeletingPayment] = useState<any>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+
+    // Delete Global Payment Dialog
+    const [deleteGlobalDialogOpen, setDeleteGlobalDialogOpen] = useState(false)
+    const [deletingGlobalPayment, setDeletingGlobalPayment] = useState<GlobalPayment | null>(null)
 
     const companyId = selectedCompany?.id || ""
 
@@ -256,6 +287,86 @@ export function GlobalCollectionsManager() {
 
         fetchMovements()
     }, [selectedCustomerId, supabase, refreshTrigger])
+
+    // Fetch Global Payments
+    useEffect(() => {
+        const fetchGlobalPayments = async () => {
+            if (!selectedCustomerId) {
+                setGlobalPayments([])
+                return
+            }
+            try {
+                const { data, error } = await supabase.rpc('get_customer_global_payments', {
+                    p_customer_id: selectedCustomerId
+                })
+                if (error) throw error
+                if (data) setGlobalPayments(data)
+            } catch (err) {
+                console.error("Error fetching global payments:", err)
+            }
+        }
+        fetchGlobalPayments()
+    }, [selectedCustomerId, supabase, refreshTrigger])
+
+    // ========== GLOBAL PAYMENT MANAGEMENT HANDLERS ==========
+
+    const openEditGlobalDialog = (payment: GlobalPayment) => {
+        setEditingGlobalPayment(payment)
+        setEditGlobalAmount(payment.amount)
+        setEditGlobalDialogOpen(true)
+    }
+
+    const handleEditGlobalPayment = async () => {
+        if (!editingGlobalPayment || editGlobalAmount <= 0) return
+
+        setIsEditing(true)
+        try {
+            const { data, error } = await supabase.rpc('update_global_payment', {
+                p_global_payment_id: editingGlobalPayment.id,
+                p_new_amount: editGlobalAmount
+            })
+
+            if (error) throw error
+
+            toast.success(
+                `Paiement global modifié avec succès. Nouvelle allocation effectuée.`
+            )
+            setEditGlobalDialogOpen(false)
+            setRefreshTrigger(r => r + 1)
+        } catch (err: any) {
+            console.error('Error editing global payment:', err)
+            toast.error("Erreur: " + (err.message || 'Impossible de modifier le paiement'))
+        } finally {
+            setIsEditing(false)
+        }
+    }
+
+    const openDeleteGlobalDialog = (payment: GlobalPayment) => {
+        setDeletingGlobalPayment(payment)
+        setDeleteGlobalDialogOpen(true)
+    }
+
+    const handleDeleteGlobalPayment = async () => {
+        if (!deletingGlobalPayment) return
+
+        setIsDeleting(true)
+        try {
+            const { data, error } = await supabase.rpc('delete_global_payment', {
+                p_global_payment_id: deletingGlobalPayment.id
+            })
+
+            if (error) throw error
+
+            toast.success("Paiement global supprimé avec succès.")
+            setDeleteGlobalDialogOpen(false)
+            setRefreshTrigger(r => r + 1)
+        } catch (err: any) {
+            console.error('Error deleting global payment:', err)
+            toast.error("Erreur: " + (err.message || 'Impossible de supprimer le paiement'))
+        } finally {
+            setIsDeleting(false)
+        }
+    }
 
     // ========== PAYMENT MANAGEMENT HANDLERS ==========
 
@@ -566,201 +677,317 @@ export function GlobalCollectionsManager() {
                             </div>
                         </div>
 
-                        {/* Sort Toggle */}
-                        <div className="flex justify-end">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSortAscending(!sortAscending)}
-                            >
-                                <ArrowUpDown className="mr-2 h-4 w-4" />
-                                {sortAscending ? "Plus ancien → Plus récent" : "Plus récent → Plus ancien"}
-                            </Button>
-                        </div>
+                        {/* Sort Toggle (Specific to Movements Tab) */}
+                        {activeTab === 'movements' && (
+                            <div className="flex justify-end mb-4">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSortAscending(!sortAscending)}
+                                >
+                                    <ArrowUpDown className="mr-2 h-4 w-4" />
+                                    {sortAscending ? "Plus ancien → Plus récent" : "Plus récent → Plus ancien"}
+                                </Button>
+                            </div>
+                        )}
 
-                        {/* Movements Table */}
-                        <Card>
-                            <CardContent className="p-0">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead className="w-[120px]">Date</TableHead>
-                                            <TableHead className="w-[140px]">Mouvements</TableHead>
-                                            <TableHead className="text-right w-[130px]">Montant Facturé</TableHead>
-                                            <TableHead className="text-right w-[130px]">Montant Payé</TableHead>
-                                            <TableHead className="text-right w-[130px]">Reste à Payer</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {isLoading ? (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                                    Chargement...
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : groupedMovementsByDate.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                                                    Aucun mouvement
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            groupedMovementsByDate.map((group: any, idx: number) => (
-                                                <TableRow key={idx} className="hover:bg-muted/30">
-                                                    <TableCell className="font-medium">
-                                                        {format(new Date(group.date), "dd/MM/yyyy")}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <div className="flex gap-2 text-xs cursor-help">
-                                                                        {group.debitDetails.length > 0 && (
-                                                                            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-                                                                                {group.debitDetails.length} Facture{group.debitDetails.length > 1 ? 's' : ''}
-                                                                            </Badge>
-                                                                        )}
-                                                                        {group.creditDetails.length > 0 && (
-                                                                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                                                                                {group.creditDetails.length} Paiement{group.creditDetails.length > 1 ? 's' : ''}
-                                                                            </Badge>
-                                                                        )}
-                                                                    </div>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="right" className="max-w-md">
-                                                                    <div className="space-y-2">
-                                                                        {group.debitDetails.length > 0 && (
-                                                                            <div>
-                                                                                <p className="font-semibold text-red-600 mb-1">Facturé:</p>
-                                                                                <ul className="text-xs space-y-0.5">
-                                                                                    {group.debitDetails.map((d: string, i: number) => (
-                                                                                        <li key={i}>• {d}</li>
-                                                                                    ))}
-                                                                                </ul>
-                                                                            </div>
-                                                                        )}
-                                                                        {group.creditDetails.length > 0 && (
-                                                                            <div>
-                                                                                <p className="font-semibold text-emerald-600 mb-1">Payé:</p>
-                                                                                <ul className="text-xs space-y-0.5">
-                                                                                    {group.creditDetails.map((c: string, i: number) => (
-                                                                                        <li key={i}>• {c}</li>
-                                                                                    ))}
-                                                                                </ul>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-mono font-semibold text-red-600">
-                                                        {group.debitTotal > 0 ? group.debitTotal.toFixed(3) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-mono font-semibold text-emerald-600">
-                                                        {group.creditTotal > 0 ? group.creditTotal.toFixed(3) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className={cn(
-                                                        "text-right font-mono font-bold text-lg",
-                                                        group.balance > 0 ? "text-orange-600" : "text-emerald-600"
-                                                    )}>
-                                                        {group.balance.toFixed(3)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                            <TabsList className="grid w-full grid-cols-2 mb-4">
+                                <TabsTrigger value="movements">Vue d'ensemble & Mouvements</TabsTrigger>
+                                <TabsTrigger value="global_payments">Historique des Paiements Globaux</TabsTrigger>
+                            </TabsList>
 
-                        {/* ==================== DETAILED MOVEMENTS WITH ACTIONS ==================== */}
-                        <Card className="mt-6">
-                            <CardContent className="p-0">
-                                <div className="p-4 bg-muted/30 border-b">
-                                    <h4 className="font-semibold"><CreditCard className="inline h-4 w-4 mr-2" />Détail des Paiements</h4>
-                                    <p className="text-xs text-muted-foreground mt-1">Gérer les paiements individuellement</p>
-                                </div>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Type</TableHead>
-                                            <TableHead>Référence</TableHead>
-                                            <TableHead className="text-right">Montant</TableHead>
-                                            <TableHead className="text-right w-[100px]">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {movements
-                                            .filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT')
-                                            .map((movement) => (
-                                                <TableRow key={movement.id}>
-                                                    <TableCell className="text-sm">
-                                                        {format(new Date(movement.date), "dd/MM/yyyy")}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {movement.type === 'PAIEMENT' ? (
-                                                                <><CreditCard className="h-3 w-3 mr-1 inline" />Paiement</>
-                                                            ) : (
-                                                                <><Banknote className="h-3 w-3 mr-1 inline" />Avance</>
-                                                            )}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {movement.reference}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-mono font-semibold text-emerald-600">
-                                                        {movement.credit.toFixed(3)} TND
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex gap-1 justify-end">
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-7 w-7"
-                                                                            onClick={() => openEditDialog(movement)}
-                                                                        >
-                                                                            <Edit className="h-3.5 w-3.5" />
-                                                                        </Button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>Modifier le montant</TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
-                                                                            onClick={() => openDeleteDialog(movement)}
-                                                                        >
-                                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                                        </Button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>Supprimer le paiement</TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        </div>
-                                                    </TableCell>
+                            <TabsContent value="movements">
+                                {/* Movements Table */}
+                                <Card>
+                                    <CardContent className="p-0">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/50">
+                                                    <TableHead className="w-[120px]">Date</TableHead>
+                                                    <TableHead className="w-[140px]">Mouvements</TableHead>
+                                                    <TableHead className="text-right w-[130px]">Montant Facturé</TableHead>
+                                                    <TableHead className="text-right w-[130px]">Montant Payé</TableHead>
+                                                    <TableHead className="text-right w-[130px]">Reste à Payer</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        {movements.filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT').length === 0 && (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                                                    Aucun paiement à afficher
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {isLoading ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                            Chargement...
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : groupedMovementsByDate.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
+                                                            Aucun mouvement
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    groupedMovementsByDate.map((group: any, idx: number) => (
+                                                        <TableRow key={idx} className="hover:bg-muted/30">
+                                                            <TableCell className="font-medium">
+                                                                {format(new Date(group.date), "dd/MM/yyyy")}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <div className="flex gap-2 text-xs cursor-help">
+                                                                                {group.debitDetails.length > 0 && (
+                                                                                    <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+                                                                                        {group.debitDetails.length} Facture{group.debitDetails.length > 1 ? 's' : ''}
+                                                                                    </Badge>
+                                                                                )}
+                                                                                {group.creditDetails.length > 0 && (
+                                                                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                                                                        {group.creditDetails.length} Paiement{group.creditDetails.length > 1 ? 's' : ''}
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </div>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="right" className="max-w-md">
+                                                                            <div className="space-y-2">
+                                                                                {group.debitDetails.length > 0 && (
+                                                                                    <div>
+                                                                                        <p className="font-semibold text-red-600 mb-1">Facturé:</p>
+                                                                                        <ul className="text-xs space-y-0.5">
+                                                                                            {group.debitDetails.map((d: string, i: number) => (
+                                                                                                <li key={i}>• {d}</li>
+                                                                                            ))}
+                                                                                        </ul>
+                                                                                    </div>
+                                                                                )}
+                                                                                {group.creditDetails.length > 0 && (
+                                                                                    <div>
+                                                                                        <p className="font-semibold text-emerald-600 mb-1">Payé:</p>
+                                                                                        <ul className="text-xs space-y-0.5">
+                                                                                            {group.creditDetails.map((c: string, i: number) => (
+                                                                                                <li key={i}>• {c}</li>
+                                                                                            ))}
+                                                                                        </ul>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-semibold text-red-600">
+                                                                {group.debitTotal > 0 ? group.debitTotal.toFixed(3) : '-'}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-semibold text-emerald-600">
+                                                                {group.creditTotal > 0 ? group.creditTotal.toFixed(3) : '-'}
+                                                            </TableCell>
+                                                            <TableCell className={cn(
+                                                                "text-right font-mono font-bold text-lg",
+                                                                group.balance > 0 ? "text-orange-600" : "text-emerald-600"
+                                                            )}>
+                                                                {group.balance.toFixed(3)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+
+                                {/* ==================== DETAILED MOVEMENTS WITH ACTIONS ==================== */}
+                                <Card className="mt-6">
+                                    <CardContent className="p-0">
+                                        <div className="p-4 bg-muted/30 border-b">
+                                            <h4 className="font-semibold"><CreditCard className="inline h-4 w-4 mr-2" />Détail des Paiements</h4>
+                                            <p className="text-xs text-muted-foreground mt-1">Gérer les paiements individuellement</p>
+                                        </div>
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/50">
+                                                    <TableHead>Date</TableHead>
+                                                    <TableHead>Type</TableHead>
+                                                    <TableHead>Référence</TableHead>
+                                                    <TableHead className="text-right">Montant</TableHead>
+                                                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {movements
+                                                    .filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT')
+                                                    .map((movement) => (
+                                                        <TableRow key={movement.id}>
+                                                            <TableCell className="text-sm">
+                                                                {format(new Date(movement.date), "dd/MM/yyyy")}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {movement.type === 'PAIEMENT' ? (
+                                                                        <><CreditCard className="h-3 w-3 mr-1 inline" />Paiement</>
+                                                                    ) : (
+                                                                        <><Banknote className="h-3 w-3 mr-1 inline" />Avance</>
+                                                                    )}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-sm">
+                                                                {movement.reference}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-semibold text-emerald-600">
+                                                                {movement.credit.toFixed(3)} TND
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex gap-1 justify-end">
+                                                                    <TooltipProvider>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-7 w-7"
+                                                                                    onClick={() => openEditDialog(movement)}
+                                                                                >
+                                                                                    <Edit className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Modifier le montant</TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+                                                                    <TooltipProvider>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
+                                                                                    onClick={() => openDeleteDialog(movement)}
+                                                                                >
+                                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Supprimer le paiement</TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                {movements.filter(m => m.type === 'PAIEMENT' || m.type === 'CREDIT').length === 0 && (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
+                                                            Aucun paiement à afficher
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            </TabsContent>
+
+                            <TabsContent value="global_payments">
+                                <Card>
+                                    <CardContent className="p-0">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/50">
+                                                    <TableHead className="w-[120px]">Date</TableHead>
+                                                    <TableHead>Mode</TableHead>
+                                                    <TableHead>Ref / Notes</TableHead>
+                                                    <TableHead className="text-right">Montant Total</TableHead>
+                                                    <TableHead>Détails d'Allocation</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {globalPayments.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                                                            Aucun paiement global enregistré pour ce client.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    globalPayments.map((payment) => (
+                                                        <TableRow key={payment.id} className="hover:bg-muted/30">
+                                                            <TableCell className="font-medium align-top">
+                                                                {format(new Date(payment.payment_date), "dd/MM/yyyy")}
+                                                            </TableCell>
+                                                            <TableCell className="align-top">
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {payment.payment_method}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="align-top text-sm text-muted-foreground max-w-[200px] truncate">
+                                                                {payment.notes || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-bold text-emerald-600 align-top">
+                                                                {payment.amount.toFixed(3)} TND
+                                                            </TableCell>
+                                                            <TableCell className="align-top">
+                                                                <div className="space-y-1 text-xs">
+                                                                    {payment.allocations?.invoices?.length > 0 && (
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <span className="font-semibold text-muted-foreground">Factures:</span>
+                                                                            {payment.allocations.invoices.map((inv, i) => (
+                                                                                <div key={i} className="flex justify-between w-full max-w-[250px] bg-slate-50 px-2 py-1 rounded border">
+                                                                                    <span>{inv.invoice_number}</span>
+                                                                                    <span className="font-mono">{inv.amount.toFixed(3)}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                    {payment.allocations?.bls?.length > 0 && (
+                                                                        <div className="flex flex-col gap-1 mt-2">
+                                                                            <span className="font-semibold text-muted-foreground">BLs:</span>
+                                                                            {payment.allocations.bls.map((bl, i) => (
+                                                                                <div key={i} className="flex justify-between w-full max-w-[250px] bg-sky-50 px-2 py-1 rounded border border-sky-100">
+                                                                                    <span>{bl.delivery_note_number}</span>
+                                                                                    <span className="font-mono">{bl.amount.toFixed(3)}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                    {(payment.allocations?.credits || 0) > 0.001 && (
+                                                                        <div className="mt-2 flex items-center gap-2 text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 w-fit">
+                                                                            <Wallet className="h-3 w-3" />
+                                                                            <span>Solde Créditeur: <span className="font-mono font-bold">{(payment.allocations?.credits || 0).toFixed(3)}</span></span>
+                                                                        </div>
+                                                                    )}
+                                                                    {(!payment.allocations || (
+                                                                        (payment.allocations.invoices?.length || 0) === 0 &&
+                                                                        (payment.allocations.bls?.length || 0) === 0 &&
+                                                                        (payment.allocations.credits || 0) <= 0.001
+                                                                    )) && (
+                                                                            <span className="text-muted-foreground italic">Non alloué</span>
+                                                                        )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right align-top">
+                                                                <div className="flex justify-end gap-2">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => openEditGlobalDialog(payment)}
+                                                                    >
+                                                                        <Edit className="h-3 w-3 mr-1" />
+                                                                        Modifier
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                        onClick={() => openDeleteGlobalDialog(payment)}
+                                                                    >
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            </TabsContent>
+                        </Tabs>
                     </>
                 )}
 
@@ -834,6 +1061,75 @@ export function GlobalCollectionsManager() {
                         </Button>
                         <Button variant="destructive" onClick={handleDeletePayment} disabled={isDeleting}>
                             {isDeleting ? "Suppression..." : "Supprimer"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            {/* ==================== GLOBAL PAYMENT EDIT DIALOG ==================== */}
+            <Dialog open={editGlobalDialogOpen} onOpenChange={setEditGlobalDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Modifier le Paiement Global</DialogTitle>
+                        <DialogDescription>
+                            Modifiez le montant total. Le système recalculera automatiquement la répartition sur les factures et BL (FIFO).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Montant actuel</Label>
+                            <p className="text-sm text-muted-foreground">
+                                {editingGlobalPayment?.amount?.toFixed(3)} TND ({editingGlobalPayment?.payment_method})
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="editGlobalAmount">Nouveau montant total (TND)</Label>
+                            <Input
+                                id="editGlobalAmount"
+                                type="number"
+                                step="0.001"
+                                value={editGlobalAmount}
+                                onChange={(e) => setEditGlobalAmount(parseFloat(e.target.value) || 0)}
+                                className="font-bold text-lg"
+                            />
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-md text-xs flex gap-2">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            <p>
+                                Attention : Modifier ce montant va <strong>annuler toutes les allocations actuelles</strong> de ce paiement et les recréer sur les documents les plus anciens impayés.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditGlobalDialogOpen(false)}>Annuler</Button>
+                        <Button onClick={handleEditGlobalPayment} disabled={isEditing || editGlobalAmount <= 0}>
+                            {isEditing ? "Enregistrement..." : "Enregistrer les modifications"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ==================== GLOBAL PAYMENT DELETE DIALOG ==================== */}
+            <Dialog open={deleteGlobalDialogOpen} onOpenChange={setDeleteGlobalDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Supprimer le paiement global ?</DialogTitle>
+                        <DialogDescription>
+                            Cette action supprimera le paiement ainsi que <strong>toutes ses allocations</strong> sur les factures et BL.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {deletingGlobalPayment && (
+                        <div className="py-4 text-sm text-center bg-red-50 rounded-lg border border-red-100">
+                            <p className="font-bold text-red-600 mb-1 text-lg">{deletingGlobalPayment.amount.toFixed(3)} TND</p>
+                            <p className="text-muted-foreground">du {format(new Date(deletingGlobalPayment.payment_date), "dd/MM/yyyy")}</p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                {deletingGlobalPayment.allocations.invoices.length} facture(s), {deletingGlobalPayment.allocations.bls.length} BL(s) impactés.
+                            </p>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteGlobalDialogOpen(false)}>Annuler</Button>
+                        <Button variant="destructive" onClick={handleDeleteGlobalPayment} disabled={isDeleting}>
+                            {isDeleting ? "Suppression..." : "Confirmer la suppression"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
