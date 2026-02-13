@@ -142,7 +142,7 @@ export default function LandingPage() {
             {/* Tunisia Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 text-red-600 text-sm font-medium mb-6 border border-red-500/20">
               <Building2 className="w-4 h-4" />
-              Built for Tunisian businesses • <span className="font-bold">100% Free in 2026</span>
+              Built for Tunisian businesses • <span className="font-bold">100% Free Forever</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6">
@@ -274,10 +274,10 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Special Offer 2026
+              Free Forever for Everyone
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Access the full power of ZIRA completely free in 2026, or upgrade for enterprise controls.
+              Access the full power of ZIRA completely free. No hidden fees, no billing – the app is 100% free for all users.
             </p>
           </div>
 
@@ -286,7 +286,7 @@ export default function LandingPage() {
             <div className="relative p-8 rounded-3xl bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/30 hover:border-primary/50 transition-all duration-300">
               {/* Popular Badge */}
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold shadow-lg">
-                Special Offer 2026
+                Recommended
               </div>
 
               <div className="mb-6 mt-2">
@@ -300,7 +300,7 @@ export default function LandingPage() {
                   <span className="text-xl font-semibold text-muted-foreground">DT</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">100% Free during 2026</p>
+                <p className="text-sm text-muted-foreground mt-1">100% Free - No billing, ever</p>
               </div>
 
               <ul className="space-y-3 mb-8">
