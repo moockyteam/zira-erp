@@ -239,7 +239,7 @@ export function StockIssueFormDialog({ isOpen, onOpenChange, companyId, onSucces
                                                     {items.map((item) => (
                                                         <CommandItem
                                                             key={item.id}
-                                                            value={item.name}
+                                                            value={`${item.name} ${item.reference || ''}`}
                                                             onSelect={() => {
                                                                 setSelectedItemId(item.id)
                                                                 setOpenCombobox(false)

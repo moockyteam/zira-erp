@@ -93,6 +93,7 @@ export function DeliveryNoteForm({
   const [rib, setRib] = useState(initialData?.rib || "")
   // Removed managerName state as it comes from company profile now
   const [showManagerName, setShowManagerName] = useState(initialData?.show_manager_name ?? false)
+  const [customerSpecialPrices, setCustomerSpecialPrices] = useState<any[]>([])
 
   const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customerId, customers])
 
@@ -107,6 +108,23 @@ export function DeliveryNoteForm({
       fetchCustomersForCompany()
     }
   }, [companyId, supabase, initialDataSource])
+
+  // Fetch special prices for the selected customer
+  useEffect(() => {
+    const fetchSpecialPrices = async () => {
+      if (!customerId) {
+        setCustomerSpecialPrices([])
+        return
+      }
+      const { data } = await supabase
+        .from("customer_items")
+        .select("item_id, special_price, special_vat_rate")
+        .eq("customer_id", customerId)
+        .not("item_id", "is", null)
+      setCustomerSpecialPrices(data || [])
+    }
+    fetchSpecialPrices()
+  }, [customerId, supabase])
 
   useEffect(() => {
     if (initialDataSource && isNew) {
@@ -143,15 +161,20 @@ export function DeliveryNoteForm({
     (local_id: string, itemId: string) => {
       const item = items.find((i: Item) => i.id === itemId)
       if (item) {
+        // Check for customer-specific special price
+        const specialEntry = customerSpecialPrices.find((sp: any) => sp.item_id === itemId)
+        const unitPrice = specialEntry?.special_price ?? item.sale_price ?? 0
+
         setLines(lines => lines.map(line => line.local_id === local_id ? {
           ...line,
           item_id: itemId,
           description: `${item.reference ? `[${item.reference}] ` : ""}${item.name}`,
-          unit_price_ht: item.sale_price || 0,
+          unit_price_ht: unitPrice,
+          ...(specialEntry?.special_vat_rate != null ? { tva_rate: specialEntry.special_vat_rate } : {}),
         } : line))
       }
     },
-    [items],
+    [items, customerSpecialPrices],
   )
 
   const addLine = () =>

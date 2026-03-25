@@ -42,6 +42,7 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
   const [lines, setLines] = useState<ReturnLine[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [openCombobox, setOpenCombobox] = useState(false)
+  const [openComboboxes, setOpenComboboxes] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     console.log("--- [FORMULAIRE] useEffect se déclenche ---");
@@ -225,7 +226,35 @@ export function ReturnVoucherForm({ isOpen, onOpenChange, companyId, initialData
             <div className="space-y-2">
               {lines.map(line => (
                 <div key={line.local_id} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5"><Select value={line.item_id || ''} onValueChange={v => updateLine(line.local_id, { item_id: v })}><SelectTrigger><SelectValue placeholder="Article..." /></SelectTrigger><SelectContent>{items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="col-span-5">
+                    <Popover open={openComboboxes[line.local_id]} onOpenChange={(open) => setOpenComboboxes(prev => ({...prev, [line.local_id]: open}))}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className={cn("w-full justify-between px-3 font-normal", !line.item_id && "text-muted-foreground")}>
+                          <span className="truncate">{line.item_id ? items.find(i => i.id === line.item_id)?.name : "Rechercher..."}</span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Rechercher nom/réf..." />
+                          <CommandList>
+                            <CommandEmpty>Aucun article trouvé.</CommandEmpty>
+                            <CommandGroup>
+                              {items.map(i => (
+                                <CommandItem key={i.id} value={`${i.name} ${i.reference || ''}`} onSelect={() => { updateLine(line.local_id, { item_id: i.id }); setOpenComboboxes(prev => ({...prev, [line.local_id]: false})) }}>
+                                  <Check className={cn("mr-2 h-4 w-4", line.item_id === i.id ? "opacity-100" : "opacity-0")} />
+                                  <div className="flex flex-col">
+                                    <span>{i.name}</span>
+                                    <span className="text-xs text-muted-foreground">Ref: {i.reference || '-'}</span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                   <div className="col-span-2"><Input type="number" placeholder="Qté" value={line.quantity} onChange={e => updateLine(line.local_id, { quantity: parseFloat(e.target.value) || 1 })} /></div>
                   <div className="col-span-4"><Input placeholder="Raison du retour..." value={line.reason} onChange={e => updateLine(line.local_id, { reason: e.target.value })} /></div>
                   <div className="col-span-1"><Button variant="ghost" size="icon" onClick={() => removeLine(line.local_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button></div>

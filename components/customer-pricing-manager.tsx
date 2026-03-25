@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Plus, Trash2, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown, X, ChevronDown, ChevronUp, Tag, Percent } from "lucide-react"
+import { Plus, Trash2, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown, X, ChevronDown, ChevronUp, Tag, Percent, Pencil } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -117,6 +117,7 @@ export function CustomerPricingManager({
     // UI Logic: Inline form state instead of Dialog
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [openCombobox, setOpenCombobox] = useState(false)
+    const [editingId, setEditingId] = useState<string | null>(null)
 
     // Filter Logic
     const [searchTerm, setSearchTerm] = useState("")
@@ -275,7 +276,7 @@ export function CustomerPricingManager({
             }
 
             const newPendingRule: PendingPriceRule = {
-                tempId: `temp-${Date.now()}-${Math.random()}`,
+                tempId: editingId || `temp-${Date.now()}-${Math.random()}`,
                 type: values.type,
                 itemId: values.itemId,
                 itemName: found.name,
@@ -287,12 +288,20 @@ export function CustomerPricingManager({
                 renewalDate: values.renewalDate
             }
 
-            if (onPendingRulesChange) {
-                onPendingRulesChange([...pendingRules, newPendingRule])
+            if (editingId) {
+                if (onPendingRulesChange) {
+                    onPendingRulesChange(pendingRules.map(r => r.tempId === editingId ? newPendingRule : r))
+                }
+                toast.success("Tarif modifié")
+            } else {
+                if (onPendingRulesChange) {
+                    onPendingRulesChange([...pendingRules, newPendingRule])
+                }
+                toast.success("Tarif ajouté (sera sauvegardé à l'enregistrement du client)")
             }
 
-            toast.success("Tarif ajouté (sera sauvegardé à l'enregistrement du client)")
             setIsFormOpen(false)
+            setEditingId(null)
             form.reset({
                 type: selectedType,
                 itemId: "",
@@ -321,23 +330,46 @@ export function CustomerPricingManager({
             payload.service_id = null
         }
 
-        const { error } = await supabase.from("customer_items").insert(payload)
-
-        if (error) {
-            if (error.code === '23505') toast.error("Un prix spécial existe déjà pour cet élément.")
-            else toast.error("Erreur technique.")
+        if (editingId) {
+            const { error } = await supabase.from("customer_items").update(payload).eq("id", editingId)
+            
+            if (error) {
+                if (error.code === '23505') toast.error("Un prix spécial existe déjà pour cet élément.")
+                else toast.error("Erreur technique.")
+            } else {
+                toast.success("Tarif modifié correctement")
+                setIsFormOpen(false)
+                setEditingId(null)
+                form.reset({
+                    type: selectedType,
+                    itemId: "",
+                    specialPrice: 0,
+                    specialVatRate: 19,
+                    overrideVat: false
+                })
+                setPriceTTC("")
+                fetchRules()
+            }
         } else {
-            toast.success("Tarif ajouté correctement")
-            setIsFormOpen(false)
-            form.reset({
-                type: selectedType,
-                itemId: "",
-                specialPrice: 0,
-                specialVatRate: 19,
-                overrideVat: false
-            })
-            setPriceTTC("")
-            fetchRules()
+            const { error } = await supabase.from("customer_items").insert(payload)
+
+            if (error) {
+                if (error.code === '23505') toast.error("Un prix spécial existe déjà pour cet élément.")
+                else toast.error("Erreur technique.")
+            } else {
+                toast.success("Tarif ajouté correctement")
+                setIsFormOpen(false)
+                setEditingId(null)
+                form.reset({
+                    type: selectedType,
+                    itemId: "",
+                    specialPrice: 0,
+                    specialVatRate: 19,
+                    overrideVat: false
+                })
+                setPriceTTC("")
+                fetchRules()
+            }
         }
     }
 
@@ -363,8 +395,38 @@ export function CustomerPricingManager({
 
     const handleCancelBasicForInline = () => {
         setIsFormOpen(false)
+        setEditingId(null)
         form.reset()
         setPriceTTC("")
+    }
+
+    const handleEdit = (rule: any) => {
+        const ruleId = isCreateMode ? rule.tempId : rule.id
+        setEditingId(ruleId)
+        
+        const isService = isCreateMode ? rule.type === 'service' : !!rule.service_id
+        const type = isService ? 'service' : 'item'
+        const itemId = isCreateMode ? rule.itemId : (isService ? rule.service_id : rule.item_id)
+        const price = isCreateMode ? rule.specialPrice : rule.special_price
+        const vatRate = isCreateMode ? rule.specialVatRate : rule.special_vat_rate
+        const overrideVat = isCreateMode ? rule.overrideVat : (vatRate !== null && vatRate !== undefined)
+        const startDate = isCreateMode ? rule.startDate : (rule.subscription_start_date ? new Date(rule.subscription_start_date) : undefined)
+        const renewalDate = isCreateMode ? rule.renewalDate : (rule.subscription_renewal_date ? new Date(rule.subscription_renewal_date) : undefined)
+
+        setSelectedType(type)
+        
+        form.reset({
+            type: type,
+            itemId: itemId,
+            specialPrice: price || 0,
+            specialVatRate: vatRate !== null ? vatRate : 19,
+            overrideVat: overrideVat,
+            startDate: startDate,
+            renewalDate: renewalDate
+        })
+        
+        setIsFormOpen(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     // Filter Logic - Use pending rules in create mode, database rules in edit mode
@@ -421,7 +483,7 @@ export function CustomerPricingManager({
                     <Card className="border-2 border-primary/10 shadow-sm bg-slate-50/50">
                         <CardHeader className="pb-4">
                             <CardTitle className="text-base font-medium flex items-center justify-between">
-                                Nouveau Tarif Spécial
+                                {editingId ? "Modifier le Tarif Spécial" : "Nouveau Tarif Spécial"}
                                 <Button variant="ghost" size="sm" onClick={handleCancelBasicForInline} className="h-8 w-8 p-0">
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -662,7 +724,7 @@ export function CustomerPricingManager({
                                     {/* Actions */}
                                     <div className="flex justify-end gap-3 pt-4 border-t">
                                         <Button type="button" variant="ghost" onClick={handleCancelBasicForInline}>Annuler</Button>
-                                        <Button type="button" onClick={form.handleSubmit(onSubmit)} className="min-w-[150px]">Enregistrer le tarif</Button>
+                                        <Button type="button" onClick={form.handleSubmit(onSubmit)} className="min-w-[150px]">{editingId ? "Mettre à jour" : "Enregistrer le tarif"}</Button>
                                     </div>
                                 </div>
                             </Form>
@@ -763,9 +825,14 @@ export function CustomerPricingManager({
                                             ) : "-"}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(ruleId)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(rule)} className="h-8 w-8 text-slate-400 hover:text-primary hover:bg-primary/10">
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(ruleId)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 )

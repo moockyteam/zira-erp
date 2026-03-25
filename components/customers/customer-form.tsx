@@ -234,8 +234,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
 
     // --- Submission ---
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+    const handleSubmit = async () => {
         setIsSaving(true)
 
         try {
@@ -352,7 +351,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-8 max-w-5xl mx-auto pb-20">
+        <div className="space-y-8 max-w-5xl mx-auto pb-20">
             <div className="flex items-center gap-4">
                 <Button variant="outline" size="icon" type="button" onClick={() => router.back()}>
                     <ArrowLeft className="h-4 w-4" />
@@ -376,7 +375,7 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                     <Button variant="outline" size="sm" type="button" onClick={() => router.back()} className="h-9">
                         Annuler
                     </Button>
-                    <Button type="submit" disabled={isSaving} size="sm" className="h-9 shadow-sm">
+                    <Button type="button" disabled={isSaving} size="sm" className="h-9 shadow-sm" onClick={handleSubmit}>
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                         Enregistrer
                     </Button>
@@ -648,6 +647,6 @@ export function CustomerForm({ companyId, customerId }: CustomerFormProps) {
                     router.refresh()
                 }}
             />
-        </form>
+        </div>
     )
 }
