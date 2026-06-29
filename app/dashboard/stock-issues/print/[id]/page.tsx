@@ -4,16 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 
-export default async function PrintStockIssuePage({ 
+export default async function PrintStockIssuePage({
   params,
-  searchParams 
-}: { 
-  params: { id: string },
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams
+}: {
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  // LA VRAIE CORRECTION EST ICI. AVEC 'await'.
+  const { id } = await params;
+  const resolvedSearchParams = await searchParams;
   const supabase = await createClient();
-  
+
   const { data: voucher, error } = await supabase
     .from('stock_issue_vouchers')
     .select(`
@@ -21,7 +22,7 @@ export default async function PrintStockIssuePage({
       companies ( name, matricule_fiscal, logo_url, address, phone_number ),
       stock_issue_voucher_lines(*, items(name, reference))
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error || !voucher) {
@@ -29,7 +30,7 @@ export default async function PrintStockIssuePage({
     return notFound();
   }
 
-  const shouldPrint = searchParams.print === 'true';
+  const shouldPrint = resolvedSearchParams.print === 'true';
 
   return (
     <div className="p-8 font-sans bg-white text-black">
